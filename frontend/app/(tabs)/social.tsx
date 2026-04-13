@@ -25,6 +25,12 @@ export default function ExecuteScreen() {
   const [style, setStyle] = useState('modern');
   const [building, setBuilding] = useState(false);
   const [buildResult, setBuildResult] = useState<any>(null);
+  // Browser agent state
+  const [browserUrl, setBrowserUrl] = useState('');
+  const [browserInstructions, setBrowserInstructions] = useState('');
+  const [browserType, setBrowserType] = useState('research');
+  const [browsing, setBrowsing] = useState(false);
+  const [browserResult, setBrowserResult] = useState<any>(null);
   const [refreshing, setRefreshing] = useState(false);
 
   const fetchData = useCallback(async () => {
@@ -83,6 +89,21 @@ export default function ExecuteScreen() {
     finally { setBuilding(false); }
   };
 
+  const executeBrowser = async () => {
+    setBrowsing(true); Keyboard.dismiss();
+    try {
+      const res = await authFetch('/api/browser/execute', {
+        method: 'POST', body: JSON.stringify({
+          task_type: browserType, url: browserUrl.trim() || null,
+          instructions: browserInstructions.trim() || null,
+        }),
+      });
+      const data = await res.json();
+      if (data.result) setBrowserResult(data);
+    } catch (e) { console.error(e); }
+    finally { setBrowsing(false); }
+  };
+
   if (loading) return <SafeAreaView style={s.container}><View style={s.center}><ActivityIndicator size="large" color={Colors.emerald} /></View></SafeAreaView>;
 
   const agentOrder = ['store_manager', 'marketing', 'analytics', 'customer_service'];
@@ -100,7 +121,8 @@ export default function ExecuteScreen() {
           {[
             { id: 'actions' as const, label: 'Actions', icon: '⚡' },
             { id: 'workflows' as const, label: 'Workflows', icon: '🔄' },
-            { id: 'builder' as const, label: 'Build Store', icon: '🏗️' },
+            { id: 'builder' as const, label: 'Build', icon: '🏗️' },
+            { id: 'browser' as const, label: 'Browse', icon: '🌐' },
           ].map(t => (
             <TouchableOpacity key={t.id} testID={`tab-${t.id}`}
               style={[s.tabBtn, tab === t.id && s.tabActive]} onPress={() => setTab(t.id)}>
@@ -204,6 +226,69 @@ export default function ExecuteScreen() {
                 ))}
                 {(buildResult.plan.products?.length || 0) > 5 && (
                   <Text style={s.moreText}>+ {buildResult.plan.products.length - 5} more products</Text>
+                )}
+              </View>
+            )}
+          </View>
+        )}
+
+        {/* BROWSER AGENT TAB */}
+        {tab === 'browser' && (
+          <View>
+            <Text style={s.sectionSub}>AI-powered browser agent — researches competitors, scrapes products, monitors prices, and more.</Text>
+
+            <Text style={s.agentLabel}>Task Type</Text>
+            <View style={s.styleRow}>
+              {[
+                { id: 'research', label: 'Research', icon: '🔍' },
+                { id: 'scrape', label: 'Scrape', icon: '📋' },
+                { id: 'monitor', label: 'Monitor', icon: '👁️' },
+                { id: 'screenshot', label: 'Screenshot', icon: '📸' },
+                { id: 'custom', label: 'Custom', icon: '🎯' },
+              ].map(t => (
+                <TouchableOpacity key={t.id} testID={`browser-type-${t.id}`}
+                  style={[s.stylePill, browserType === t.id && { borderColor: Colors.cyan, backgroundColor: Colors.cyanGlow }]}
+                  onPress={() => setBrowserType(t.id)}>
+                  <Text style={{ fontSize: 14 }}>{t.icon}</Text>
+                  <Text style={[s.styleText, browserType === t.id && { color: Colors.cyan }]}>{t.label}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            <Text style={[s.label, { marginTop: 16 }]}>URL (optional for research)</Text>
+            <TextInput testID="browser-url-input" style={s.input} value={browserUrl} onChangeText={setBrowserUrl}
+              placeholder="https://competitor-store.com" placeholderTextColor={Colors.textMuted} autoCapitalize="none" />
+
+            <Text style={s.label}>Instructions</Text>
+            <TextInput testID="browser-instructions-input" style={[s.input, { height: 80, textAlignVertical: 'top' }]}
+              value={browserInstructions} onChangeText={setBrowserInstructions} multiline
+              placeholder="e.g., Find their bestselling products and pricing strategy" placeholderTextColor={Colors.textMuted} />
+
+            <TouchableOpacity testID="browser-execute-btn"
+              style={[s.wfRunBtn, { backgroundColor: Colors.cyan }]}
+              onPress={executeBrowser} disabled={browsing}>
+              {browsing ? <ActivityIndicator size="small" color={Colors.bg} /> :
+                <Text style={s.wfRunText}>Launch Browser Agent</Text>}
+            </TouchableOpacity>
+
+            {browserResult && (
+              <View style={[s.planCard, { borderColor: Colors.cyan + '25', marginTop: 16 }]}>
+                <Text style={[s.planTitle, { color: Colors.cyan }]}>Browser Agent Report</Text>
+                {browserResult.scraped_data?.length > 0 && (
+                  <View>
+                    <Text style={s.planSection}>Extracted Data ({browserResult.scraped_data.length} items)</Text>
+                    {browserResult.scraped_data.slice(0, 5).map((item: any, i: number) => (
+                      <View key={i} style={s.productRow}>
+                        <Text style={s.productName}>{item.title || item.price || JSON.stringify(item)}</Text>
+                        {item.price && <Text style={[s.productPrice, { color: Colors.cyan }]}>{item.price}</Text>}
+                      </View>
+                    ))}
+                  </View>
+                )}
+                <Text style={s.planSection}>AI Analysis</Text>
+                <Text style={s.resultContent}>{browserResult.result}</Text>
+                {browserResult.screenshots?.length > 0 && (
+                  <Text style={[s.moreText, { color: Colors.cyan }]}>{browserResult.screenshots.length} screenshot(s) captured</Text>
                 )}
               </View>
             )}

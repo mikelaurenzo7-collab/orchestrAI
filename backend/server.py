@@ -1132,6 +1132,159 @@ async def deploy_store_plan(plan_id: str, store_id: str, request: Request):
 
     return {"created": created, "errors": errors, "total": len(products)}
 
+# ──────────────── Browser Agent (Playwright) ────────────────
+
+class BrowserTaskRequest(BaseModel):
+    task_type: str  # research, setup, screenshot, scrape, monitor, custom
+    url: Optional[str] = None
+    instructions: Optional[str] = None
+    store_id: Optional[str] = None
+
+@api_router.post("/browser/execute")
+async def execute_browser_task(req: BrowserTaskRequest, request: Request):
+    """Execute a browser automation task using Playwright"""
+    from playwright.async_api import async_playwright
+    import base64
+
+    user = await get_current_user(request)
+    user_id = user["_id"]
+
+    task_doc = {
+        "id": str(uuid.uuid4()), "user_id": user_id, "task_type": req.task_type,
+        "url": req.url, "instructions": req.instructions,
+        "status": "running", "screenshots": [], "result": None,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    await db.browser_tasks.insert_one(task_doc)
+
+    # Build AI instructions based on task type
+    context = await build_agent_context(user_id, "store_manager")
+    task_prompts = {
+        "research": f"Research competitors and trending products for this user's business.\n{context}\nURL: {req.url or 'search for relevant competitors'}\nUser instructions: {req.instructions or 'Find top 5 competitors, their pricing, bestsellers, and unique selling points.'}",
+        "setup": f"Help set up a store or configure settings.\n{context}\nURL: {req.url}\nUser instructions: {req.instructions or 'Document what needs to be configured.'}",
+        "screenshot": f"Capture and analyze a webpage.\nURL: {req.url}\nUser instructions: {req.instructions or 'Take a screenshot and describe what you see.'}",
+        "scrape": f"Extract product data from a webpage.\n{context}\nURL: {req.url}\nUser instructions: {req.instructions or 'Extract all product names, prices, and descriptions.'}",
+        "monitor": f"Check competitor prices and availability.\n{context}\nURL: {req.url}\nUser instructions: {req.instructions or 'Monitor pricing and stock status.'}",
+        "custom": f"Execute a custom browser task.\n{context}\nURL: {req.url}\nUser instructions: {req.instructions or 'No specific instructions.'}",
+    }
+
+    try:
+        async with async_playwright() as p:
+            browser = await p.chromium.launch(headless=True)
+            browser_context = await browser.new_context(
+                viewport={"width": 1280, "height": 800},
+                user_agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36"
+            )
+            page = await browser_context.new_page()
+
+            screenshots = []
+            scraped_data = []
+
+            if req.task_type == "research" and not req.url:
+                # AI-driven research: search for competitors
+                stores = await db.stores.find({"user_id": user_id}, {"_id": 0}).to_list(5)
+                niche = ""
+                if stores:
+                    niche = stores[0].get("name", "ecommerce")
+                search_query = req.instructions or f"{niche} store competitors"
+                await page.goto(f"https://www.google.com/search?q={search_query.replace(' ', '+')}", timeout=15000)
+                await page.wait_for_timeout(2000)
+                screenshot_bytes = await page.screenshot(type="jpeg", quality=50)
+                screenshots.append(base64.b64encode(screenshot_bytes).decode())
+
+                # Extract search results
+                results = await page.evaluate("""() => {
+                    const items = document.querySelectorAll('div.g, div[data-sokoban-container]');
+                    return Array.from(items).slice(0, 8).map(el => {
+                        const title = el.querySelector('h3')?.textContent || '';
+                        const link = el.querySelector('a')?.href || '';
+                        const snippet = el.querySelector('.VwiC3b, [data-snc]')?.textContent || '';
+                        return { title, link, snippet };
+                    }).filter(r => r.title);
+                }""")
+                scraped_data = results
+
+            elif req.url:
+                await page.goto(req.url, timeout=20000)
+                await page.wait_for_timeout(3000)
+                screenshot_bytes = await page.screenshot(type="jpeg", quality=50, full_page=False)
+                screenshots.append(base64.b64encode(screenshot_bytes).decode())
+
+                if req.task_type == "scrape":
+                    # Extract product-like data from page
+                    products = await page.evaluate("""() => {
+                        const items = [];
+                        // Try common ecommerce selectors
+                        document.querySelectorAll('[class*="product"], [class*="item"], .grid-item, .card').forEach(el => {
+                            const title = el.querySelector('h2, h3, h4, [class*="title"], [class*="name"]')?.textContent?.trim() || '';
+                            const price = el.querySelector('[class*="price"], .money, [class*="amount"]')?.textContent?.trim() || '';
+                            if (title) items.push({ title, price: price || 'N/A' });
+                        });
+                        return items.slice(0, 20);
+                    }""")
+                    scraped_data = products
+
+                elif req.task_type == "monitor":
+                    # Extract pricing data
+                    prices = await page.evaluate("""() => {
+                        const data = [];
+                        document.querySelectorAll('[class*="price"], .money, [class*="amount"]').forEach(el => {
+                            const text = el.textContent?.trim();
+                            if (text && text.match(/[\$\£\€]/)) data.push(text);
+                        });
+                        return [...new Set(data)].slice(0, 30);
+                    }""")
+                    scraped_data = [{"price": p} for p in prices]
+
+                # Scroll and take another screenshot for full page context
+                await page.evaluate("window.scrollBy(0, 600)")
+                await page.wait_for_timeout(1000)
+                screenshot_bytes2 = await page.screenshot(type="jpeg", quality=50, full_page=False)
+                screenshots.append(base64.b64encode(screenshot_bytes2).decode())
+
+            await browser.close()
+
+        # Now have AI analyze what was found
+        analysis_prompt = task_prompts.get(req.task_type, task_prompts["custom"])
+        if scraped_data:
+            analysis_prompt += f"\n\nDATA EXTRACTED FROM BROWSER:\n{str(scraped_data)[:3000]}"
+        analysis_prompt += "\n\nBased on the browser data above, provide a detailed analysis with actionable recommendations. Be specific with numbers and strategies."
+
+        chat = LlmChat(api_key=EMERGENT_LLM_KEY, session_id=f"browser_{task_doc['id']}",
+            system_message="You are orchestrAI's Browser Intelligence Agent. You analyze web data collected by our automated browser to provide competitive intelligence, market research, and actionable eCommerce insights. Be specific and data-driven.")
+        chat.with_model("openai", "gpt-5.2")
+        analysis = await chat.send_message(UserMessage(text=analysis_prompt))
+
+        await db.browser_tasks.update_one({"id": task_doc["id"]}, {"$set": {
+            "status": "completed", "screenshots": screenshots, "scraped_data": scraped_data,
+            "result": analysis, "completed_at": datetime.now(timezone.utc).isoformat()
+        }})
+        await db.activity_log.insert_one({"user_id": user_id, "type": "browser_task",
+            "message": f"Browser Agent: {req.task_type} task completed",
+            "timestamp": datetime.now(timezone.utc).isoformat()})
+
+        return {"id": task_doc["id"], "status": "completed", "task_type": req.task_type,
+                "screenshots": screenshots, "scraped_data": scraped_data[:10], "result": analysis}
+
+    except Exception as e:
+        await db.browser_tasks.update_one({"id": task_doc["id"]}, {"$set": {"status": "failed", "result": str(e)}})
+        logger.error(f"Browser task error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@api_router.get("/browser/history")
+async def get_browser_history(request: Request):
+    user = await get_current_user(request)
+    tasks = await db.browser_tasks.find({"user_id": user["_id"]}, {"_id": 0, "user_id": 0, "screenshots": 0}).sort("created_at", -1).to_list(20)
+    return tasks
+
+@api_router.get("/browser/task/{task_id}")
+async def get_browser_task(task_id: str, request: Request):
+    user = await get_current_user(request)
+    task = await db.browser_tasks.find_one({"id": task_id, "user_id": user["_id"]}, {"_id": 0, "user_id": 0})
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    return task
+
 # ──────────────── Dashboard ────────────────
 
 @api_router.get("/dashboard")
