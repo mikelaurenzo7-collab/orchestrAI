@@ -56,11 +56,11 @@ export default function ChatScreen() {
 
   const agentColor = AgentColors[selectedAgent]?.primary || Colors.emerald;
   const suggestions: Record<string, string[]> = {
-    general: ['What can you do for my store?', 'Help me grow revenue', 'Create a marketing plan'],
-    store_manager: ['Analyze my inventory', 'Suggest pricing optimizations', 'Order management tips'],
-    marketing: ['Create an Instagram campaign', 'Write ad copy for my product', 'Plan a product launch'],
-    analytics: ['What are my sales trends?', 'Identify best products', 'Customer behavior insights'],
-    customer_service: ['Draft FAQ for my store', 'Handle a refund request', 'Create response templates'],
+    general: ['Give me a full business health check', 'What should I focus on this week?', 'How do I 10x my revenue?'],
+    store_manager: ['Audit my product catalog for quick wins', 'What pricing changes would boost my margins?', 'Create an inventory management plan'],
+    marketing: ['Build me a 7-day social media calendar', 'Write 3 Instagram posts for my best products', 'Design a product launch campaign'],
+    analytics: ['Break down my store performance', 'Which products should I double down on?', 'What does my customer data tell you?'],
+    customer_service: ['Write a returns policy for my store', 'Create 10 FAQ answers for common questions', 'Draft response templates for complaints'],
   };
 
   return (

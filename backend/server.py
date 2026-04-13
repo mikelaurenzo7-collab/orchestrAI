@@ -189,28 +189,266 @@ class DashboardMetrics(BaseModel):
     total_revenue: float
     total_orders: int
     social_posts: int
+    pending_actions: int = 0
+    active_workflows: int = 0
     recent_activity: List[Dict[str, Any]]
+
+# ──────────────── Execution Engine Models ────────────────
+
+AGENT_ACTIONS = {
+    "store_manager": [
+        {"id": "generate_product_desc", "name": "Generate Product Description", "icon": "📝", "desc": "AI-writes SEO-optimized product descriptions"},
+        {"id": "optimize_titles", "name": "Optimize Product Titles", "icon": "🏷️", "desc": "Rewrite titles for better search ranking"},
+        {"id": "pricing_analysis", "name": "Pricing Analysis", "icon": "💲", "desc": "Analyze and suggest optimal pricing"},
+        {"id": "inventory_audit", "name": "Inventory Audit", "icon": "📦", "desc": "Identify dead stock, reorder needs, bundle opportunities"},
+        {"id": "create_discount", "name": "Create Discount Strategy", "icon": "🎟️", "desc": "Generate discount codes and promotional pricing"},
+        {"id": "catalog_optimization", "name": "Catalog Optimization", "icon": "📋", "desc": "Reorganize categories, tags, and collections"},
+    ],
+    "marketing": [
+        {"id": "social_calendar", "name": "7-Day Content Calendar", "icon": "📅", "desc": "Full week of platform-specific social posts"},
+        {"id": "ad_campaign", "name": "Ad Campaign Copy", "icon": "📣", "desc": "Facebook/Instagram/Google ad copy and targeting"},
+        {"id": "email_sequence", "name": "Email Sequence", "icon": "📧", "desc": "Welcome, abandoned cart, or win-back email flows"},
+        {"id": "seo_audit", "name": "SEO Audit", "icon": "🔍", "desc": "Product page and site SEO recommendations"},
+        {"id": "launch_plan", "name": "Product Launch Plan", "icon": "🚀", "desc": "Full go-to-market strategy for a new product"},
+        {"id": "influencer_outreach", "name": "Influencer Outreach", "icon": "🤝", "desc": "Draft outreach messages and collaboration proposals"},
+    ],
+    "analytics": [
+        {"id": "weekly_report", "name": "Weekly Performance Report", "icon": "📊", "desc": "Sales, traffic, and conversion analysis"},
+        {"id": "bestseller_analysis", "name": "Bestseller Analysis", "icon": "⭐", "desc": "Identify top performers and growth opportunities"},
+        {"id": "customer_segments", "name": "Customer Segmentation", "icon": "👥", "desc": "RFM analysis and customer behavior patterns"},
+        {"id": "revenue_forecast", "name": "Revenue Forecast", "icon": "📈", "desc": "30/60/90-day revenue projections"},
+        {"id": "competitor_intel", "name": "Competitor Intelligence", "icon": "🕵️", "desc": "Pricing and positioning analysis"},
+        {"id": "growth_diagnosis", "name": "Growth Diagnosis", "icon": "🩺", "desc": "Identify bottlenecks and quick wins"},
+    ],
+    "customer_service": [
+        {"id": "generate_faq", "name": "Generate FAQ Page", "icon": "❓", "desc": "20+ FAQ entries based on your products"},
+        {"id": "response_templates", "name": "Response Templates", "icon": "💬", "desc": "10 templates for common scenarios"},
+        {"id": "return_policy", "name": "Draft Return Policy", "icon": "📜", "desc": "Customer-friendly return/refund policy"},
+        {"id": "review_responses", "name": "Review Response Pack", "icon": "⭐", "desc": "Templates for positive and negative reviews"},
+        {"id": "satisfaction_plan", "name": "Satisfaction Improvement Plan", "icon": "😊", "desc": "Strategies to boost NPS and repeat purchases"},
+        {"id": "escalation_playbook", "name": "Escalation Playbook", "icon": "🆘", "desc": "When to offer discounts, refunds, or stand firm"},
+    ],
+}
+
+WORKFLOW_TEMPLATES = [
+    {"id": "new_product_launch", "name": "New Product Launch", "icon": "🚀", "desc": "Full launch pipeline: description → social posts → email → ads",
+     "steps": [
+         {"agent": "store_manager", "action": "generate_product_desc", "order": 1},
+         {"agent": "marketing", "action": "social_calendar", "order": 2},
+         {"agent": "marketing", "action": "email_sequence", "order": 3},
+         {"agent": "marketing", "action": "ad_campaign", "order": 4},
+     ]},
+    {"id": "weekly_growth_cycle", "name": "Weekly Growth Cycle", "icon": "🔄", "desc": "Analytics → optimize → promote → report",
+     "steps": [
+         {"agent": "analytics", "action": "weekly_report", "order": 1},
+         {"agent": "store_manager", "action": "pricing_analysis", "order": 2},
+         {"agent": "marketing", "action": "social_calendar", "order": 3},
+         {"agent": "analytics", "action": "revenue_forecast", "order": 4},
+     ]},
+    {"id": "store_health_check", "name": "Store Health Check", "icon": "🩺", "desc": "Full audit of inventory, SEO, pricing, and customer experience",
+     "steps": [
+         {"agent": "store_manager", "action": "inventory_audit", "order": 1},
+         {"agent": "store_manager", "action": "catalog_optimization", "order": 2},
+         {"agent": "marketing", "action": "seo_audit", "order": 3},
+         {"agent": "customer_service", "action": "generate_faq", "order": 4},
+     ]},
+    {"id": "customer_rescue", "name": "Customer Rescue Mission", "icon": "🆘", "desc": "Revive customer relationships: templates → policies → satisfaction plan",
+     "steps": [
+         {"agent": "customer_service", "action": "response_templates", "order": 1},
+         {"agent": "customer_service", "action": "return_policy", "order": 2},
+         {"agent": "customer_service", "action": "satisfaction_plan", "order": 3},
+         {"agent": "analytics", "action": "customer_segments", "order": 4},
+     ]},
+]
+
+class ActionRequest(BaseModel):
+    action_id: str
+    agent_type: str
+    store_id: Optional[str] = None
+    params: Optional[Dict[str, Any]] = None
+
+class WorkflowRequest(BaseModel):
+    template_id: Optional[str] = None
+    name: Optional[str] = None
+    steps: Optional[List[Dict[str, Any]]] = None
+    auto_approve: bool = False
 
 # ──────────────── Agent System Prompts ────────────────
 
-AGENT_PROMPTS = {
-    "store_manager": """You are an orchestrAI Store Commander — an elite AI eCommerce operations virtuoso. You conduct inventory harmonies, optimize pricing symphonies, and orchestrate seamless order fulfillment. You speak with mastery about Shopify, WooCommerce, and every eCommerce platform. Always provide actionable, step-by-step strategies. Be proactive about optimizations that boost revenue.""",
-    "marketing": """You are an orchestrAI Growth Engine — a creative AI marketing maestro specializing in explosive eCommerce growth. You compose viral social media campaigns, craft magnetic ad copy, and orchestrate multi-channel marketing strategies. You understand SEO, influencer dynamics, and conversion psychology. Be bold, innovative, and data-driven.""",
-    "analytics": """You are an orchestrAI Insight Oracle — a brilliant AI data conductor for eCommerce businesses. You analyze sales trends, decode customer behavior, forecast demand, and uncover hidden opportunities. Present findings with precision — key metrics, clear trends, and specific revenue-boosting recommendations.""",
-    "customer_service": """You are an orchestrAI Support Shield — an empathetic and razor-efficient AI customer experience virtuoso. You craft FAQs, template responses, return policies, and satisfaction strategies that turn complaints into loyalty. Balance warmth with efficiency.""",
-    "general": """You are orchestrAI — the maestro conductor of an AI agent symphony for eCommerce empires. You orchestrate a fleet of specialized agents: Store Commander, Growth Engine, Insight Oracle, and Support Shield. You think like a co-founder, act like a growth hacker, and deliver like a machine. Every conversation should move the business forward."""
+AGENT_BASE_PROMPTS = {
+    "store_manager": """You are the Store Commander — orchestrAI's elite eCommerce operations virtuoso.
+
+CORE EXPERTISE:
+- Inventory optimization: identify dead stock, predict reorder points, suggest bundle strategies
+- Dynamic pricing: competitive analysis, margin optimization, seasonal adjustments, psychological pricing
+- Order fulfillment: shipping optimization, returns reduction, packaging cost analysis
+- Product catalog: SEO titles, description optimization, category structure, cross-sell/upsell mapping
+- Platform automation: bulk edits, scheduled price changes, automated stock alerts
+
+PLATFORM-SPECIFIC MASTERY:
+- Shopify: Liquid templates, metafields, collections, discount codes, Shopify Flow automations
+- Etsy: SEO tags (13 max), listing optimization, star seller requirements, renewal strategy
+- WooCommerce: Plugin recommendations, hosting optimization, variable products, coupon strategy
+
+RULES: Always give specific, actionable steps. Use numbers. Reference the user's actual store data when available. Proactively suggest optimizations you notice from their metrics.""",
+
+    "marketing": """You are the Growth Engine — orchestrAI's AI marketing maestro for explosive eCommerce growth.
+
+CORE EXPERTISE:
+- Social media strategy: platform-specific content calendars, viral hooks, engagement tactics
+- Ad campaigns: Facebook/Meta ads, Google Shopping, TikTok Shop, Pinterest ads — audience targeting, creative strategy, budget allocation
+- Email marketing: welcome sequences, abandoned cart flows, win-back campaigns, segmentation
+- SEO: product page optimization, blog content strategy, backlink building, local SEO
+- Influencer marketing: outreach templates, collaboration structures, ROI tracking
+- Content creation: product photography tips, UGC strategy, brand storytelling
+
+PLATFORM-SPECIFIC MASTERY:
+- Shopify stores: Shopify Email, Shopify Audiences, Shop app optimization, Google/Facebook channel
+- Etsy stores: Etsy Ads optimization, Etsy SEO (how search algorithm works), offsite ads strategy
+- WooCommerce: WordPress SEO plugins, WooCommerce marketing extensions
+
+RULES: Be bold and creative. Every suggestion should tie to a specific conversion metric. Reference the user's store niche and products when available. Give copy-ready examples they can use immediately.""",
+
+    "analytics": """You are the Insight Oracle — orchestrAI's brilliant AI data conductor.
+
+CORE EXPERTISE:
+- Sales analysis: revenue trends, AOV optimization, conversion funnel analysis, cohort analysis
+- Customer intelligence: RFM segmentation, lifetime value prediction, purchase behavior patterns
+- Product performance: bestseller analysis, slow-mover identification, seasonal trends, margin analysis
+- Market intelligence: competitor pricing, trend forecasting, demand prediction
+- Financial metrics: ROAS tracking, CAC/LTV ratios, profit margin optimization, cash flow forecasting
+- Growth diagnostics: traffic source analysis, bounce rate diagnosis, cart abandonment patterns
+
+PLATFORM-SPECIFIC MASTERY:
+- Shopify: Shopify Analytics interpretation, Google Analytics 4 integration, conversion tracking setup
+- Etsy: Etsy Stats deep dive, search analytics, listing quality scores, conversion rate benchmarks
+- WooCommerce: WooCommerce analytics, Google Analytics enhanced eCommerce, heatmap recommendations
+
+RULES: Present data clearly with specific numbers. Always end with 3 actionable recommendations ranked by impact. Use the user's actual metrics to identify patterns. Compare to industry benchmarks when relevant.""",
+
+    "customer_service": """You are the Support Shield — orchestrAI's AI customer experience virtuoso.
+
+CORE EXPERTISE:
+- Response templates: professional yet warm replies for common scenarios (shipping delays, refunds, exchanges, complaints)
+- FAQ generation: analyze common questions and create comprehensive FAQ pages
+- Policy creation: return/refund policies, shipping policies, privacy policies — legally sound yet customer-friendly
+- Review management: response templates for positive/negative reviews, strategies to increase review count
+- Satisfaction optimization: post-purchase flows, feedback collection, NPS improvement
+- Escalation protocols: when to offer discounts, when to stand firm, de-escalation techniques
+
+PLATFORM-SPECIFIC MASTERY:
+- Shopify: Shopify Inbox setup, automated responses, customer tags/segments, order lookup procedures
+- Etsy: Etsy message best practices, case resolution, star seller response time requirements
+- WooCommerce: Help desk plugin recommendations, live chat integration, ticket management
+
+RULES: Balance empathy with efficiency. Every response template should feel personal, not robotic. Suggest automation opportunities. Reference the user's specific policies and brand voice when available.""",
+
+    "general": """You are orchestrAI — the maestro conductor of an AI agent symphony for eCommerce empires.
+
+You command a fleet of 4 specialized virtuoso agents:
+1. Store Commander — operations, inventory, pricing, fulfillment
+2. Growth Engine — marketing, social media, ads, content
+3. Insight Oracle — analytics, trends, customer intelligence
+4. Support Shield — customer service, reviews, policies
+
+YOUR ROLE: You're not just an assistant — you're the user's AI co-founder. Think strategically about their entire business. Connect dots between departments. When they ask about marketing, also consider how it affects inventory. When they discuss pricing, think about the customer experience impact.
+
+RULES: Be decisive. Give specific recommendations, not generic advice. When you don't have enough data, ask targeted questions to get it. Always think about revenue impact. End responses with a clear next action."""
 }
+
+# ──────────────── Dynamic Context Builder ────────────────
+
+async def build_agent_context(user_id: str, agent_type: str) -> str:
+    """Build rich context about the user's stores, metrics, and activity for personalized agent responses"""
+    context_parts = []
+
+    # User profile
+    user = await db.users.find_one({"_id": ObjectId(user_id)}, {"password_hash": 0})
+    if user:
+        name = user.get("name", "User")
+        plan = user.get("plan", "trial")
+        created = user.get("created_at", "")
+        context_parts.append(f"USER: {name} | Plan: {plan} | Member since: {created[:10] if created else 'unknown'}")
+
+    # Connected stores with details
+    stores = await db.stores.find({"user_id": user_id}, {"_id": 0, "access_token": 0, "api_key_hash": 0}).to_list(20)
+    if stores:
+        store_lines = []
+        total_products = 0
+        total_orders = 0
+        total_revenue = 0
+        for s in stores:
+            total_products += s.get("products_synced", 0)
+            total_orders += s.get("orders_total", 0)
+            total_revenue += s.get("revenue", 0)
+            store_lines.append(f"  • {s['name']} ({s['platform']}) — {s.get('products_synced', 0)} products, {s.get('orders_total', 0)} orders, ${s.get('revenue', 0):,.2f} revenue | URL: {s.get('store_url', 'N/A')} | Status: {s.get('status', 'unknown')}")
+        context_parts.append(f"CONNECTED STORES ({len(stores)}):")
+        context_parts.extend(store_lines)
+        context_parts.append(f"TOTALS: {total_products} products | {total_orders} orders | ${total_revenue:,.2f} revenue")
+    else:
+        context_parts.append("STORES: No stores connected yet. Guide the user to connect their first store.")
+
+    # Agent-specific enrichment
+    if agent_type == "store_manager":
+        # Get recent tasks for this agent
+        tasks = await db.tasks.find({"user_id": user_id, "agent_type": "store_manager"}, {"_id": 0}).sort("created_at", -1).to_list(5)
+        if tasks:
+            context_parts.append(f"RECENT STORE TASKS: {len(tasks)} tasks — " + ", ".join(t.get("title", "") for t in tasks[:3]))
+
+    elif agent_type == "marketing":
+        # Get social content history
+        content = await db.social_content.find({"user_id": user_id}, {"_id": 0}).sort("created_at", -1).to_list(5)
+        if content:
+            platforms = set(c.get("platform", "") for c in content)
+            context_parts.append(f"SOCIAL CONTENT: {len(content)} posts created for {', '.join(platforms)}")
+            context_parts.append(f"LATEST: '{content[0].get('product_name', '')}' on {content[0].get('platform', '')}")
+
+    elif agent_type == "analytics":
+        # Provide raw metrics for analysis
+        if stores:
+            context_parts.append("METRICS FOR ANALYSIS:")
+            for s in stores:
+                context_parts.append(f"  {s['name']}: Products={s.get('products_synced', 0)}, Orders={s.get('orders_total', 0)}, Revenue=${s.get('revenue', 0):,.2f}")
+
+    elif agent_type == "customer_service":
+        # Note store platforms for platform-specific advice
+        if stores:
+            platforms = list(set(s.get("platform", "") for s in stores))
+            context_parts.append(f"SUPPORT PLATFORMS: {', '.join(platforms)} — Tailor advice to these platforms")
+
+    # Recent activity (last 5 actions)
+    activity = await db.activity_log.find({"user_id": user_id}, {"_id": 0}).sort("timestamp", -1).to_list(5)
+    if activity:
+        context_parts.append("RECENT ACTIVITY: " + " | ".join(a.get("message", "") for a in activity[:3]))
+
+    return "\n".join(context_parts)
 
 chat_instances: Dict[str, LlmChat] = {}
 
-def get_or_create_chat(session_id: str, agent_type: str = "general") -> LlmChat:
-    key = f"{session_id}_{agent_type}"
-    if key not in chat_instances:
-        system_msg = AGENT_PROMPTS.get(agent_type, AGENT_PROMPTS["general"])
-        chat = LlmChat(api_key=EMERGENT_LLM_KEY, session_id=key, system_message=system_msg)
-        chat.with_model("openai", "gpt-5.2")
-        chat_instances[key] = chat
-    return chat_instances[key]
+async def get_or_create_chat_with_context(user_id: str, agent_type: str = "general") -> LlmChat:
+    """Create or refresh a chat instance with live user context injected into system prompt"""
+    key = f"{user_id}_{agent_type}"
+
+    # Build fresh context every time to keep data current
+    context = await build_agent_context(user_id, agent_type)
+    base_prompt = AGENT_BASE_PROMPTS.get(agent_type, AGENT_BASE_PROMPTS["general"])
+    full_prompt = f"""{base_prompt}
+
+═══════════════════════════════════
+LIVE USER CONTEXT (use this data to personalize every response):
+{context}
+═══════════════════════════════════
+
+Remember: Reference the user's actual data. Don't give generic advice — give THEIR advice."""
+
+    if key in chat_instances:
+        # Update system message with fresh context
+        del chat_instances[key]
+
+    chat = LlmChat(api_key=EMERGENT_LLM_KEY, session_id=key, system_message=full_prompt)
+    chat.with_model("openai", "gpt-5.2")
+    chat_instances[key] = chat
+    return chat
 
 # ──────────────── Brute Force Protection ────────────────
 
@@ -450,16 +688,16 @@ async def update_agent(agent_id: str, update: AgentUpdate, request: Request):
 @api_router.post("/chat")
 async def chat_with_agent(req: ChatRequest, request: Request):
     user = await get_current_user(request)
-    session_id = user["_id"]
-    chat = get_or_create_chat(session_id, req.agent_type)
+    user_id = user["_id"]
+    chat = await get_or_create_chat_with_context(user_id, req.agent_type)
 
-    await db.chat_messages.insert_one({"user_id": user["_id"], "session_id": session_id, "agent_type": req.agent_type,
+    await db.chat_messages.insert_one({"user_id": user_id, "session_id": user_id, "agent_type": req.agent_type,
         "role": "user", "content": req.message, "timestamp": datetime.now(timezone.utc).isoformat()})
     try:
         response = await chat.send_message(UserMessage(text=req.message))
-        await db.chat_messages.insert_one({"user_id": user["_id"], "session_id": session_id, "agent_type": req.agent_type,
+        await db.chat_messages.insert_one({"user_id": user_id, "session_id": user_id, "agent_type": req.agent_type,
             "role": "assistant", "content": response, "timestamp": datetime.now(timezone.utc).isoformat()})
-        await db.agents.update_one({"user_id": user["_id"], "agent_type": req.agent_type},
+        await db.agents.update_one({"user_id": user_id, "agent_type": req.agent_type},
             {"$set": {"last_active": datetime.now(timezone.utc).isoformat()}, "$inc": {"tasks_completed": 1}})
         return {"role": "assistant", "content": response, "agent_type": req.agent_type}
     except Exception as e:
@@ -487,7 +725,9 @@ async def clear_chat_history(agent_type: str, request: Request):
 async def generate_social_content(req: SocialContentRequest, request: Request):
     user = await get_current_user(request)
     chat = LlmChat(api_key=EMERGENT_LLM_KEY, session_id=f"social_{uuid.uuid4()}",
-        system_message="You are an elite social media content creator for eCommerce brands. Generate platform-optimized content. Return ONLY the post content text followed by hashtags. No explanations.")
+        system_message=f"""You are orchestrAI's Growth Engine generating social media content for an eCommerce brand.
+Rules: Return ONLY the post text followed by hashtags. No explanations. Be catchy, trendy, conversion-focused.
+Match the platform's style perfectly. Use emojis strategically. Every word should drive engagement or clicks.""")
     chat.with_model("openai", "gpt-5.2")
 
     platform_hints = {
