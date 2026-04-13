@@ -1,8 +1,9 @@
 import { Stack, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { View, ActivityIndicator, StyleSheet } from 'react-native';
 import { AuthProvider, useAuth } from '../contexts/AuthContext';
+import { authFetch } from '../utils/api';
 import { Colors } from '../constants/theme';
 
 function AuthGate() {
@@ -10,7 +11,25 @@ function AuthGate() {
   const segments = useSegments();
   const router = useRouter();
   const [checkedOnboard, setCheckedOnboard] = useState(false);
-  const [needsOnboard, setNeedsOnboard] = useState(false);
+
+  const checkOnboarding = useCallback(async () => {
+    try {
+      const res = await authFetch('/api/profile');
+      if (res.ok) {
+        const profile = await res.json();
+        if (!profile.niche && !profile.brand_name && !profile.goals) {
+          router.replace('/onboarding');
+        } else {
+          router.replace('/(tabs)');
+        }
+      } else {
+        router.replace('/(tabs)');
+      }
+    } catch {
+      router.replace('/(tabs)');
+    }
+    setCheckedOnboard(true);
+  }, [router]);
 
   useEffect(() => {
     if (loading) return;
@@ -19,37 +38,10 @@ function AuthGate() {
 
     if (!user && !inAuth) {
       router.replace('/auth');
-    } else if (user && inAuth) {
-      // Check if user needs onboarding (no profile set yet)
-      checkOnboarding();
-    } else if (user && !inAuth && !inOnboard && !checkedOnboard) {
+    } else if (user && (inAuth || (!inOnboard && !checkedOnboard))) {
       checkOnboarding();
     }
-  }, [user, loading, segments]);
-
-  const checkOnboarding = async () => {
-    try {
-      const { authFetch } = require('../utils/api');
-      const res = await authFetch('/api/profile');
-      if (res.ok) {
-        const profile = await res.json();
-        if (!profile.niche && !profile.brand_name && !profile.goals) {
-          setNeedsOnboard(true);
-          router.replace('/onboarding');
-        } else {
-          setNeedsOnboard(false);
-          if (segments[0] === 'auth' || segments[0] === 'onboarding') {
-            router.replace('/(tabs)');
-          }
-        }
-      } else {
-        router.replace('/(tabs)');
-      }
-    } catch (e) {
-      router.replace('/(tabs)');
-    }
-    setCheckedOnboard(true);
-  };
+  }, [user, loading, segments, checkedOnboard, checkOnboarding, router]);
 
   if (loading) {
     return (

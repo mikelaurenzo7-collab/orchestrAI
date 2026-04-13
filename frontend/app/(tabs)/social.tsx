@@ -1,11 +1,11 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, RefreshControl, TouchableOpacity,
-  TextInput, ActivityIndicator, Modal, KeyboardAvoidingView, Platform, Keyboard,
+  TextInput, ActivityIndicator, KeyboardAvoidingView, Platform, Keyboard, Modal,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { authFetch } from '../../utils/api';
-import { Colors, Spacing, BorderRadius, FontSizes, Shadows, AgentColors } from '../../constants/theme';
+import { Colors, Spacing, BorderRadius, FontSizes, AgentColors } from '../../constants/theme';
 
 type ActionDef = { id: string; name: string; icon: string; desc: string };
 type WorkflowTemplate = { id: string; name: string; icon: string; desc: string; steps: any[] };
