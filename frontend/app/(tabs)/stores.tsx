@@ -14,6 +14,11 @@ const STORE_PLATFORMS = [
   { id: 'shopify', name: 'Shopify', icon: '🟢', color: PlatformColors.shopify, hasOAuth: true },
   { id: 'etsy', name: 'Etsy', icon: '🟠', color: PlatformColors.etsy, hasOAuth: true },
   { id: 'woocommerce', name: 'WooCommerce', icon: '🟣', color: PlatformColors.woocommerce, hasOAuth: false },
+  { id: 'amazon', name: 'Amazon', icon: '📦', color: '#FF9900', hasOAuth: false },
+  { id: 'ebay', name: 'eBay', icon: '🏷️', color: '#E53238', hasOAuth: false },
+  { id: 'bigcommerce', name: 'BigCommerce', icon: '🔷', color: '#34313F', hasOAuth: false },
+  { id: 'square', name: 'Square', icon: '⬛', color: '#006AFF', hasOAuth: false },
+  { id: 'wix', name: 'Wix', icon: '🌐', color: '#0C6EFC', hasOAuth: false },
   { id: 'custom', name: 'Custom API', icon: '🔧', color: Colors.emerald, hasOAuth: false },
 ];
 

@@ -16,12 +16,12 @@ const ORBIT_R = 100;
 const INTEGRATIONS = [
   { label: 'Shopify', emoji: '🛍️', color: '#96BF48' },
   { label: 'Etsy', emoji: '🧶', color: '#F1641E' },
-  { label: 'WooCommerce', emoji: '🛒', color: '#7B51AD' },
-  { label: 'Instagram', emoji: '📷', color: '#E1306C' },
-  { label: 'X', emoji: '✖️', color: '#1DA1F2' },
-  { label: 'TikTok', emoji: '🎵', color: '#FE2C55' },
-  { label: 'GPT', emoji: '🧠', color: '#10A37F' },
-  { label: 'Facebook', emoji: '👤', color: '#1877F2' },
+  { label: 'Amazon', emoji: '📦', color: '#FF9900' },
+  { label: 'eBay', emoji: '🏷️', color: '#E53238' },
+  { label: 'Woo', emoji: '🛒', color: '#7B51AD' },
+  { label: 'Square', emoji: '⬛', color: '#006AFF' },
+  { label: 'BigC', emoji: '🔷', color: '#34313F' },
+  { label: 'Wix', emoji: '🌐', color: '#0C6EFC' },
 ];
 
 function OrbitalHero() {

@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, RefreshControl, TouchableOpacity,
   TextInput, ActivityIndicator, Modal, KeyboardAvoidingView, Platform, Keyboard,
@@ -233,35 +233,69 @@ export default function ExecuteScreen() {
           </View>
         )}
 
-        {/* STORE BUILDER TAB */}
+        {/* STORE BUILDER TAB — Conversational */}
         {tab === 'builder' && (
           <View>
-            <Text style={s.sectionSub}>AI builds your entire store from scratch — products, descriptions, pricing, everything.</Text>
-            <TouchableOpacity testID="start-builder-btn" style={s.builderBtn} onPress={() => setShowBuilder(true)}>
-              <Text style={s.builderBtnIcon}>🏗️</Text>
-              <Text style={s.builderBtnTitle}>Build a New Store</Text>
-              <Text style={s.builderBtnSub}>Tell us your niche → AI creates a full store blueprint → Deploy to Shopify</Text>
-            </TouchableOpacity>
-
-            {buildResult?.plan && (
-              <View style={s.planCard}>
-                <Text style={s.planTitle}>{buildResult.plan.brand_name || 'Store Plan'}</Text>
-                {buildResult.plan.tagline && <Text style={s.planTagline}>{buildResult.plan.tagline}</Text>}
-                {buildResult.plan.estimated_monthly_revenue && (
-                  <View style={s.revBadge}><Text style={s.revText}>Est. Revenue: {buildResult.plan.estimated_monthly_revenue}</Text></View>
-                )}
-                <Text style={s.planSection}>Products ({buildResult.plan.products?.length || 0})</Text>
-                {(buildResult.plan.products || []).slice(0, 5).map((p: any, i: number) => (
-                  <View key={i} style={s.productRow}>
-                    <View style={{ flex: 1 }}>
-                      <Text style={s.productName}>{p.title}</Text>
-                      <Text style={s.productDesc} numberOfLines={2}>{p.description}</Text>
+            {!buildId ? (
+              <>
+                <Text style={s.sectionSub}>Tell us your niche — AI builds your entire store while you watch. Chat with the builder anytime.</Text>
+                <TouchableOpacity testID="start-builder-btn" style={s.builderBtn} onPress={() => setShowBuilder(true)}>
+                  <Text style={s.builderBtnIcon}>🏗️</Text>
+                  <Text style={s.builderBtnTitle}>Build a New Store</Text>
+                  <Text style={s.builderBtnSub}>Pick a niche → AI creates brand, products, pricing, policies, marketing → Deploy to any platform</Text>
+                </TouchableOpacity>
+              </>
+            ) : (
+              <View style={s.buildChatWrap}>
+                <View style={s.buildProgress}>
+                  <Text style={s.buildProgressText}>
+                    {buildComplete ? '✅ Build Complete!' : building ? '🔨 Building...' : 'Ready'}
+                  </Text>
+                </View>
+                <ScrollView ref={buildScrollRef} style={s.buildChatScroll} showsVerticalScrollIndicator={false}
+                  onContentSizeChange={() => buildScrollRef.current?.scrollToEnd({ animated: true })}>
+                  {buildChat.map((msg: any, i: number) => (
+                    <View key={i} style={[s.buildMsg, msg.role === 'user' ? s.buildMsgUser : s.buildMsgAgent]}>
+                      {msg.role !== 'user' && <View style={s.buildMsgDot} />}
+                      <Text style={[s.buildMsgText, msg.role === 'user' && { color: Colors.emerald }]}>{msg.content}</Text>
                     </View>
-                    <Text style={s.productPrice}>${p.price}</Text>
+                  ))}
+                  {building && <ActivityIndicator size="small" color={Colors.emerald} style={{ marginTop: 12 }} />}
+                </ScrollView>
+
+                {/* Chat input during build */}
+                <View style={s.buildInputBar}>
+                  <TextInput testID="build-chat-input" style={s.buildInput} value={buildMsg} onChangeText={setBuildMsg}
+                    placeholder="Feedback or changes..." placeholderTextColor="#475569" />
+                  <TouchableOpacity testID="build-chat-send" style={s.buildSendBtn} onPress={sendBuildChat} disabled={!buildMsg.trim()}>
+                    <Text style={s.buildSendText}>↑</Text>
+                  </TouchableOpacity>
+                </View>
+
+                {buildComplete && buildPlan && (
+                  <View style={s.planCard}>
+                    <Text style={s.planTitle}>{buildPlan.brand_name || 'Your Store'}</Text>
+                    {buildPlan.tagline && <Text style={s.planTagline}>{buildPlan.tagline}</Text>}
+                    {buildPlan.estimated_monthly_revenue && (
+                      <View style={s.revBadge}><Text style={s.revText}>Est: {buildPlan.estimated_monthly_revenue}</Text></View>
+                    )}
+                    <Text style={s.planSection}>Products ({buildPlan.products?.length || 0})</Text>
+                    {(buildPlan.products || []).slice(0, 5).map((p: any, i: number) => (
+                      <View key={i} style={s.productRow}>
+                        <View style={{ flex: 1 }}><Text style={s.productName}>{p.title}</Text></View>
+                        <Text style={s.productPrice}>${p.price}</Text>
+                      </View>
+                    ))}
+                    {(buildPlan.products?.length || 0) > 5 && (
+                      <Text style={s.moreText}>+ {buildPlan.products.length - 5} more</Text>
+                    )}
                   </View>
-                ))}
-                {(buildResult.plan.products?.length || 0) > 5 && (
-                  <Text style={s.moreText}>+ {buildResult.plan.products.length - 5} more products</Text>
+                )}
+
+                {buildComplete && (
+                  <TouchableOpacity style={s.newBuildBtn} onPress={() => { setBuildId(null); setBuildChat([]); setBuildComplete(false); setBuildPlan(null); }}>
+                    <Text style={s.newBuildText}>Start Another Build</Text>
+                  </TouchableOpacity>
                 )}
               </View>
             )}
@@ -398,7 +432,7 @@ export default function ExecuteScreen() {
               </TouchableOpacity>
               <TouchableOpacity testID="generate-plan-btn"
                 style={[s.genBtn, !niche.trim() && { opacity: 0.5 }]}
-                onPress={buildStore} disabled={!niche.trim() || building}>
+                onPress={startBuild} disabled={!niche.trim() || building}>
                 {building ? <ActivityIndicator size="small" color={Colors.bg} /> :
                   <Text style={s.genText}>Generate Blueprint</Text>}
               </TouchableOpacity>
@@ -459,6 +493,22 @@ const s = StyleSheet.create({
   productDesc: { fontSize: FontSizes.xs, color: Colors.textMuted, marginTop: 2 },
   productPrice: { fontSize: FontSizes.lg, fontWeight: '800', color: Colors.emerald, marginLeft: Spacing.md },
   moreText: { fontSize: FontSizes.sm, color: Colors.textMuted, marginTop: Spacing.md, textAlign: 'center' },
+  // Build chat
+  buildChatWrap: { flex: 1 },
+  buildProgress: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 8, marginBottom: 8 },
+  buildProgressText: { fontSize: FontSizes.md, fontWeight: '700', color: Colors.emerald },
+  buildChatScroll: { maxHeight: 320, backgroundColor: '#0A0F1E', borderRadius: 16, padding: 16, marginBottom: 12 },
+  buildMsg: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 10, gap: 8 },
+  buildMsgUser: { alignSelf: 'flex-end', justifyContent: 'flex-end' },
+  buildMsgAgent: { alignSelf: 'flex-start' },
+  buildMsgDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: Colors.emerald, marginTop: 6 },
+  buildMsgText: { fontSize: FontSizes.md, color: '#E2E8F0', lineHeight: 22, flex: 1 },
+  buildInputBar: { flexDirection: 'row', gap: 8, marginBottom: 12 },
+  buildInput: { flex: 1, backgroundColor: '#0D1424', borderRadius: 12, paddingHorizontal: 16, paddingVertical: 12, color: '#F1F5F9', fontSize: FontSizes.md, borderWidth: 1, borderColor: '#1E293B' },
+  buildSendBtn: { width: 44, height: 44, borderRadius: 12, backgroundColor: Colors.emerald, justifyContent: 'center', alignItems: 'center' },
+  buildSendText: { fontSize: 20, fontWeight: '800', color: '#050A18' },
+  newBuildBtn: { backgroundColor: '#0D1424', borderRadius: 14, paddingVertical: 14, alignItems: 'center', borderWidth: 1, borderColor: '#1E293B', marginTop: 12 },
+  newBuildText: { fontSize: FontSizes.md, fontWeight: '700', color: '#94A3B8' },
   histSection: { marginTop: Spacing.xl },
   histTitle: { fontSize: FontSizes.lg, fontWeight: '800', color: Colors.textPrimary, marginBottom: Spacing.md },
   histItem: { flexDirection: 'row', alignItems: 'center', gap: Spacing.md, paddingVertical: Spacing.md, borderBottomWidth: 1, borderBottomColor: Colors.border },
