@@ -1,45 +1,107 @@
-from fastapi import FastAPI, APIRouter, HTTPException
 from dotenv import load_dotenv
-from starlette.middleware.cors import CORSMiddleware
-from motor.motor_asyncio import AsyncIOMotorClient
-import os
-import logging
 from pathlib import Path
-from pydantic import BaseModel, Field
-from typing import List, Optional, Dict, Any
-import uuid
-from datetime import datetime, timezone
-from emergentintegrations.llm.chat import LlmChat, UserMessage
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
 
-# Configure logging early
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
+from fastapi import FastAPI, APIRouter, HTTPException, Request, Response, Depends
+from starlette.middleware.cors import CORSMiddleware
+from motor.motor_asyncio import AsyncIOMotorClient
+from bson import ObjectId
+import os
+import logging
+import bcrypt
+import jwt
+import secrets
+from pydantic import BaseModel, Field
+from typing import List, Optional, Dict, Any
+import uuid
+from datetime import datetime, timezone, timedelta
+from emergentintegrations.llm.chat import LlmChat, UserMessage
+
+# Configure logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-# MongoDB connection
+# MongoDB
 mongo_url = os.environ['MONGO_URL']
 client = AsyncIOMotorClient(mongo_url)
 db = client[os.environ['DB_NAME']]
 
-# LLM Key
+# JWT Config
+JWT_ALGORITHM = "HS256"
 EMERGENT_LLM_KEY = os.environ.get('EMERGENT_LLM_KEY', '')
 
-app = FastAPI()
+def get_jwt_secret() -> str:
+    return os.environ['JWT_SECRET']
+
+def hash_password(password: str) -> str:
+    salt = bcrypt.gensalt()
+    return bcrypt.hashpw(password.encode("utf-8"), salt).decode("utf-8")
+
+def verify_password(plain: str, hashed: str) -> bool:
+    return bcrypt.checkpw(plain.encode("utf-8"), hashed.encode("utf-8"))
+
+def create_access_token(user_id: str, email: str) -> str:
+    payload = {"sub": user_id, "email": email, "exp": datetime.now(timezone.utc) + timedelta(hours=24), "type": "access"}
+    return jwt.encode(payload, get_jwt_secret(), algorithm=JWT_ALGORITHM)
+
+def create_refresh_token(user_id: str) -> str:
+    payload = {"sub": user_id, "exp": datetime.now(timezone.utc) + timedelta(days=7), "type": "refresh"}
+    return jwt.encode(payload, get_jwt_secret(), algorithm=JWT_ALGORITHM)
+
+async def get_current_user(request: Request) -> dict:
+    token = request.cookies.get("access_token")
+    if not token:
+        auth_header = request.headers.get("Authorization", "")
+        if auth_header.startswith("Bearer "):
+            token = auth_header[7:]
+    if not token:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    try:
+        payload = jwt.decode(token, get_jwt_secret(), algorithms=[JWT_ALGORITHM])
+        if payload.get("type") != "access":
+            raise HTTPException(status_code=401, detail="Invalid token type")
+        user = await db.users.find_one({"_id": ObjectId(payload["sub"])})
+        if not user:
+            raise HTTPException(status_code=401, detail="User not found")
+        user["_id"] = str(user["_id"])
+        user.pop("password_hash", None)
+        return user
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(status_code=401, detail="Token expired")
+    except jwt.InvalidTokenError:
+        raise HTTPException(status_code=401, detail="Invalid token")
+
+# FastAPI App
+app = FastAPI(title="THEONE API", version="2.0.0")
 api_router = APIRouter(prefix="/api")
 
-# ──────────────── Models ────────────────
+# ──────────────── Auth Models ────────────────
+
+class RegisterRequest(BaseModel):
+    email: str
+    password: str
+    name: str
+
+class LoginRequest(BaseModel):
+    email: str
+    password: str
+
+class UserResponse(BaseModel):
+    id: str
+    email: str
+    name: str
+    role: str
+    created_at: str
+
+# ──────────────── Business Models ────────────────
 
 class StoreCreate(BaseModel):
     name: str
-    platform: str  # shopify, woocommerce, etsy, custom
+    platform: str
     api_key: Optional[str] = None
     store_url: Optional[str] = None
-    status: str = "pending"
 
 class StoreResponse(BaseModel):
     id: str
@@ -55,7 +117,7 @@ class StoreResponse(BaseModel):
 class AgentConfig(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     name: str
-    agent_type: str  # store_manager, marketing, analytics, customer_service
+    agent_type: str
     description: str
     personality: str = "professional"
     tone: str = "friendly"
@@ -73,7 +135,7 @@ class AgentUpdate(BaseModel):
     is_active: Optional[bool] = None
 
 class ChatMessage(BaseModel):
-    role: str  # user or assistant
+    role: str
     content: str
     timestamp: str
     agent_type: Optional[str] = None
@@ -86,7 +148,7 @@ class ChatRequest(BaseModel):
 class TaskCreate(BaseModel):
     title: str
     agent_type: str
-    task_type: str  # schedule, automation, one_time
+    task_type: str
     description: str
     schedule: Optional[str] = None
     store_id: Optional[str] = None
@@ -107,7 +169,7 @@ class TaskResponse(BaseModel):
 class SocialContentRequest(BaseModel):
     product_name: str
     product_description: str
-    platform: str  # instagram, twitter, facebook, tiktok
+    platform: str
     tone: str = "engaging"
     store_id: Optional[str] = None
 
@@ -132,18 +194,12 @@ class DashboardMetrics(BaseModel):
 # ──────────────── Agent System Prompts ────────────────
 
 AGENT_PROMPTS = {
-    "store_manager": """You are THEONE Store Manager Agent — an elite AI eCommerce operations expert. You help manage inventory, optimize pricing, process orders, and handle all store operations. You speak with authority about eCommerce operations. When asked about specific actions, describe exactly what you would do step-by-step. You have deep knowledge of Shopify, WooCommerce, and other platforms. Always provide actionable insights and be proactive about suggesting optimizations. Format responses clearly with bullet points when listing actions.""",
-
-    "marketing": """You are THEONE Marketing Agent — a creative AI marketing genius specializing in eCommerce growth. You create compelling social media content, ad copy, email campaigns, and promotional strategies. You understand viral marketing, SEO, influencer partnerships, and conversion optimization. When creating content, be specific with platform-optimized formats. Always think about engagement, conversion, and brand voice. Be bold, creative, and data-driven in your suggestions.""",
-
-    "analytics": """You are THEONE Analytics Agent — a brilliant AI data analyst for eCommerce businesses. You analyze sales trends, customer behavior, inventory patterns, and market opportunities. You provide actionable insights backed by data-driven reasoning. Present findings clearly with key metrics, trends, and specific recommendations. Think like a Chief Data Officer who translates numbers into business strategy.""",
-
-    "customer_service": """You are THEONE Customer Service Agent — an empathetic and efficient AI customer support specialist. You help draft FAQ responses, handle common customer inquiries, create return/refund policies, and optimize the customer experience. You balance efficiency with genuine care. Provide template responses that feel personal, not robotic. Always suggest ways to turn complaints into loyalty.""",
-
-    "general": """You are THEONE — the ultimate AI co-pilot for eCommerce entrepreneurs. You orchestrate a team of specialized agents: Store Manager, Marketing, Analytics, and Customer Service. You can help with any aspect of running an online business. Be strategic, bold, and always thinking about growth. You're not just an assistant — you're a co-founder who happens to be AI. Think big, act fast, deliver results."""
+    "store_manager": """You are THEONE Store Manager Agent — an elite AI eCommerce operations expert. You help manage inventory, optimize pricing, process orders, and handle all store operations. You speak with authority about eCommerce operations. When asked about specific actions, describe exactly what you would do step-by-step. You have deep knowledge of Shopify, WooCommerce, and other platforms. Always provide actionable insights and be proactive about suggesting optimizations.""",
+    "marketing": """You are THEONE Marketing Agent — a creative AI marketing genius specializing in eCommerce growth. You create compelling social media content, ad copy, email campaigns, and promotional strategies. You understand viral marketing, SEO, influencer partnerships, and conversion optimization. Be bold, creative, and data-driven.""",
+    "analytics": """You are THEONE Analytics Agent — a brilliant AI data analyst for eCommerce businesses. You analyze sales trends, customer behavior, inventory patterns, and market opportunities. Present findings clearly with key metrics and specific recommendations.""",
+    "customer_service": """You are THEONE Customer Service Agent — an empathetic and efficient AI customer support specialist. You help draft FAQ responses, handle common customer inquiries, create return/refund policies, and optimize the customer experience.""",
+    "general": """You are THEONE — the ultimate AI co-pilot for eCommerce entrepreneurs. You orchestrate a team of specialized agents: Store Manager, Marketing, Analytics, and Customer Service. You can help with any aspect of running an online business. Be strategic, bold, and always thinking about growth."""
 }
-
-# ──────────────── Chat Sessions ────────────────
 
 chat_instances: Dict[str, LlmChat] = {}
 
@@ -151,179 +207,238 @@ def get_or_create_chat(session_id: str, agent_type: str = "general") -> LlmChat:
     key = f"{session_id}_{agent_type}"
     if key not in chat_instances:
         system_msg = AGENT_PROMPTS.get(agent_type, AGENT_PROMPTS["general"])
-        chat = LlmChat(
-            api_key=EMERGENT_LLM_KEY,
-            session_id=key,
-            system_message=system_msg
-        )
+        chat = LlmChat(api_key=EMERGENT_LLM_KEY, session_id=key, system_message=system_msg)
         chat.with_model("openai", "gpt-5.2")
         chat_instances[key] = chat
     return chat_instances[key]
 
-# ──────────────── Seed Data ────────────────
+# ──────────────── Brute Force Protection ────────────────
 
-async def seed_agents():
-    count = await db.agents.count_documents({})
-    if count == 0:
-        default_agents = [
-            {
-                "id": str(uuid.uuid4()),
-                "name": "Store Commander",
-                "agent_type": "store_manager",
-                "description": "Manages inventory, pricing, orders, and store operations autonomously.",
-                "personality": "strategic",
-                "tone": "professional",
-                "auto_execute": False,
-                "is_active": True,
-                "store_id": None,
-                "capabilities": ["inventory_management", "price_optimization", "order_processing", "stock_alerts", "bulk_updates"],
-                "tasks_completed": 0,
-                "last_active": None
-            },
-            {
-                "id": str(uuid.uuid4()),
-                "name": "Growth Engine",
-                "agent_type": "marketing",
-                "description": "Creates viral content, manages social media, and drives store traffic.",
-                "personality": "creative",
-                "tone": "bold",
-                "auto_execute": False,
-                "is_active": True,
-                "store_id": None,
-                "capabilities": ["social_media_posts", "ad_copy", "email_campaigns", "seo_optimization", "influencer_outreach"],
-                "tasks_completed": 0,
-                "last_active": None
-            },
-            {
-                "id": str(uuid.uuid4()),
-                "name": "Insight Oracle",
-                "agent_type": "analytics",
-                "description": "Analyzes trends, predicts demand, and delivers actionable business intelligence.",
-                "personality": "analytical",
-                "tone": "precise",
-                "auto_execute": False,
-                "is_active": True,
-                "store_id": None,
-                "capabilities": ["sales_analytics", "customer_insights", "trend_forecasting", "competitor_analysis", "revenue_optimization"],
-                "tasks_completed": 0,
-                "last_active": None
-            },
-            {
-                "id": str(uuid.uuid4()),
-                "name": "Support Shield",
-                "agent_type": "customer_service",
-                "description": "Handles customer inquiries, generates FAQs, and optimizes support flows.",
-                "personality": "empathetic",
-                "tone": "friendly",
-                "auto_execute": False,
-                "is_active": True,
-                "store_id": None,
-                "capabilities": ["auto_responses", "faq_generation", "review_management", "refund_processing", "satisfaction_tracking"],
-                "tasks_completed": 0,
-                "last_active": None
-            }
-        ]
-        await db.agents.insert_many(default_agents)
-        logger.info("Seeded default agents")
+async def check_brute_force(identifier: str):
+    record = await db.login_attempts.find_one({"identifier": identifier})
+    if record and record.get("attempts", 0) >= 5:
+        lockout_until = record.get("lockout_until")
+        if lockout_until and datetime.now(timezone.utc) < lockout_until:
+            remaining = int((lockout_until - datetime.now(timezone.utc)).total_seconds() / 60)
+            raise HTTPException(status_code=429, detail=f"Too many attempts. Try again in {remaining + 1} minutes.")
+        else:
+            await db.login_attempts.delete_one({"identifier": identifier})
+
+async def record_failed_attempt(identifier: str):
+    record = await db.login_attempts.find_one({"identifier": identifier})
+    if record:
+        attempts = record.get("attempts", 0) + 1
+        update = {"$set": {"attempts": attempts}}
+        if attempts >= 5:
+            update["$set"]["lockout_until"] = datetime.now(timezone.utc) + timedelta(minutes=15)
+        await db.login_attempts.update_one({"identifier": identifier}, update)
+    else:
+        await db.login_attempts.insert_one({"identifier": identifier, "attempts": 1})
+
+async def clear_failed_attempts(identifier: str):
+    await db.login_attempts.delete_one({"identifier": identifier})
+
+# ──────────────── Auth Endpoints ────────────────
+
+@api_router.post("/auth/register")
+async def register(req: RegisterRequest, response: Response):
+    email = req.email.lower().strip()
+    if not email or not req.password or len(req.password) < 6:
+        raise HTTPException(status_code=400, detail="Email and password (min 6 chars) required")
+
+    existing = await db.users.find_one({"email": email})
+    if existing:
+        raise HTTPException(status_code=409, detail="Email already registered")
+
+    user_doc = {
+        "email": email,
+        "password_hash": hash_password(req.password),
+        "name": req.name.strip(),
+        "role": "user",
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    result = await db.users.insert_one(user_doc)
+    user_id = str(result.inserted_id)
+
+    # Create default agents for this user
+    await seed_user_agents(user_id)
+
+    access = create_access_token(user_id, email)
+    refresh = create_refresh_token(user_id)
+    response.set_cookie(key="access_token", value=access, httponly=True, secure=False, samesite="lax", max_age=86400, path="/")
+    response.set_cookie(key="refresh_token", value=refresh, httponly=True, secure=False, samesite="lax", max_age=604800, path="/")
+
+    return {"id": user_id, "email": email, "name": req.name.strip(), "role": "user", "token": access}
+
+@api_router.post("/auth/login")
+async def login(req: LoginRequest, request: Request, response: Response):
+    email = req.email.lower().strip()
+    ip = request.client.host if request.client else "unknown"
+    identifier = f"{ip}:{email}"
+
+    await check_brute_force(identifier)
+
+    user = await db.users.find_one({"email": email})
+    if not user or not verify_password(req.password, user["password_hash"]):
+        await record_failed_attempt(identifier)
+        raise HTTPException(status_code=401, detail="Invalid email or password")
+
+    await clear_failed_attempts(identifier)
+    user_id = str(user["_id"])
+
+    access = create_access_token(user_id, email)
+    refresh = create_refresh_token(user_id)
+    response.set_cookie(key="access_token", value=access, httponly=True, secure=False, samesite="lax", max_age=86400, path="/")
+    response.set_cookie(key="refresh_token", value=refresh, httponly=True, secure=False, samesite="lax", max_age=604800, path="/")
+
+    return {"id": user_id, "email": email, "name": user.get("name", ""), "role": user.get("role", "user"), "token": access}
+
+@api_router.post("/auth/logout")
+async def logout(response: Response):
+    response.delete_cookie("access_token", path="/")
+    response.delete_cookie("refresh_token", path="/")
+    return {"status": "logged out"}
+
+@api_router.get("/auth/me")
+async def get_me(request: Request):
+    user = await get_current_user(request)
+    return {"id": user["_id"], "email": user["email"], "name": user.get("name", ""), "role": user.get("role", "user")}
+
+@api_router.post("/auth/refresh")
+async def refresh_token(request: Request, response: Response):
+    token = request.cookies.get("refresh_token")
+    if not token:
+        raise HTTPException(status_code=401, detail="No refresh token")
+    try:
+        payload = jwt.decode(token, get_jwt_secret(), algorithms=[JWT_ALGORITHM])
+        if payload.get("type") != "refresh":
+            raise HTTPException(status_code=401, detail="Invalid token type")
+        user = await db.users.find_one({"_id": ObjectId(payload["sub"])})
+        if not user:
+            raise HTTPException(status_code=401, detail="User not found")
+        access = create_access_token(str(user["_id"]), user["email"])
+        response.set_cookie(key="access_token", value=access, httponly=True, secure=False, samesite="lax", max_age=86400, path="/")
+        return {"status": "refreshed"}
+    except jwt.InvalidTokenError:
+        raise HTTPException(status_code=401, detail="Invalid refresh token")
+
+# ──────────────── Seed Functions ────────────────
+
+async def seed_user_agents(user_id: str):
+    default_agents = [
+        {"id": str(uuid.uuid4()), "user_id": user_id, "name": "Store Commander", "agent_type": "store_manager",
+         "description": "Manages inventory, pricing, orders, and store operations autonomously.",
+         "personality": "strategic", "tone": "professional", "auto_execute": False, "is_active": True,
+         "capabilities": ["inventory_management", "price_optimization", "order_processing", "stock_alerts", "bulk_updates"],
+         "tasks_completed": 0, "last_active": None},
+        {"id": str(uuid.uuid4()), "user_id": user_id, "name": "Growth Engine", "agent_type": "marketing",
+         "description": "Creates viral content, manages social media, and drives store traffic.",
+         "personality": "creative", "tone": "bold", "auto_execute": False, "is_active": True,
+         "capabilities": ["social_media_posts", "ad_copy", "email_campaigns", "seo_optimization", "influencer_outreach"],
+         "tasks_completed": 0, "last_active": None},
+        {"id": str(uuid.uuid4()), "user_id": user_id, "name": "Insight Oracle", "agent_type": "analytics",
+         "description": "Analyzes trends, predicts demand, and delivers actionable business intelligence.",
+         "personality": "analytical", "tone": "precise", "auto_execute": False, "is_active": True,
+         "capabilities": ["sales_analytics", "customer_insights", "trend_forecasting", "competitor_analysis", "revenue_optimization"],
+         "tasks_completed": 0, "last_active": None},
+        {"id": str(uuid.uuid4()), "user_id": user_id, "name": "Support Shield", "agent_type": "customer_service",
+         "description": "Handles customer inquiries, generates FAQs, and optimizes support flows.",
+         "personality": "empathetic", "tone": "friendly", "auto_execute": False, "is_active": True,
+         "capabilities": ["auto_responses", "faq_generation", "review_management", "refund_processing", "satisfaction_tracking"],
+         "tasks_completed": 0, "last_active": None},
+    ]
+    await db.agents.insert_many(default_agents)
+
+async def seed_admin():
+    admin_email = os.environ.get("ADMIN_EMAIL", "admin@theone.ai")
+    admin_password = os.environ.get("ADMIN_PASSWORD", "TheOne2026!")
+    existing = await db.users.find_one({"email": admin_email})
+    if not existing:
+        result = await db.users.insert_one({
+            "email": admin_email, "password_hash": hash_password(admin_password),
+            "name": "Admin", "role": "admin", "created_at": datetime.now(timezone.utc).isoformat()
+        })
+        await seed_user_agents(str(result.inserted_id))
+        logger.info("Admin seeded")
+    elif not verify_password(admin_password, existing["password_hash"]):
+        await db.users.update_one({"email": admin_email}, {"$set": {"password_hash": hash_password(admin_password)}})
 
 @app.on_event("startup")
 async def startup():
-    await seed_agents()
+    await db.users.create_index("email", unique=True)
+    await db.login_attempts.create_index("identifier")
+    await seed_admin()
 
 # ──────────────── Dashboard ────────────────
 
 @api_router.get("/dashboard", response_model=DashboardMetrics)
-async def get_dashboard():
-    stores = await db.stores.count_documents({})
-    agents = await db.agents.count_documents({"is_active": True})
-    tasks = await db.tasks.count_documents({"status": "completed"})
-    social = await db.social_content.count_documents({})
+async def get_dashboard(request: Request):
+    user = await get_current_user(request)
+    user_id = user["_id"]
 
-    # Aggregate revenue from stores
-    pipeline = [{"$group": {"_id": None, "total_revenue": {"$sum": "$revenue"}, "total_orders": {"$sum": "$orders_total"}}}]
+    stores = await db.stores.count_documents({"user_id": user_id})
+    agents = await db.agents.count_documents({"user_id": user_id, "is_active": True})
+    tasks = await db.tasks.count_documents({"user_id": user_id, "status": "completed"})
+    social = await db.social_content.count_documents({"user_id": user_id})
+
+    pipeline = [{"$match": {"user_id": user_id}}, {"$group": {"_id": None, "total_revenue": {"$sum": "$revenue"}, "total_orders": {"$sum": "$orders_total"}}}]
     agg = await db.stores.aggregate(pipeline).to_list(1)
     revenue = agg[0]["total_revenue"] if agg else 0
     orders = agg[0]["total_orders"] if agg else 0
 
-    # Recent activity
-    recent = await db.activity_log.find({}, {"_id": 0}).sort("timestamp", -1).to_list(10)
+    recent = await db.activity_log.find({"user_id": user_id}, {"_id": 0}).sort("timestamp", -1).to_list(10)
 
-    return DashboardMetrics(
-        total_stores=stores,
-        active_agents=agents,
-        tasks_completed=tasks,
-        total_revenue=revenue,
-        total_orders=orders,
-        social_posts=social,
-        recent_activity=recent
-    )
+    return DashboardMetrics(total_stores=stores, active_agents=agents, tasks_completed=tasks,
+                            total_revenue=revenue, total_orders=orders, social_posts=social, recent_activity=recent)
 
 # ──────────────── Stores ────────────────
 
 @api_router.post("/stores", response_model=StoreResponse)
-async def connect_store(store: StoreCreate):
+async def connect_store(store: StoreCreate, request: Request):
+    user = await get_current_user(request)
     store_doc = {
-        "id": str(uuid.uuid4()),
-        "name": store.name,
-        "platform": store.platform,
-        "store_url": store.store_url,
-        "status": "connected",
+        "id": str(uuid.uuid4()), "user_id": user["_id"], "name": store.name, "platform": store.platform,
+        "store_url": store.store_url, "status": "connected",
         "connected_at": datetime.now(timezone.utc).isoformat(),
-        "products_synced": 0,
-        "orders_total": 0,
-        "revenue": 0.0,
+        "products_synced": 0, "orders_total": 0, "revenue": 0.0,
     }
     if store.api_key:
-        store_doc["api_key_hash"] = store.api_key[:8] + "..." # Store partial for display
+        store_doc["api_key_hash"] = store.api_key[:8] + "..."
     await db.stores.insert_one(store_doc)
-
-    # Log activity
-    await db.activity_log.insert_one({
-        "type": "store_connected",
-        "message": f"Connected {store.platform} store: {store.name}",
-        "timestamp": datetime.now(timezone.utc).isoformat()
-    })
-
-    return StoreResponse(**{k: v for k, v in store_doc.items() if k != "_id" and k != "api_key_hash"})
+    await db.activity_log.insert_one({"user_id": user["_id"], "type": "store_connected",
+        "message": f"Connected {store.platform} store: {store.name}", "timestamp": datetime.now(timezone.utc).isoformat()})
+    return StoreResponse(**{k: v for k, v in store_doc.items() if k not in ("_id", "api_key_hash", "user_id")})
 
 @api_router.get("/stores", response_model=List[StoreResponse])
-async def get_stores():
-    stores = await db.stores.find({}, {"_id": 0, "api_key_hash": 0}).to_list(100)
+async def get_stores(request: Request):
+    user = await get_current_user(request)
+    stores = await db.stores.find({"user_id": user["_id"]}, {"_id": 0, "api_key_hash": 0, "user_id": 0}).to_list(100)
     return [StoreResponse(**s) for s in stores]
 
 @api_router.delete("/stores/{store_id}")
-async def disconnect_store(store_id: str):
-    result = await db.stores.delete_one({"id": store_id})
+async def disconnect_store(store_id: str, request: Request):
+    user = await get_current_user(request)
+    result = await db.stores.delete_one({"id": store_id, "user_id": user["_id"]})
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Store not found")
-    await db.activity_log.insert_one({
-        "type": "store_disconnected",
-        "message": f"Disconnected store {store_id}",
-        "timestamp": datetime.now(timezone.utc).isoformat()
-    })
     return {"status": "disconnected"}
 
 # ──────────────── Agents ────────────────
 
 @api_router.get("/agents", response_model=List[AgentConfig])
-async def get_agents():
-    agents = await db.agents.find({}, {"_id": 0}).to_list(100)
+async def get_agents(request: Request):
+    user = await get_current_user(request)
+    agents = await db.agents.find({"user_id": user["_id"]}, {"_id": 0, "user_id": 0}).to_list(100)
     return [AgentConfig(**a) for a in agents]
 
-@api_router.get("/agents/{agent_id}", response_model=AgentConfig)
-async def get_agent(agent_id: str):
-    agent = await db.agents.find_one({"id": agent_id}, {"_id": 0})
-    if not agent:
-        raise HTTPException(status_code=404, detail="Agent not found")
-    return AgentConfig(**agent)
-
 @api_router.patch("/agents/{agent_id}", response_model=AgentConfig)
-async def update_agent(agent_id: str, update: AgentUpdate):
+async def update_agent(agent_id: str, update: AgentUpdate, request: Request):
+    user = await get_current_user(request)
     update_data = {k: v for k, v in update.dict().items() if v is not None}
     if not update_data:
         raise HTTPException(status_code=400, detail="No fields to update")
-    await db.agents.update_one({"id": agent_id}, {"$set": update_data})
-    agent = await db.agents.find_one({"id": agent_id}, {"_id": 0})
+    await db.agents.update_one({"id": agent_id, "user_id": user["_id"]}, {"$set": update_data})
+    agent = await db.agents.find_one({"id": agent_id, "user_id": user["_id"]}, {"_id": 0, "user_id": 0})
     if not agent:
         raise HTTPException(status_code=404, detail="Agent not found")
     return AgentConfig(**agent)
@@ -331,60 +446,35 @@ async def update_agent(agent_id: str, update: AgentUpdate):
 # ──────────────── Chat ────────────────
 
 @api_router.post("/chat")
-async def chat_with_agent(req: ChatRequest):
-    session_id = "default_session"
+async def chat_with_agent(req: ChatRequest, request: Request):
+    user = await get_current_user(request)
+    session_id = user["_id"]
     chat = get_or_create_chat(session_id, req.agent_type)
 
-    # Store user message
-    user_msg = {
-        "session_id": session_id,
-        "agent_type": req.agent_type,
-        "role": "user",
-        "content": req.message,
-        "timestamp": datetime.now(timezone.utc).isoformat()
-    }
-    await db.chat_messages.insert_one(user_msg)
-
-    # Get AI response
+    await db.chat_messages.insert_one({"user_id": user["_id"], "session_id": session_id, "agent_type": req.agent_type,
+        "role": "user", "content": req.message, "timestamp": datetime.now(timezone.utc).isoformat()})
     try:
-        user_message = UserMessage(text=req.message)
-        response = await chat.send_message(user_message)
-
-        # Store assistant message
-        assistant_msg = {
-            "session_id": session_id,
-            "agent_type": req.agent_type,
-            "role": "assistant",
-            "content": response,
-            "timestamp": datetime.now(timezone.utc).isoformat()
-        }
-        await db.chat_messages.insert_one(assistant_msg)
-
-        # Update agent activity
-        await db.agents.update_one(
-            {"agent_type": req.agent_type},
-            {"$set": {"last_active": datetime.now(timezone.utc).isoformat()},
-             "$inc": {"tasks_completed": 1}}
-        )
-
+        response = await chat.send_message(UserMessage(text=req.message))
+        await db.chat_messages.insert_one({"user_id": user["_id"], "session_id": session_id, "agent_type": req.agent_type,
+            "role": "assistant", "content": response, "timestamp": datetime.now(timezone.utc).isoformat()})
+        await db.agents.update_one({"user_id": user["_id"], "agent_type": req.agent_type},
+            {"$set": {"last_active": datetime.now(timezone.utc).isoformat()}, "$inc": {"tasks_completed": 1}})
         return {"role": "assistant", "content": response, "agent_type": req.agent_type}
-
     except Exception as e:
         logger.error(f"Chat error: {e}")
         raise HTTPException(status_code=500, detail=f"Agent communication error: {str(e)}")
 
 @api_router.get("/chat/history/{agent_type}", response_model=List[ChatMessage])
-async def get_chat_history(agent_type: str):
-    messages = await db.chat_messages.find(
-        {"agent_type": agent_type},
-        {"_id": 0}
-    ).sort("timestamp", 1).to_list(100)
+async def get_chat_history(agent_type: str, request: Request):
+    user = await get_current_user(request)
+    messages = await db.chat_messages.find({"user_id": user["_id"], "agent_type": agent_type}, {"_id": 0, "user_id": 0}).sort("timestamp", 1).to_list(100)
     return [ChatMessage(**m) for m in messages]
 
 @api_router.delete("/chat/history/{agent_type}")
-async def clear_chat_history(agent_type: str):
-    await db.chat_messages.delete_many({"agent_type": agent_type})
-    key = f"default_session_{agent_type}"
+async def clear_chat_history(agent_type: str, request: Request):
+    user = await get_current_user(request)
+    await db.chat_messages.delete_many({"user_id": user["_id"], "agent_type": agent_type})
+    key = f"{user['_id']}_{agent_type}"
     if key in chat_instances:
         del chat_instances[key]
     return {"status": "cleared"}
@@ -392,124 +482,74 @@ async def clear_chat_history(agent_type: str):
 # ──────────────── Social Content ────────────────
 
 @api_router.post("/social/generate", response_model=SocialContentResponse)
-async def generate_social_content(req: SocialContentRequest):
-    chat = LlmChat(
-        api_key=EMERGENT_LLM_KEY,
-        session_id=f"social_{uuid.uuid4()}",
-        system_message="""You are an elite social media content creator for eCommerce brands. Generate platform-optimized content. Return ONLY the post content text followed by a line break and hashtags. No explanations or meta-commentary. Be catchy, trendy, and conversion-focused."""
-    )
+async def generate_social_content(req: SocialContentRequest, request: Request):
+    user = await get_current_user(request)
+    chat = LlmChat(api_key=EMERGENT_LLM_KEY, session_id=f"social_{uuid.uuid4()}",
+        system_message="You are an elite social media content creator for eCommerce brands. Generate platform-optimized content. Return ONLY the post content text followed by hashtags. No explanations.")
     chat.with_model("openai", "gpt-5.2")
 
     platform_hints = {
-        "instagram": "Create an Instagram caption (max 300 chars). Include emojis. Make it visually descriptive.",
-        "twitter": "Create a tweet (max 280 chars). Punchy, viral-worthy. Include 1-2 emojis.",
+        "instagram": "Create an Instagram caption (max 300 chars). Include emojis.",
+        "twitter": "Create a tweet (max 280 chars). Punchy, viral-worthy.",
         "facebook": "Create a Facebook post (max 500 chars). Engaging and shareable.",
-        "tiktok": "Create a TikTok caption (max 200 chars). Trendy, use Gen-Z language."
+        "tiktok": "Create a TikTok caption (max 200 chars). Trendy."
     }
 
-    prompt = f"""Product: {req.product_name}
-Description: {req.product_description}
-Platform: {req.platform}
-Tone: {req.tone}
-Instructions: {platform_hints.get(req.platform, 'Create engaging social media content.')}
-
-Generate the post content and 5 relevant hashtags."""
+    prompt = f"Product: {req.product_name}\nDescription: {req.product_description}\nPlatform: {req.platform}\nTone: {req.tone}\n{platform_hints.get(req.platform, '')}\nGenerate the post content and 5 relevant hashtags."
 
     try:
         response = await chat.send_message(UserMessage(text=prompt))
-
-        # Parse hashtags from response
         lines = response.strip().split('\n')
-        hashtags = []
-        content_lines = []
+        hashtags, content_lines = [], []
         for line in lines:
             tags = [w.strip() for w in line.split() if w.startswith('#')]
             if tags:
                 hashtags.extend(tags)
             else:
                 content_lines.append(line)
-
-        content = '\n'.join(content_lines).strip()
-        if not content:
-            content = response.strip()
+        content = '\n'.join(content_lines).strip() or response.strip()
         if not hashtags:
             hashtags = [f"#{req.product_name.replace(' ', '')}", "#ecommerce", "#shopnow"]
 
-        doc = {
-            "id": str(uuid.uuid4()),
-            "platform": req.platform,
-            "content": content,
-            "hashtags": hashtags[:8],
-            "product_name": req.product_name,
-            "created_at": datetime.now(timezone.utc).isoformat(),
-            "status": "draft",
-            "store_id": req.store_id
-        }
+        doc = {"id": str(uuid.uuid4()), "user_id": user["_id"], "platform": req.platform, "content": content,
+               "hashtags": hashtags[:8], "product_name": req.product_name,
+               "created_at": datetime.now(timezone.utc).isoformat(), "status": "draft"}
         await db.social_content.insert_one(doc)
-
-        await db.activity_log.insert_one({
-            "type": "content_generated",
-            "message": f"Generated {req.platform} post for {req.product_name}",
-            "timestamp": datetime.now(timezone.utc).isoformat()
-        })
-
-        return SocialContentResponse(**{k: v for k, v in doc.items() if k != "_id"})
-
+        await db.activity_log.insert_one({"user_id": user["_id"], "type": "content_generated",
+            "message": f"Generated {req.platform} post for {req.product_name}", "timestamp": datetime.now(timezone.utc).isoformat()})
+        return SocialContentResponse(**{k: v for k, v in doc.items() if k not in ("_id", "user_id")})
     except Exception as e:
         logger.error(f"Social content error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @api_router.get("/social/content", response_model=List[SocialContentResponse])
-async def get_social_content():
-    content = await db.social_content.find({}, {"_id": 0}).sort("created_at", -1).to_list(50)
+async def get_social_content(request: Request):
+    user = await get_current_user(request)
+    content = await db.social_content.find({"user_id": user["_id"]}, {"_id": 0, "user_id": 0}).sort("created_at", -1).to_list(50)
     return [SocialContentResponse(**c) for c in content]
 
 # ──────────────── Tasks ────────────────
 
 @api_router.post("/tasks", response_model=TaskResponse)
-async def create_task(task: TaskCreate):
-    doc = {
-        "id": str(uuid.uuid4()),
-        "title": task.title,
-        "agent_type": task.agent_type,
-        "task_type": task.task_type,
-        "description": task.description,
-        "status": "active",
-        "schedule": task.schedule,
-        "store_id": task.store_id,
-        "created_at": datetime.now(timezone.utc).isoformat(),
-        "last_run": None,
-        "runs_count": 0
-    }
+async def create_task(task: TaskCreate, request: Request):
+    user = await get_current_user(request)
+    doc = {"id": str(uuid.uuid4()), "user_id": user["_id"], "title": task.title, "agent_type": task.agent_type,
+           "task_type": task.task_type, "description": task.description, "status": "active",
+           "schedule": task.schedule, "store_id": task.store_id,
+           "created_at": datetime.now(timezone.utc).isoformat(), "last_run": None, "runs_count": 0}
     await db.tasks.insert_one(doc)
-
-    await db.activity_log.insert_one({
-        "type": "task_created",
-        "message": f"New task: {task.title}",
-        "timestamp": datetime.now(timezone.utc).isoformat()
-    })
-
-    return TaskResponse(**{k: v for k, v in doc.items() if k != "_id"})
+    return TaskResponse(**{k: v for k, v in doc.items() if k not in ("_id", "user_id")})
 
 @api_router.get("/tasks", response_model=List[TaskResponse])
-async def get_tasks():
-    tasks = await db.tasks.find({}, {"_id": 0}).sort("created_at", -1).to_list(100)
+async def get_tasks(request: Request):
+    user = await get_current_user(request)
+    tasks = await db.tasks.find({"user_id": user["_id"]}, {"_id": 0, "user_id": 0}).sort("created_at", -1).to_list(100)
     return [TaskResponse(**t) for t in tasks]
 
-@api_router.patch("/tasks/{task_id}")
-async def update_task_status(task_id: str, status: str = "completed"):
-    result = await db.tasks.update_one(
-        {"id": task_id},
-        {"$set": {"status": status, "last_run": datetime.now(timezone.utc).isoformat()},
-         "$inc": {"runs_count": 1}}
-    )
-    if result.matched_count == 0:
-        raise HTTPException(status_code=404, detail="Task not found")
-    return {"status": "updated"}
-
 @api_router.delete("/tasks/{task_id}")
-async def delete_task(task_id: str):
-    result = await db.tasks.delete_one({"id": task_id})
+async def delete_task(task_id: str, request: Request):
+    user = await get_current_user(request)
+    result = await db.tasks.delete_one({"id": task_id, "user_id": user["_id"]})
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Task not found")
     return {"status": "deleted"}
@@ -518,7 +558,7 @@ async def delete_task(task_id: str):
 
 @api_router.get("/")
 async def root():
-    return {"app": "THEONE", "version": "1.0.0", "status": "operational"}
+    return {"app": "THEONE", "version": "2.0.0", "status": "operational"}
 
 @api_router.get("/health")
 async def health():
