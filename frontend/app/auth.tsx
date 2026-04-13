@@ -10,8 +10,8 @@ import { Colors, BorderRadius } from '../constants/theme';
 
 const { width: W, height: H } = Dimensions.get('window');
 const CENTER = W / 2;
-const ROBOT_SIZE = 130;
-const ORBIT_R = 110;
+const ROBOT_SIZE = 120;
+const ORBIT_R = 100;
 
 const INTEGRATIONS = [
   { label: 'Shopify', emoji: '🛍️', color: '#96BF48' },
@@ -54,8 +54,8 @@ function OrbitalHero() {
   return (
     <View style={[o.container, { width: containerSize, height: containerSize, alignSelf: 'center' }]}>      
       {/* Glow rings */}
-      <Animated.View style={[o.glowRing, { opacity: robotGlow, left: centerOffset - (ROBOT_SIZE + 80) / 2, top: centerOffset - (ROBOT_SIZE + 80) / 2 }]} />
-      <Animated.View style={[o.glowRing2, { opacity: robotGlow, left: centerOffset - (ROBOT_SIZE + 140) / 2, top: centerOffset - (ROBOT_SIZE + 140) / 2 }]} />
+      <Animated.View style={[o.glowRing, { opacity: robotGlow, left: centerOffset - (ROBOT_SIZE + 60) / 2, top: centerOffset - (ROBOT_SIZE + 60) / 2 }]} />
+      <Animated.View style={[o.glowRing2, { opacity: robotGlow, left: centerOffset - (ROBOT_SIZE + 110) / 2, top: centerOffset - (ROBOT_SIZE + 110) / 2 }]} />
 
       {/* Dashed orbit circle */}
       <View style={[o.orbitRing, { left: centerOffset - ORBIT_R - 22, top: centerOffset - ORBIT_R - 22 }]} />
@@ -231,12 +231,12 @@ export default function AuthScreen() {
 const o = StyleSheet.create({
   container: { position: 'relative', marginBottom: 10 },
   glowRing: {
-    position: 'absolute', width: ROBOT_SIZE + 80, height: ROBOT_SIZE + 80, borderRadius: (ROBOT_SIZE + 80) / 2,
+    position: 'absolute', width: ROBOT_SIZE + 60, height: ROBOT_SIZE + 60, borderRadius: (ROBOT_SIZE + 60) / 2,
     backgroundColor: Colors.emerald,
   },
   glowRing2: {
-    position: 'absolute', width: ROBOT_SIZE + 140, height: ROBOT_SIZE + 140, borderRadius: (ROBOT_SIZE + 140) / 2,
-    backgroundColor: Colors.emerald, opacity: 0.08,
+    position: 'absolute', width: ROBOT_SIZE + 110, height: ROBOT_SIZE + 110, borderRadius: (ROBOT_SIZE + 110) / 2,
+    backgroundColor: Colors.emerald, opacity: 0.06,
   },
   orbitRing: {
     position: 'absolute', width: ORBIT_R * 2 + 44, height: ORBIT_R * 2 + 44, borderRadius: ORBIT_R + 22,
@@ -248,7 +248,7 @@ const o = StyleSheet.create({
   },
   intEmoji: { fontSize: 18 },
   intLabel: { fontSize: 7, fontWeight: '800', marginTop: 1, letterSpacing: 0.3 },
-  robotWrap: { zIndex: 10 },
+  robotWrap: { zIndex: 10, borderRadius: ROBOT_SIZE / 2, overflow: 'hidden', backgroundColor: '#0a1a12' },
   robotImg: { width: ROBOT_SIZE, height: ROBOT_SIZE },
 });
 
