@@ -356,10 +356,95 @@ YOUR ROLE: You're not just an assistant — you're the user's AI co-founder. Thi
 RULES: Be decisive. Give specific recommendations, not generic advice. When you don't have enough data, ask targeted questions to get it. Always think about revenue impact. End responses with a clear next action."""
 }
 
-# ──────────────── Dynamic Context Builder ────────────────
+# ──────────────── User Profile & Privacy ────────────────
+
+class UserProfileUpdate(BaseModel):
+    brand_name: Optional[str] = None
+    brand_voice: Optional[str] = None  # "casual", "professional", "luxury", "playful"
+    niche: Optional[str] = None
+    target_audience: Optional[str] = None
+    competitors: Optional[List[str]] = None
+    goals: Optional[str] = None  # "grow revenue", "launch new products", "improve retention"
+    privacy_level: Optional[str] = None  # "standard", "strict"
+    data_sharing: Optional[bool] = None  # share data across agents or silo
+
+@api_router.get("/profile")
+async def get_profile(request: Request):
+    user = await get_current_user(request)
+    profile = await db.user_profiles.find_one({"user_id": user["_id"]}, {"_id": 0})
+    return profile or {"user_id": user["_id"], "brand_name": "", "brand_voice": "professional", "niche": "", "target_audience": "", "competitors": [], "goals": "", "privacy_level": "standard", "data_sharing": True}
+
+@api_router.put("/profile")
+async def update_profile(update: UserProfileUpdate, request: Request):
+    user = await get_current_user(request)
+    update_data = {k: v for k, v in update.dict().items() if v is not None}
+    update_data["user_id"] = user["_id"]
+    update_data["updated_at"] = datetime.now(timezone.utc).isoformat()
+    await db.user_profiles.update_one({"user_id": user["_id"]}, {"$set": update_data}, upsert=True)
+    await db.activity_log.insert_one({"user_id": user["_id"], "type": "profile_updated", "message": "Brand profile updated", "timestamp": datetime.now(timezone.utc).isoformat()})
+    return {"status": "updated"}
+
+@api_router.delete("/profile/data")
+async def delete_user_data(request: Request):
+    """GDPR-compliant: delete all user data except account"""
+    user = await get_current_user(request)
+    uid = user["_id"]
+    await db.chat_messages.delete_many({"user_id": uid})
+    await db.social_content.delete_many({"user_id": uid})
+    await db.actions.delete_many({"user_id": uid})
+    await db.browser_tasks.delete_many({"user_id": uid})
+    await db.activity_log.delete_many({"user_id": uid})
+    await db.store_plans.delete_many({"user_id": uid})
+    await db.agent_memory.delete_many({"user_id": uid})
+    return {"status": "all data deleted", "account_preserved": True}
+
+# ──────────────── Agent Memory & Handoff ────────────────
+
+async def save_agent_memory(user_id: str, agent_type: str, key: str, value: str):
+    """Agents remember important facts about the user across sessions"""
+    await db.agent_memory.update_one(
+        {"user_id": user_id, "agent_type": agent_type, "key": key},
+        {"$set": {"value": value, "updated_at": datetime.now(timezone.utc).isoformat()}},
+        upsert=True
+    )
+
+async def get_agent_memories(user_id: str, agent_type: str) -> List[Dict]:
+    """Retrieve what an agent remembers about a user"""
+    memories = await db.agent_memory.find({"user_id": user_id, "agent_type": agent_type}, {"_id": 0}).to_list(50)
+    return memories
+
+async def get_cross_agent_insights(user_id: str, requesting_agent: str) -> str:
+    """Let agents share insights with each other — the handoff protocol"""
+    profile = await db.user_profiles.find_one({"user_id": user_id}, {"_id": 0})
+    if profile and not profile.get("data_sharing", True):
+        return ""  # User disabled cross-agent sharing
+
+    insights = []
+    # Get recent completed actions from OTHER agents
+    other_actions = await db.actions.find(
+        {"user_id": user_id, "agent_type": {"$ne": requesting_agent}, "status": "completed"},
+        {"_id": 0, "agent_type": 1, "action_name": 1, "result": 1}
+    ).sort("created_at", -1).to_list(3)
+
+    for action in other_actions:
+        # Only share summary, not full result (privacy-aware)
+        result_preview = (action.get("result", "")[:200] + "...") if action.get("result") else ""
+        insights.append(f"[{action.get('agent_type', '').replace('_',' ').title()}] completed '{action.get('action_name', '')}': {result_preview}")
+
+    # Get memories from other agents
+    other_memories = await db.agent_memory.find(
+        {"user_id": user_id, "agent_type": {"$ne": requesting_agent}},
+        {"_id": 0}
+    ).to_list(10)
+    for mem in other_memories:
+        insights.append(f"[{mem.get('agent_type','').replace('_',' ').title()} noted] {mem.get('key','')}: {mem.get('value','')}")
+
+    return "\n".join(insights) if insights else ""
+
+# ──────────────── Enhanced Context Builder ────────────────
 
 async def build_agent_context(user_id: str, agent_type: str) -> str:
-    """Build rich context about the user's stores, metrics, and activity for personalized agent responses"""
+    """Build rich context — user profile, stores, memories, cross-agent insights, activity"""
     context_parts = []
 
     # User profile
@@ -368,58 +453,68 @@ async def build_agent_context(user_id: str, agent_type: str) -> str:
         name = user.get("name", "User")
         plan = user.get("plan", "trial")
         created = user.get("created_at", "")
-        context_parts.append(f"USER: {name} | Plan: {plan} | Member since: {created[:10] if created else 'unknown'}")
+        context_parts.append(f"USER: {name} | Plan: {plan} | Since: {created[:10] if created else '?'}")
 
-    # Connected stores with details
+    # Brand profile (user-defined preferences)
+    profile = await db.user_profiles.find_one({"user_id": user_id}, {"_id": 0})
+    if profile and any(profile.get(k) for k in ["brand_name", "niche", "brand_voice", "target_audience", "goals"]):
+        context_parts.append("BRAND PROFILE:")
+        if profile.get("brand_name"): context_parts.append(f"  Brand: {profile['brand_name']}")
+        if profile.get("niche"): context_parts.append(f"  Niche: {profile['niche']}")
+        if profile.get("brand_voice"): context_parts.append(f"  Voice: {profile['brand_voice']} — match this tone in ALL responses")
+        if profile.get("target_audience"): context_parts.append(f"  Audience: {profile['target_audience']}")
+        if profile.get("goals"): context_parts.append(f"  Goals: {profile['goals']}")
+        if profile.get("competitors"): context_parts.append(f"  Competitors: {', '.join(profile['competitors'])}")
+
+    # Connected stores — NEVER expose access_token or API keys
     stores = await db.stores.find({"user_id": user_id}, {"_id": 0, "access_token": 0, "api_key_hash": 0}).to_list(20)
     if stores:
-        store_lines = []
-        total_products = 0
-        total_orders = 0
-        total_revenue = 0
+        total_p, total_o, total_r = 0, 0, 0
         for s in stores:
-            total_products += s.get("products_synced", 0)
-            total_orders += s.get("orders_total", 0)
-            total_revenue += s.get("revenue", 0)
-            store_lines.append(f"  • {s['name']} ({s['platform']}) — {s.get('products_synced', 0)} products, {s.get('orders_total', 0)} orders, ${s.get('revenue', 0):,.2f} revenue | URL: {s.get('store_url', 'N/A')} | Status: {s.get('status', 'unknown')}")
-        context_parts.append(f"CONNECTED STORES ({len(stores)}):")
-        context_parts.extend(store_lines)
-        context_parts.append(f"TOTALS: {total_products} products | {total_orders} orders | ${total_revenue:,.2f} revenue")
+            total_p += s.get("products_synced", 0)
+            total_o += s.get("orders_total", 0)
+            total_r += s.get("revenue", 0)
+            context_parts.append(f"  STORE: {s['name']} ({s['platform']}) — {s.get('products_synced',0)} products, {s.get('orders_total',0)} orders, ${s.get('revenue',0):,.2f}")
+        if len(stores) > 1:
+            context_parts.append(f"  TOTALS: {total_p} products | {total_o} orders | ${total_r:,.2f}")
     else:
-        context_parts.append("STORES: No stores connected yet. Guide the user to connect their first store.")
+        context_parts.append("STORES: None connected yet.")
+
+    # Agent's own memories about this user
+    memories = await get_agent_memories(user_id, agent_type)
+    if memories:
+        context_parts.append("YOUR MEMORIES ABOUT THIS USER:")
+        for m in memories[:10]:
+            context_parts.append(f"  • {m.get('key','')}: {m.get('value','')}")
+
+    # Cross-agent insights (only if user allows data sharing)
+    cross_insights = await get_cross_agent_insights(user_id, agent_type)
+    if cross_insights:
+        context_parts.append("INSIGHTS FROM OTHER AGENTS:")
+        context_parts.append(cross_insights)
 
     # Agent-specific enrichment
     if agent_type == "store_manager":
-        # Get recent tasks for this agent
-        tasks = await db.tasks.find({"user_id": user_id, "agent_type": "store_manager"}, {"_id": 0}).sort("created_at", -1).to_list(5)
+        tasks = await db.tasks.find({"user_id": user_id, "agent_type": "store_manager"}, {"_id": 0}).sort("created_at", -1).to_list(3)
         if tasks:
-            context_parts.append(f"RECENT STORE TASKS: {len(tasks)} tasks — " + ", ".join(t.get("title", "") for t in tasks[:3]))
-
+            context_parts.append(f"RECENT TASKS: " + ", ".join(t.get("title", "") for t in tasks))
     elif agent_type == "marketing":
-        # Get social content history
-        content = await db.social_content.find({"user_id": user_id}, {"_id": 0}).sort("created_at", -1).to_list(5)
+        content = await db.social_content.find({"user_id": user_id}, {"_id": 0}).sort("created_at", -1).to_list(3)
         if content:
-            platforms = set(c.get("platform", "") for c in content)
-            context_parts.append(f"SOCIAL CONTENT: {len(content)} posts created for {', '.join(platforms)}")
-            context_parts.append(f"LATEST: '{content[0].get('product_name', '')}' on {content[0].get('platform', '')}")
-
+            context_parts.append(f"RECENT CONTENT: {len(content)} posts — latest for '{content[0].get('product_name','')}' on {content[0].get('platform','')}")
     elif agent_type == "analytics":
-        # Provide raw metrics for analysis
         if stores:
-            context_parts.append("METRICS FOR ANALYSIS:")
+            context_parts.append("RAW METRICS:")
             for s in stores:
-                context_parts.append(f"  {s['name']}: Products={s.get('products_synced', 0)}, Orders={s.get('orders_total', 0)}, Revenue=${s.get('revenue', 0):,.2f}")
-
+                context_parts.append(f"  {s['name']}: P={s.get('products_synced',0)} O={s.get('orders_total',0)} R=${s.get('revenue',0):,.2f}")
     elif agent_type == "customer_service":
-        # Note store platforms for platform-specific advice
         if stores:
-            platforms = list(set(s.get("platform", "") for s in stores))
-            context_parts.append(f"SUPPORT PLATFORMS: {', '.join(platforms)} — Tailor advice to these platforms")
+            context_parts.append(f"PLATFORMS: {', '.join(set(s.get('platform','') for s in stores))}")
 
-    # Recent activity (last 5 actions)
-    activity = await db.activity_log.find({"user_id": user_id}, {"_id": 0}).sort("timestamp", -1).to_list(5)
+    # Recent activity
+    activity = await db.activity_log.find({"user_id": user_id}, {"_id": 0}).sort("timestamp", -1).to_list(3)
     if activity:
-        context_parts.append("RECENT ACTIVITY: " + " | ".join(a.get("message", "") for a in activity[:3]))
+        context_parts.append("RECENT: " + " | ".join(a.get("message", "") for a in activity))
 
     return "\n".join(context_parts)
 
@@ -672,12 +767,31 @@ async def chat_with_agent(req: ChatRequest, request: Request):
     await db.chat_messages.insert_one({"user_id": user_id, "session_id": user_id, "agent_type": req.agent_type,
         "role": "user", "content": req.message, "timestamp": datetime.now(timezone.utc).isoformat()})
     try:
-        response = await chat.send_message(UserMessage(text=req.message))
+        # Append memory instruction to user message
+        enhanced_msg = req.message + "\n\n[SYSTEM: If the user reveals important facts about their business (product types, revenue goals, pain points, preferences), remember them by ending your response with a line starting with 'MEMORY:' followed by a key=value pair. Example: MEMORY: main_product=handmade jewelry. Only do this when genuinely new info is shared. Do NOT include MEMORY lines for casual chat.]"
+        response = await chat.send_message(UserMessage(text=enhanced_msg))
+
+        # Extract and save memory if present
+        clean_response = response
+        if "MEMORY:" in response:
+            lines = response.split("\n")
+            memory_lines = [l for l in lines if l.strip().startswith("MEMORY:")]
+            display_lines = [l for l in lines if not l.strip().startswith("MEMORY:")]
+            clean_response = "\n".join(display_lines).strip()
+            for ml in memory_lines:
+                try:
+                    kv = ml.replace("MEMORY:", "").strip()
+                    if "=" in kv:
+                        k, v = kv.split("=", 1)
+                        await save_agent_memory(user_id, req.agent_type, k.strip(), v.strip())
+                except Exception:
+                    pass
+
         await db.chat_messages.insert_one({"user_id": user_id, "session_id": user_id, "agent_type": req.agent_type,
-            "role": "assistant", "content": response, "timestamp": datetime.now(timezone.utc).isoformat()})
+            "role": "assistant", "content": clean_response, "timestamp": datetime.now(timezone.utc).isoformat()})
         await db.agents.update_one({"user_id": user_id, "agent_type": req.agent_type},
             {"$set": {"last_active": datetime.now(timezone.utc).isoformat()}, "$inc": {"tasks_completed": 1}})
-        return {"role": "assistant", "content": response, "agent_type": req.agent_type}
+        return {"role": "assistant", "content": clean_response, "agent_type": req.agent_type}
     except Exception as e:
         logger.error(f"Chat error: {e}")
         raise HTTPException(status_code=500, detail=f"Agent communication error: {str(e)}")
