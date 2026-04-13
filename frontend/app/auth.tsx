@@ -2,130 +2,111 @@ import { useState, useEffect, useRef } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, ScrollView,
   KeyboardAvoidingView, Platform, ActivityIndicator, TextInput,
-  Dimensions, Animated, Modal, Keyboard, Easing, Pressable,
+  Dimensions, Animated, Keyboard, Easing, Image, Pressable,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../contexts/AuthContext';
 import { Colors, BorderRadius } from '../constants/theme';
 
-const { width, height } = Dimensions.get('window');
-const W = width;
+const { width: W, height: H } = Dimensions.get('window');
+const CENTER = W / 2;
+const ROBOT_SIZE = 160;
+const ORBIT_R = 120;
 
-// ─── Animated Background with visible orbs, grid, aurora, sparkles ───
-function AnimatedBg() {
-  const orb1Y = useRef(new Animated.Value(0)).current;
-  const orb1X = useRef(new Animated.Value(0)).current;
-  const orb2Y = useRef(new Animated.Value(0)).current;
-  const orb2X = useRef(new Animated.Value(0)).current;
-  const orb3Y = useRef(new Animated.Value(0)).current;
-  const orb3X = useRef(new Animated.Value(0)).current;
-  const pulse1 = useRef(new Animated.Value(0.28)).current;
-  const pulse2 = useRef(new Animated.Value(0.22)).current;
-  // Sparkle particles
-  const sparkles = useRef(Array.from({ length: 18 }, () => ({
-    x: Math.random() * W,
-    y: Math.random() * height * 1.2,
-    size: Math.random() * 3 + 1.5,
-    opacity: new Animated.Value(Math.random() * 0.5 + 0.2),
-    isGreen: Math.random() > 0.5,
-  }))).current;
+// Integration logos that orbit the robot
+const INTEGRATIONS = [
+  { label: 'Shopify', emoji: '🟢', color: '#96BF48' },
+  { label: 'Etsy', emoji: '🟠', color: '#F1641E' },
+  { label: 'Woo', emoji: '🟣', color: '#7B51AD' },
+  { label: 'Insta', emoji: '📸', color: '#E1306C' },
+  { label: 'X', emoji: '🐦', color: '#1DA1F2' },
+  { label: 'TikTok', emoji: '🎵', color: '#FE2C55' },
+  { label: 'GPT', emoji: '🧠', color: '#10A37F' },
+  { label: 'Meta', emoji: '📘', color: '#1877F2' },
+];
+
+function OrbitalHero() {
+  const robotPulse = useRef(new Animated.Value(1)).current;
+  const robotGlow = useRef(new Animated.Value(0.3)).current;
+  const orbitAngle = useRef(new Animated.Value(0)).current;
+  // Individual integration pulses
+  const intPulses = useRef(INTEGRATIONS.map(() => new Animated.Value(0.6))).current;
 
   useEffect(() => {
-    const drift = (v: Animated.Value, range: number, dur: number) => {
-      const loop = () => Animated.sequence([
-        Animated.timing(v, { toValue: range, duration: dur, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
-        Animated.timing(v, { toValue: -range, duration: dur, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
-      ]).start(loop);
-      loop();
-    };
-    drift(orb1Y, 35, 5000); drift(orb1X, 25, 7000);
-    drift(orb2Y, -30, 6500); drift(orb2X, -20, 5500);
-    drift(orb3Y, 25, 8000); drift(orb3X, 15, 6000);
-
-    const breathe = (v: Animated.Value, lo: number, hi: number, dur: number) =>
-      Animated.loop(Animated.sequence([
-        Animated.timing(v, { toValue: hi, duration: dur, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
-        Animated.timing(v, { toValue: lo, duration: dur, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
-      ])).start();
-    breathe(pulse1, 0.2, 0.4, 3500);
-    breathe(pulse2, 0.15, 0.35, 4500);
-
-    // Sparkle twinkle
-    sparkles.forEach(sp => {
-      const twinkle = () => Animated.sequence([
-        Animated.timing(sp.opacity, { toValue: Math.random() * 0.8 + 0.2, duration: 1500 + Math.random() * 2000, useNativeDriver: true }),
-        Animated.timing(sp.opacity, { toValue: Math.random() * 0.15, duration: 1500 + Math.random() * 2000, useNativeDriver: true }),
-      ]).start(twinkle);
-      twinkle();
+    // Robot breathe
+    Animated.loop(Animated.sequence([
+      Animated.timing(robotPulse, { toValue: 1.06, duration: 2000, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+      Animated.timing(robotPulse, { toValue: 0.96, duration: 2000, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+    ])).start();
+    // Robot glow breathe
+    Animated.loop(Animated.sequence([
+      Animated.timing(robotGlow, { toValue: 0.6, duration: 2500, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+      Animated.timing(robotGlow, { toValue: 0.2, duration: 2500, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+    ])).start();
+    // Orbit rotation
+    Animated.loop(
+      Animated.timing(orbitAngle, { toValue: 1, duration: 30000, easing: Easing.linear, useNativeDriver: false })
+    ).start();
+    // Integration pulses
+    intPulses.forEach((p, i) => {
+      const delay = i * 400;
+      setTimeout(() => {
+        Animated.loop(Animated.sequence([
+          Animated.timing(p, { toValue: 1, duration: 1200 + i * 200, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+          Animated.timing(p, { toValue: 0.5, duration: 1200 + i * 200, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+        ])).start();
+      }, delay);
     });
   }, []);
 
+  // Calculate orbital positions
+  const rotation = orbitAngle.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '360deg'] });
+
   return (
-    <View style={StyleSheet.absoluteFill} pointerEvents="none">
-      {/* Grid — visible */}
-      {Array.from({ length: 9 }).map((_, i) => (
-        <View key={`h${i}`} style={{ position: 'absolute', top: i * (height / 8), left: 0, right: 0, height: 1, backgroundColor: '#34D399', opacity: 0.07 }} />
-      ))}
-      {Array.from({ length: 7 }).map((_, i) => (
-        <View key={`v${i}`} style={{ position: 'absolute', left: i * (W / 6), top: 0, bottom: 0, width: 1, backgroundColor: '#34D399', opacity: 0.05 }} />
-      ))}
+    <View style={o.container}>
+      {/* Glow ring behind robot */}
+      <Animated.View style={[o.glowRing, { opacity: robotGlow }]} />
+      <Animated.View style={[o.glowRing2, { opacity: robotGlow }]} />
 
-      {/* Aurora sweep */}
-      <Animated.View style={{
-        position: 'absolute', top: 40, left: -40, right: -40, height: 280,
-        backgroundColor: Colors.emerald, opacity: pulse1, borderRadius: 140,
-        transform: [{ scaleX: 1.8 }, { scaleY: 0.4 }, { rotate: '-6deg' }],
-      }} />
-      <Animated.View style={{
-        position: 'absolute', top: height * 0.55, left: -30, right: -30, height: 200,
-        backgroundColor: Colors.cyan, opacity: pulse2, borderRadius: 100,
-        transform: [{ scaleX: 1.5 }, { scaleY: 0.3 }, { rotate: '4deg' }],
-      }} />
+      {/* Orbit ring visual */}
+      <View style={o.orbitRing} />
 
-      {/* Orbs with glow */}
-      <Animated.View style={[bgs.orb, {
-        width: 320, height: 320, backgroundColor: Colors.emerald, opacity: 0.3,
-        top: 20, left: -80, borderRadius: 160,
-        transform: [{ translateY: orb1Y }, { translateX: orb1X }],
-        shadowColor: Colors.emerald, shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.6, shadowRadius: 60, elevation: 0,
-      }]} />
-      <Animated.View style={[bgs.orb, {
-        width: 240, height: 240, backgroundColor: Colors.cyan, opacity: 0.25,
-        top: height * 0.38, right: -50, borderRadius: 120,
-        transform: [{ translateY: orb2Y }, { translateX: orb2X }],
-        shadowColor: Colors.cyan, shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.5, shadowRadius: 50, elevation: 0,
-      }]} />
-      <Animated.View style={[bgs.orb, {
-        width: 200, height: 200, backgroundColor: Colors.amber, opacity: 0.2,
-        bottom: 180, left: W * 0.25, borderRadius: 100,
-        transform: [{ translateY: orb3Y }, { translateX: orb3X }],
-        shadowColor: Colors.amber, shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.4, shadowRadius: 40, elevation: 0,
-      }]} />
+      {/* Orbiting integrations */}
+      <Animated.View style={[o.orbitGroup, { transform: [{ rotate: rotation }] }]}>
+        {INTEGRATIONS.map((int, i) => {
+          const angle = (i / INTEGRATIONS.length) * Math.PI * 2;
+          const x = Math.cos(angle) * ORBIT_R;
+          const y = Math.sin(angle) * ORBIT_R;
+          return (
+            <Animated.View key={i} style={[o.intBubble, {
+              left: CENTER - 22 + x, top: ROBOT_SIZE / 2 + 20 - 22 + y,
+              opacity: intPulses[i],
+              borderColor: int.color + '50',
+              shadowColor: int.color, shadowOpacity: 0.4, shadowRadius: 12, shadowOffset: { width: 0, height: 0 },
+            }]}>
+              <Text style={o.intEmoji}>{int.emoji}</Text>
+            </Animated.View>
+          );
+        })}
+      </Animated.View>
 
-      {/* Sparkle particles */}
-      {sparkles.map((sp, i) => (
-        <Animated.View key={i} style={{
-          position: 'absolute', left: sp.x, top: sp.y,
-          width: sp.size, height: sp.size, borderRadius: sp.size,
-          backgroundColor: sp.isGreen ? Colors.emerald : '#fff',
-          opacity: sp.opacity,
-        }} />
-      ))}
+      {/* Central Robot */}
+      <Animated.View style={[o.robotWrap, { transform: [{ scale: robotPulse }] }]}>
+        <Image source={require('../assets/images/robot.png')} style={o.robotImg} resizeMode="contain" />
+      </Animated.View>
     </View>
   );
 }
 
-// ─── Pressable button with scale micro-animation ───
-function BentoButton({ testID, onPress, children, style }: any) {
-  const scale = useRef(new Animated.Value(1)).current;
+// Press-animated button
+function PressBtn({ testID, onPress, children, style }: any) {
+  const sc = useRef(new Animated.Value(1)).current;
   return (
     <Pressable testID={testID}
-      onPressIn={() => Animated.spring(scale, { toValue: 0.97, useNativeDriver: true, speed: 50 }).start()}
-      onPressOut={() => Animated.spring(scale, { toValue: 1, useNativeDriver: true, speed: 30 }).start()}
+      onPressIn={() => Animated.spring(sc, { toValue: 0.96, useNativeDriver: true, speed: 50 }).start()}
+      onPressOut={() => Animated.spring(sc, { toValue: 1, useNativeDriver: true, speed: 30 }).start()}
       onPress={onPress}>
-      <Animated.View style={[style, { transform: [{ scale }] }]}>
-        {children}
-      </Animated.View>
+      <Animated.View style={[style, { transform: [{ scale: sc }] }]}>{children}</Animated.View>
     </Pressable>
   );
 }
@@ -140,15 +121,20 @@ export default function AuthScreen() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
-  // Staggered entrance
-  const anims = useRef(Array.from({ length: 6 }, () => ({ op: new Animated.Value(0), sl: new Animated.Value(45) }))).current;
+  const fadeIn = useRef(new Animated.Value(0)).current;
+  const slideUp = useRef(new Animated.Value(40)).current;
+  const btnFade = useRef(new Animated.Value(0)).current;
+  const bottomFade = useRef(new Animated.Value(0)).current;
+
   useEffect(() => {
-    anims.forEach((a, i) => {
+    Animated.sequence([
       Animated.parallel([
-        Animated.timing(a.op, { toValue: 1, duration: 700, delay: 150 + i * 180, useNativeDriver: true }),
-        Animated.timing(a.sl, { toValue: 0, duration: 600, delay: 150 + i * 180, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
-      ]).start();
-    });
+        Animated.timing(fadeIn, { toValue: 1, duration: 800, delay: 300, useNativeDriver: true }),
+        Animated.timing(slideUp, { toValue: 0, duration: 700, delay: 300, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
+      ]),
+      Animated.timing(btnFade, { toValue: 1, duration: 600, useNativeDriver: true }),
+      Animated.timing(bottomFade, { toValue: 1, duration: 500, useNativeDriver: true }),
+    ]).start();
   }, []);
 
   const handleSubmit = async () => {
@@ -161,77 +147,80 @@ export default function AuthScreen() {
   };
 
   const openAuth = (mode: boolean) => { setIsLogin(mode); setShowAuth(true); setError(''); setEmail(''); setPassword(''); setName(''); };
-  const A = (i: number) => ({ opacity: anims[i].op, transform: [{ translateY: anims[i].sl }] });
 
   return (
     <View style={s.root}>
-      <AnimatedBg />
       <SafeAreaView style={s.safe}>
         <ScrollView contentContainerStyle={s.scroll} showsVerticalScrollIndicator={false}>
 
-          {/* Hero */}
-          <Animated.View style={[s.hero, A(0)]}>
-            <View style={s.logoBadge}>
-              <Text style={s.logoBadgeText}>oAI</Text>
-            </View>
-            <Text style={s.h1}>Conduct Your Commerce</Text>
-            <Text style={s.h1g}>Symphony with AI</Text>
-            <Text style={s.heroP}>4 autonomous agents that build, manage,{'\n'}and scale your eCommerce store.</Text>
+          {/* Brand name top */}
+          <Animated.View style={[s.topBrand, { opacity: fadeIn }]}>
+            <Text style={s.brandLight}>orchestr</Text>
+            <Text style={s.brandBold}>AI</Text>
           </Animated.View>
 
-          {/* CTA buttons with press animation */}
-          <Animated.View style={A(1)}>
-            <BentoButton testID="landing-signup-btn" style={s.ctaP} onPress={() => openAuth(false)}>
-              <View>
-                <Text style={s.ctaPT}>Start Free Trial</Text>
-                <Text style={s.ctaPS}>30 days · No credit card required</Text>
-              </View>
+          {/* Orbital Hero */}
+          <Animated.View style={[{ opacity: fadeIn, transform: [{ translateY: slideUp }] }]}>
+            <OrbitalHero />
+          </Animated.View>
+
+          {/* Tagline */}
+          <Animated.View style={[s.tagWrap, { opacity: fadeIn }]}>
+            <Text style={s.tagMain}>Your AI Commerce</Text>
+            <Text style={s.tagAccent}>Command Center</Text>
+            <Text style={s.tagSub}>Agents that build, manage, and grow{'\n'}your store — autonomously.</Text>
+          </Animated.View>
+
+          {/* CTA Buttons */}
+          <Animated.View style={{ opacity: btnFade }}>
+            {/* Inline Auth Form */}
+            {!isLogin && (
+              <TextInput testID="auth-name-input" style={s.inlineInput} value={name} onChangeText={setName}
+                placeholder="Your name" placeholderTextColor="#475569" autoCapitalize="words" />
+            )}
+            <TextInput testID="auth-email-input" style={s.inlineInput} value={email} onChangeText={setEmail}
+              placeholder="Email" placeholderTextColor="#475569" autoCapitalize="none" keyboardType="email-address" />
+            <TextInput testID="auth-password-input" style={s.inlineInput} value={password} onChangeText={setPassword}
+              placeholder="Password" placeholderTextColor="#475569" secureTextEntry />
+            {!!error && <Text testID="auth-error" style={s.inlineError}>{error}</Text>}
+
+            <PressBtn testID="auth-submit-btn" style={s.ctaP} onPress={handleSubmit}>
+              {loading ? <ActivityIndicator color="#050A18" /> : (
+                <View>
+                  <Text style={s.ctaPT}>{isLogin ? 'Sign In' : 'Start Free Trial'}</Text>
+                  {!isLogin && <Text style={s.ctaPS}>30 days · No credit card</Text>}
+                </View>
+              )}
               <View style={s.ctaArr}><Text style={s.ctaArrT}>→</Text></View>
-            </BentoButton>
+            </PressBtn>
+
+            <TouchableOpacity testID="auth-toggle-btn" onPress={() => { setIsLogin(!isLogin); setError(''); }} style={s.toggleWrap}>
+              <Text style={s.toggleText}>
+                {isLogin ? "No account? " : "Already have an account? "}
+                <Text style={s.toggleLink}>{isLogin ? 'Start Free Trial' : 'Sign In'}</Text>
+              </Text>
+            </TouchableOpacity>
           </Animated.View>
 
-          <Animated.View style={[{ marginTop: 12 }, A(2)]}>
-            <BentoButton testID="landing-signin-btn" style={s.ctaS} onPress={() => openAuth(true)}>
-              <Text style={s.ctaST}>Sign In</Text>
-              <Text style={s.ctaSS}>Welcome back, Maestro →</Text>
-            </BentoButton>
-          </Animated.View>
-
-          {/* Feature bento with press animations */}
-          <Animated.View style={[s.fGrid, A(3)]}>
-            <View style={s.fRow}>
-              <BentoButton style={[s.fCard, s.fW, { borderColor: '#34D39925' }]} onPress={() => {}}>
-                <View style={[s.fIW, { backgroundColor: '#34D39920' }]}><Text style={s.fI}>🤖</Text></View>
-                <Text style={s.fT}>4 AI Agents</Text>
-                <Text style={s.fD}>Store ops · Marketing · Analytics · Support — 24/7</Text>
-              </BentoButton>
-              <BentoButton style={[s.fCard, { borderColor: '#FBBF2425' }]} onPress={() => {}}>
-                <View style={[s.fIW, { backgroundColor: '#FBBF2420' }]}><Text style={s.fI}>🏗️</Text></View>
-                <Text style={s.fT}>Auto-Build</Text>
-                <Text style={s.fD}>AI creates your store from scratch</Text>
-              </BentoButton>
-            </View>
-            <View style={s.fRow}>
-              <BentoButton style={[s.fCard, { borderColor: '#22D3EE25' }]} onPress={() => {}}>
-                <View style={[s.fIW, { backgroundColor: '#22D3EE20' }]}><Text style={s.fI}>🌐</Text></View>
-                <Text style={s.fT}>Browser Agent</Text>
-                <Text style={s.fD}>Scrapes & monitors competitors</Text>
-              </BentoButton>
-              <BentoButton style={[s.fCard, s.fW, { borderColor: '#FB718525' }]} onPress={() => {}}>
-                <View style={[s.fIW, { backgroundColor: '#FB718520' }]}><Text style={s.fI}>⚡</Text></View>
-                <Text style={s.fT}>24 Actions</Text>
-                <Text style={s.fD}>SEO, ads, email, pricing — agents execute</Text>
-              </BentoButton>
+          {/* Integration labels */}
+          <Animated.View style={[s.intLabels, { opacity: bottomFade }]}>
+            <Text style={s.intTitle}>Connected to everything</Text>
+            <View style={s.intRow}>
+              {INTEGRATIONS.map((int, i) => (
+                <View key={i} style={[s.intChip, { borderColor: int.color + '30' }]}>
+                  <Text style={{ fontSize: 14 }}>{int.emoji}</Text>
+                  <Text style={[s.intChipText, { color: int.color }]}>{int.label}</Text>
+                </View>
+              ))}
             </View>
           </Animated.View>
 
           {/* Stats */}
-          <Animated.View style={[s.statsBar, A(4)]}>
+          <Animated.View style={[s.statsBar, { opacity: bottomFade }]}>
             {[
               { v: '4', l: 'AI Agents', c: Colors.emerald },
               { v: '24', l: 'Actions', c: Colors.amber },
               { v: '30', l: 'Day Trial', c: Colors.cyan },
-              { v: '∞', l: 'Potential', c: Colors.rose },
             ].map((st, i) => (
               <View key={i} style={s.stat}>
                 <Text style={[s.statV, { color: st.c }]}>{st.v}</Text>
@@ -240,91 +229,71 @@ export default function AuthScreen() {
             ))}
           </Animated.View>
 
-          <Animated.View style={[s.platRow, A(5)]}>
-            {['🟢 Shopify', '🟠 Etsy', '🟣 WooCommerce'].map((p, i) => (
-              <View key={i} style={s.platChip}><Text style={s.platText}>{p}</Text></View>
-            ))}
-          </Animated.View>
-
-          <Text style={s.footer}>Powered by GPT-5.2  ·  Privacy-first  ·  Built for profit</Text>
+          <Text style={s.footer}>Powered by GPT-5.2  ·  Privacy-first</Text>
           <View style={{ height: 50 }} />
         </ScrollView>
       </SafeAreaView>
-
-      {/* Auth Sheet */}
-      <Modal visible={showAuth} animationType="slide" transparent>
-        <KeyboardAvoidingView style={s.mOv} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
-          <TouchableOpacity style={s.mDis} activeOpacity={1} onPress={() => { Keyboard.dismiss(); setShowAuth(false); }} />
-          <View style={s.mSh}>
-            <View style={s.mHan} />
-            <View style={s.mLR}><Text style={s.mLL}>orchestr</Text><Text style={s.mLB}>AI</Text></View>
-            <Text style={s.mTi}>{isLogin ? 'Welcome Back' : 'Start Your Free Trial'}</Text>
-            {!isLogin && <TextInput testID="auth-name-input" style={s.mIn} value={name} onChangeText={setName} placeholder="Your name" placeholderTextColor="#475569" autoCapitalize="words" />}
-            <TextInput testID="auth-email-input" style={s.mIn} value={email} onChangeText={setEmail} placeholder="Email" placeholderTextColor="#475569" autoCapitalize="none" keyboardType="email-address" />
-            <TextInput testID="auth-password-input" style={s.mIn} value={password} onChangeText={setPassword} placeholder="Password" placeholderTextColor="#475569" secureTextEntry />
-            {!!error && <Text testID="auth-error" style={s.mEr}>{error}</Text>}
-            <TouchableOpacity testID="auth-submit-btn" style={s.mBt} onPress={handleSubmit} disabled={loading}>
-              {loading ? <ActivityIndicator color="#050A18" /> : <Text style={s.mBtT}>{isLogin ? 'Sign In' : 'Create Account'}</Text>}
-            </TouchableOpacity>
-            <TouchableOpacity testID="auth-toggle-btn" onPress={() => { setIsLogin(!isLogin); setError(''); }} style={s.mTo}>
-              <Text style={s.mToT}>{isLogin ? "No account? " : "Have an account? "}<Text style={s.mToL}>{isLogin ? 'Sign Up' : 'Sign In'}</Text></Text>
-            </TouchableOpacity>
-          </View>
-        </KeyboardAvoidingView>
-      </Modal>
     </View>
   );
 }
 
-const bgs = StyleSheet.create({ orb: { position: 'absolute' } });
+const o = StyleSheet.create({
+  container: { height: ROBOT_SIZE + ORBIT_R * 2 + 60, alignItems: 'center', justifyContent: 'center', marginBottom: 10 },
+  glowRing: {
+    position: 'absolute', width: ROBOT_SIZE + 80, height: ROBOT_SIZE + 80, borderRadius: (ROBOT_SIZE + 80) / 2,
+    backgroundColor: Colors.emerald, top: ORBIT_R - 20, alignSelf: 'center',
+  },
+  glowRing2: {
+    position: 'absolute', width: ROBOT_SIZE + 140, height: ROBOT_SIZE + 140, borderRadius: (ROBOT_SIZE + 140) / 2,
+    backgroundColor: Colors.emerald, opacity: 0.08, top: ORBIT_R - 50, alignSelf: 'center',
+  },
+  orbitRing: {
+    position: 'absolute', width: ORBIT_R * 2 + 44, height: ORBIT_R * 2 + 44, borderRadius: ORBIT_R + 22,
+    borderWidth: 1, borderColor: Colors.emerald + '20', borderStyle: 'dashed',
+    top: ROBOT_SIZE / 2 + 20 - ORBIT_R - 22, alignSelf: 'center',
+  },
+  orbitGroup: { position: 'absolute', width: W, height: ROBOT_SIZE + ORBIT_R * 2 + 60 },
+  intBubble: {
+    position: 'absolute', width: 44, height: 44, borderRadius: 22,
+    backgroundColor: '#0D1424', borderWidth: 1.5, justifyContent: 'center', alignItems: 'center',
+  },
+  intEmoji: { fontSize: 20 },
+  robotWrap: { zIndex: 10 },
+  robotImg: { width: ROBOT_SIZE, height: ROBOT_SIZE },
+});
 
 const s = StyleSheet.create({
   root: { flex: 1, backgroundColor: '#050A18' },
   safe: { flex: 1 },
-  scroll: { paddingHorizontal: 24, paddingTop: 32 },
-  hero: { alignItems: 'center', marginBottom: 36 },
-  logoBadge: { width: 68, height: 68, borderRadius: 22, backgroundColor: '#0D142490', justifyContent: 'center', alignItems: 'center', marginBottom: 24, borderWidth: 1.5, borderColor: Colors.emerald + '45' },
-  logoBadgeText: { fontSize: 24, fontWeight: '900', color: Colors.emerald },
-  h1: { fontSize: 30, fontWeight: '900', color: '#F1F5F9', textAlign: 'center', letterSpacing: -0.5 },
-  h1g: { fontSize: 30, fontWeight: '900', color: Colors.emerald, textAlign: 'center', letterSpacing: -0.5, marginBottom: 14 },
-  heroP: { fontSize: 15, color: '#94A3B8', textAlign: 'center', lineHeight: 23 },
-  ctaP: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: Colors.emerald, borderRadius: 20, paddingHorizontal: 24, paddingVertical: 22 },
-  ctaPT: { fontSize: 20, fontWeight: '900', color: '#050A18' },
-  ctaPS: { fontSize: 13, color: '#050A18', opacity: 0.55, marginTop: 3 },
-  ctaArr: { width: 44, height: 44, borderRadius: 14, backgroundColor: 'rgba(5,10,24,0.15)', justifyContent: 'center', alignItems: 'center' },
-  ctaArrT: { fontSize: 22, color: '#050A18', fontWeight: '700' },
-  ctaS: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#0D1424', borderRadius: 18, paddingHorizontal: 24, paddingVertical: 18, borderWidth: 1, borderColor: '#1E293B' },
-  ctaST: { fontSize: 17, fontWeight: '800', color: '#E2E8F0' },
-  ctaSS: { fontSize: 13, color: '#64748B' },
-  fGrid: { marginTop: 28, gap: 10, marginBottom: 24 },
-  fRow: { flexDirection: 'row', gap: 10 },
-  fCard: { flex: 1, backgroundColor: '#0A0F1E', borderRadius: 18, padding: 16, borderWidth: 1 },
-  fW: { flex: 1.5 },
-  fIW: { width: 42, height: 42, borderRadius: 13, justifyContent: 'center', alignItems: 'center', marginBottom: 10 },
-  fI: { fontSize: 20 },
-  fT: { fontSize: 14, fontWeight: '800', color: '#E2E8F0', marginBottom: 4 },
-  fD: { fontSize: 11, color: '#64748B', lineHeight: 16 },
-  statsBar: { flexDirection: 'row', justifyContent: 'space-between', backgroundColor: '#0A0F1E', borderRadius: 18, paddingVertical: 20, paddingHorizontal: 16, borderWidth: 1, borderColor: '#1E293B', marginBottom: 24 },
-  stat: { alignItems: 'center', flex: 1 },
-  statV: { fontSize: 26, fontWeight: '900' },
+  scroll: { paddingHorizontal: 24, paddingTop: 12 },
+  topBrand: { flexDirection: 'row', alignItems: 'baseline', alignSelf: 'center', marginBottom: 8 },
+  brandLight: { fontSize: 20, fontWeight: '300', color: '#94A3B8' },
+  brandBold: { fontSize: 20, fontWeight: '900', color: Colors.emerald },
+  tagWrap: { alignItems: 'center', marginBottom: 28 },
+  tagMain: { fontSize: 28, fontWeight: '900', color: '#F1F5F9', textAlign: 'center' },
+  tagAccent: { fontSize: 28, fontWeight: '900', color: Colors.emerald, textAlign: 'center', marginBottom: 12 },
+  tagSub: { fontSize: 15, color: '#94A3B8', textAlign: 'center', lineHeight: 23 },
+  inlineInput: { backgroundColor: '#0D1424', borderRadius: 14, paddingHorizontal: 18, paddingVertical: 15, color: '#F1F5F9', fontSize: 16, borderWidth: 1, borderColor: '#1E293B', marginBottom: 10 },
+  inlineError: { color: Colors.rose, fontSize: 13, marginBottom: 10, fontWeight: '600', textAlign: 'center' },
+  toggleWrap: { alignItems: 'center', marginTop: 16 },
+  toggleText: { fontSize: 14, color: '#64748B' },
+  toggleLink: { color: Colors.emerald, fontWeight: '700' },
+  ctaP: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: Colors.emerald, borderRadius: 20, paddingHorizontal: 24, paddingVertical: 20 },
+  ctaPT: { fontSize: 19, fontWeight: '900', color: '#050A18' },
+  ctaPS: { fontSize: 13, color: '#050A18', opacity: 0.55, marginTop: 2 },
+  ctaArr: { width: 42, height: 42, borderRadius: 14, backgroundColor: 'rgba(5,10,24,0.15)', justifyContent: 'center', alignItems: 'center' },
+  ctaArrT: { fontSize: 20, color: '#050A18', fontWeight: '700' },
+  ctaS: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#0D1424', borderRadius: 16, paddingHorizontal: 24, paddingVertical: 16, borderWidth: 1, borderColor: '#1E293B' },
+  ctaST: { fontSize: 16, fontWeight: '800', color: '#E2E8F0' },
+  ctaSS: { fontSize: 18, color: '#64748B' },
+  intLabels: { marginTop: 28 },
+  intTitle: { fontSize: 12, fontWeight: '700', color: '#64748B', letterSpacing: 1, textAlign: 'center', marginBottom: 14, textTransform: 'uppercase' },
+  intRow: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 8 },
+  intChip: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#0A0F1E', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 20, borderWidth: 1 },
+  intChipText: { fontSize: 11, fontWeight: '700' },
+  statsBar: { flexDirection: 'row', justifyContent: 'space-around', marginTop: 24, marginBottom: 16 },
+  stat: { alignItems: 'center' },
+  statV: { fontSize: 28, fontWeight: '900' },
   statL: { fontSize: 10, color: '#64748B', fontWeight: '700', marginTop: 4, letterSpacing: 0.5 },
-  platRow: { flexDirection: 'row', justifyContent: 'center', gap: 10, marginBottom: 20 },
-  platChip: { backgroundColor: '#0D1424', paddingHorizontal: 16, paddingVertical: 10, borderRadius: 30, borderWidth: 1, borderColor: '#1E293B' },
-  platText: { fontSize: 12, color: '#94A3B8', fontWeight: '600' },
-  footer: { textAlign: 'center', color: '#334155', fontSize: 11, marginTop: 4 },
-  mOv: { flex: 1, backgroundColor: 'rgba(5,10,24,0.88)', justifyContent: 'flex-end' },
-  mDis: { flex: 1 },
-  mSh: { backgroundColor: '#0D1424', borderTopLeftRadius: 28, borderTopRightRadius: 28, padding: 28, paddingBottom: Platform.OS === 'ios' ? 44 : 32, borderTopWidth: 1, borderColor: '#1E293B' },
-  mHan: { width: 40, height: 4, backgroundColor: '#334155', borderRadius: 2, alignSelf: 'center', marginBottom: 24 },
-  mLR: { flexDirection: 'row', alignItems: 'baseline', alignSelf: 'center', marginBottom: 16 },
-  mLL: { fontSize: 22, fontWeight: '200', color: '#F1F5F9' },
-  mLB: { fontSize: 22, fontWeight: '900', color: Colors.emerald },
-  mTi: { fontSize: 20, fontWeight: '900', color: '#F1F5F9', textAlign: 'center', marginBottom: 24 },
-  mIn: { backgroundColor: '#141C2E', borderRadius: 14, paddingHorizontal: 18, paddingVertical: 16, color: '#F1F5F9', fontSize: 16, borderWidth: 1, borderColor: '#1E293B', marginBottom: 12 },
-  mEr: { color: Colors.rose, fontSize: 13, marginBottom: 12, fontWeight: '600', textAlign: 'center' },
-  mBt: { backgroundColor: Colors.emerald, borderRadius: 14, paddingVertical: 16, alignItems: 'center', marginTop: 4 },
-  mBtT: { fontSize: 17, fontWeight: '800', color: '#050A18' },
-  mTo: { alignItems: 'center', marginTop: 20 },
-  mToT: { fontSize: 14, color: '#64748B' },
-  mToL: { color: Colors.emerald, fontWeight: '700' },
+  footer: { textAlign: 'center', color: '#334155', fontSize: 11, marginTop: 8 },
 });
