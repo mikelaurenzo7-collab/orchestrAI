@@ -70,7 +70,6 @@ function OrbitalHero() {
             position: 'absolute', left: x, top: y,
             opacity: intPulses[i],
             borderColor: int.color + '60',
-            shadowColor: int.color, shadowOpacity: 0.5, shadowRadius: 14, shadowOffset: { width: 0, height: 0 },
           }]}>
             <Text style={o.intEmoji}>{int.emoji}</Text>
             <Text style={[o.intLabel, { color: int.color }]}>{int.label}</Text>

@@ -60,18 +60,10 @@ export const FontSizes = {
 
 export const Shadows = {
   card: {
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 12,
-    elevation: 8,
+    boxShadow: '0px 4px 12px rgba(0, 0, 0, 0.3)',
   },
   glow: (color: string) => ({
-    shadowColor: color,
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.4,
-    shadowRadius: 16,
-    elevation: 12,
+    boxShadow: `0px 0px 16px ${color}66`,
   }),
 };
 
