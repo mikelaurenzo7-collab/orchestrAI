@@ -1,0 +1,126 @@
+{
+  "theme": "DARK",
+  "archetype": "5 (Jewel & Luxury)",
+  "vibe": "Futuristic AI Command Center - Cinematic, powerful, expensive",
+  "typography": {
+    "fonts": {
+      "headings": "Outfit",
+      "body": "Manrope",
+      "mono": "JetBrains Mono"
+    },
+    "scale": {
+      "h1": "text-4xl tracking-tight font-black",
+      "h2": "text-2xl tracking-tight font-bold",
+      "h3": "text-xl tracking-tight font-bold",
+      "body": "text-base leading-relaxed text-slate-300",
+      "small": "text-sm text-slate-400",
+      "overline": "text-xs font-bold uppercase tracking-[0.2em] text-emerald-500"
+    }
+  },
+  "colors": {
+    "background": {
+      "default": "bg-[#030712]",
+      "surface": "bg-[#0B101F]",
+      "surface_elevated": "bg-[#141A29]"
+    },
+    "brand": {
+      "primary": "text-emerald-400",
+      "primary_bg": "bg-emerald-500",
+      "accent": "text-amber-400",
+      "accent_bg": "bg-amber-500",
+      "danger": "text-rose-500",
+      "danger_bg": "bg-rose-500"
+    },
+    "text": {
+      "primary": "text-white",
+      "secondary": "text-slate-400",
+      "muted": "text-slate-500"
+    },
+    "border": {
+      "default": "border-slate-800",
+      "highlight": "border-emerald-500/30"
+    }
+  },
+  "layout_and_spacing": {
+    "mobile_first": true,
+    "container": "w-full max-w-md mx-auto px-4 sm:px-6 relative pb-24",
+    "bento_grid": "flex flex-col gap-4",
+    "card": "p-6 rounded-2xl bg-[#0B101F] border border-slate-800 shadow-lg relative overflow-hidden"
+  },
+  "surface_strategies": {
+    "glassmorphism": "backdrop-blur-xl bg-[#030712]/70 border border-slate-800 shadow-[0_8px_32px_rgba(0,0,0,0.5)]",
+    "active_tracing_beam": "border border-emerald-500/50 shadow-[0_0_15px_rgba(16,185,129,0.2)]",
+    "neumorphism": "Not recommended for this deep dark theme. Use solid surfaces with 1px border instead."
+  },
+  "components": {
+    "bottom_navigation": {
+      "style": "fixed bottom-0 w-full max-w-md mx-auto h-20 flex items-center justify-around backdrop-blur-2xl bg-[#030712]/80 border-t border-slate-800 z-50",
+      "active_icon": "text-emerald-400 drop-shadow-[0_0_8px_rgba(16,185,129,0.5)]",
+      "inactive_icon": "text-slate-500 hover:text-slate-300 transition-colors"
+    },
+    "buttons": {
+      "primary": "bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold rounded-xl px-6 py-3 transition-all active:scale-95",
+      "secondary": "bg-[#141A29] hover:bg-slate-800 text-white border border-slate-700 rounded-xl px-6 py-3 transition-all active:scale-95",
+      "ghost": "bg-transparent hover:bg-slate-800/50 text-slate-300 rounded-xl px-6 py-3 transition-all"
+    },
+    "chat_interface": {
+      "ai_bubble": "bg-[#141A29] border border-slate-800 rounded-2xl rounded-tl-sm p-4",
+      "user_bubble": "bg-emerald-500/10 border border-emerald-500/20 text-emerald-50 rounded-2xl rounded-tr-sm p-4",
+      "input_area": "backdrop-blur-xl bg-[#0B101F]/90 border-t border-slate-800 p-4 sticky bottom-0"
+    },
+    "dashboard_widgets": {
+      "metric_card": "flex flex-col gap-2 p-5 rounded-2xl bg-[#0B101F] border border-slate-800",
+      "metric_value": "text-3xl font-black text-white tracking-tighter",
+      "metric_label": "text-sm font-medium text-slate-400",
+      "trend_up": "text-emerald-400 bg-emerald-400/10 px-2 py-1 rounded-md text-xs font-bold"
+    }
+  },
+  "animations": {
+    "page_transition": "opacity-0 translate-y-4 duration-300 ease-out",
+    "button_press": "active:scale-95 transition-transform duration-100",
+    "shimmer": "animate-pulse bg-slate-800/50 rounded-xl"
+  },
+  "image_urls": {
+    "hero_backgrounds": [
+      {
+        "url": "https://images.unsplash.com/photo-1771873680097-7506773a2b02?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjY2NzN8MHwxfHNlYXJjaHwxfHxhYnN0cmFjdCUyMGRhcmslMjB1aSUyMHRleHR1cmV8ZW58MHx8fHwxNzc2MDYyNDk3fDA&ixlib=rb-4.1.0&q=85",
+        "category": "Dashboard Ambient Background",
+        "description": "Abstract grid pattern with glowing lights, to be used as a low-opacity background behind the main dashboard bento grid"
+      },
+      {
+        "url": "https://images.unsplash.com/photo-1771930289806-85fa0449dc15?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjY2NzN8MHwxfHNlYXJjaHwyfHxhYnN0cmFjdCUyMGRhcmslMjB1aSUyMHRleHR1cmV8ZW58MHx8fHwxNzc2MDYyNDk3fDA&ixlib=rb-4.1.0&q=85",
+        "category": "Store Connection Hub Header",
+        "description": "Abstract metallic grid pattern with blue sheen"
+      }
+    ],
+    "ai_agent_avatars": [
+      {
+        "url": "https://images.unsplash.com/photo-1675669131543-e66f63fd758e?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjAzMjd8MHwxfHNlYXJjaHw0fHxhYnN0cmFjdCUyMDNkJTIwZ2xhc3MlMjBzcGhlcmV8ZW58MHx8fHwxNzc2MDYyNTE4fDA&ixlib=rb-4.1.0&q=85",
+        "category": "Marketing Agent Avatar",
+        "description": "Abstract blue spheres serving as a generic sleek placeholder for the AI agent"
+      },
+      {
+        "url": "https://images.unsplash.com/photo-1670834416065-5b4419def835?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjAzMjd8MHwxfHNlYXJjaHwyfHxhYnN0cmFjdCUyMDNkJTIwZ2xhc3MlMjBzcGhlcmV8ZW58MHx8fHwxNzc2MDYyNTE4fDA&ixlib=rb-4.1.0&q=85",
+        "category": "Customer Service Agent Avatar",
+        "description": "Abstract sleek vase/object serving as placeholder for AI agent identity"
+      }
+    ],
+    "social_media_placeholders": [
+      {
+        "url": "https://images.unsplash.com/photo-1758272423131-1cc69e29357a?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA0MTJ8MHwxfHNlYXJjaHwxfHxlY29tbWVyY2UlMjBsaWZlc3R5bGUlMjBtb2Rlcm58ZW58MHx8fHwxNzc2MDYyNDk4fDA&ixlib=rb-4.1.0&q=85",
+        "category": "Social Media Auto-Generated Post",
+        "description": "Woman typing on a laptop, lifestyle image for dummy social media content generated by AI"
+      }
+    ]
+  },
+  "icons_library_instruction": "Use lucide-react (or lucide-react-native if using Expo). Default to slim stroke-width (1.5) for a premium, non-bulky aesthetic.",
+  "instructions_to_main_agent": [
+    "Environment Mapping: If the environment forces React web, you MUST structure it as a Mobile-First PWA (max-w-md, mx-auto, hide standard web nav, use bottom tab bar). If Expo/React Native is allowed and configured, use NativeWind with these exact Tailwind classes.",
+    "Do not use Inter for headings. Use Outfit (or a similar modern geometric sans if unavailable, like Cabinet Grotesk or Satoshi).",
+    "Never use full-screen flat colors. Add subtle noise/grain or the provided Unsplash abstract texture at 10-20% opacity behind the main surface.",
+    "Bento Grid / Cards: Use pure #0B101F with a sharp 1px border (#1E293B or slate-800). No soft muddy box-shadows. Shadows should be hard and dark if used.",
+    "Accessibility/Contrast: Ensure text on the dark background uses text-white or text-slate-300. Never use text-slate-600 on a slate-900 background.",
+    "Interactive Elements: All buttons and navigation must have active/pressed scaling states (`active:scale-95`).",
+    "All interactive elements MUST include data-testid (e.g., data-testid='agent-chat-button')."
+  ]
+}
