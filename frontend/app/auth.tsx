@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import {
   View, Text, StyleSheet, TextInput, TouchableOpacity,
-  KeyboardAvoidingView, Platform, ActivityIndicator, ScrollView, Image,
+  KeyboardAvoidingView, Platform, ActivityIndicator, ScrollView,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../contexts/AuthContext';
@@ -33,14 +33,16 @@ export default function AuthScreen() {
       <KeyboardAvoidingView style={s.flex} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         <ScrollView contentContainerStyle={s.scroll} keyboardShouldPersistTaps="handled">
           <View style={s.logoWrap}>
-            <Text style={s.logoMark}>orchestr</Text>
-            <Text style={s.logoAI}>AI</Text>
+            <View style={s.logoRow}>
+              <Text style={s.logoLight}>orchestr</Text>
+              <Text style={s.logoBold}>AI</Text>
+            </View>
             <Text style={s.tagline}>Conduct Your Commerce Symphony</Text>
           </View>
 
           <View style={s.card}>
-            <Text style={s.cardTitle}>{isLogin ? 'Welcome Back' : 'Create Account'}</Text>
-            <Text style={s.cardSub}>{isLogin ? 'Sign in to your command center' : 'Launch your AI-powered empire'}</Text>
+            <Text style={s.cardTitle}>{isLogin ? 'Welcome Back, Maestro' : 'Join the Symphony'}</Text>
+            <Text style={s.cardSub}>{isLogin ? 'Sign in to your command center' : 'Start your 30-day free trial'}</Text>
 
             {!isLogin && (
               <TextInput testID="auth-name-input" style={s.input} value={name} onChangeText={setName}
@@ -80,9 +82,10 @@ const s = StyleSheet.create({
   flex: { flex: 1 },
   scroll: { flexGrow: 1, justifyContent: 'center', padding: Spacing.xxl },
   logoWrap: { alignItems: 'center', marginBottom: 40 },
-  logoMark: { fontSize: 42, fontWeight: '300', color: Colors.textPrimary, letterSpacing: 2 },
-  logoAI: { fontSize: 42, fontWeight: '900', color: Colors.emerald, letterSpacing: -1, marginTop: -48, marginLeft: 180 },
-  tagline: { fontSize: FontSizes.md, color: Colors.textSecondary, marginTop: 16 },
+  logoRow: { flexDirection: 'row', alignItems: 'baseline' },
+  logoLight: { fontSize: 38, fontWeight: '300', color: Colors.textPrimary, letterSpacing: 1 },
+  logoBold: { fontSize: 38, fontWeight: '900', color: Colors.emerald, letterSpacing: -1 },
+  tagline: { fontSize: FontSizes.md, color: Colors.textSecondary, marginTop: 12 },
   card: {
     backgroundColor: Colors.surface, borderRadius: BorderRadius.xxl, padding: Spacing.xxl,
     borderWidth: 1, borderColor: Colors.border,

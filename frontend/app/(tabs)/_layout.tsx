@@ -58,7 +58,7 @@ export default function TabLayout() {
         name="social"
         options={{
           tabBarIcon: ({ focused, color }) => (
-            <TabIcon label="Social" emoji="📣" focused={focused} color={color} />
+            <TabIcon label="Execute" emoji="⚡" focused={focused} color={color} />
           ),
         }}
       />

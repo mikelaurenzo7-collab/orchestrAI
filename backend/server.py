@@ -609,28 +609,6 @@ async def startup():
     await db.login_attempts.create_index("identifier")
     await seed_admin()
 
-# ──────────────── Dashboard ────────────────
-
-@api_router.get("/dashboard", response_model=DashboardMetrics)
-async def get_dashboard(request: Request):
-    user = await get_current_user(request)
-    user_id = user["_id"]
-
-    stores = await db.stores.count_documents({"user_id": user_id})
-    agents = await db.agents.count_documents({"user_id": user_id, "is_active": True})
-    tasks = await db.tasks.count_documents({"user_id": user_id, "status": "completed"})
-    social = await db.social_content.count_documents({"user_id": user_id})
-
-    pipeline = [{"$match": {"user_id": user_id}}, {"$group": {"_id": None, "total_revenue": {"$sum": "$revenue"}, "total_orders": {"$sum": "$orders_total"}}}]
-    agg = await db.stores.aggregate(pipeline).to_list(1)
-    revenue = agg[0]["total_revenue"] if agg else 0
-    orders = agg[0]["total_orders"] if agg else 0
-
-    recent = await db.activity_log.find({"user_id": user_id}, {"_id": 0}).sort("timestamp", -1).to_list(10)
-
-    return DashboardMetrics(total_stores=stores, active_agents=agents, tasks_completed=tasks,
-                            total_revenue=revenue, total_orders=orders, social_posts=social, recent_activity=recent)
-
 # ──────────────── Stores ────────────────
 
 @api_router.post("/stores", response_model=StoreResponse)
@@ -796,6 +774,385 @@ async def delete_task(task_id: str, request: Request):
         raise HTTPException(status_code=404, detail="Task not found")
     return {"status": "deleted"}
 
+# ──────────────── Execution Engine ────────────────
+
+@api_router.get("/actions/catalog")
+async def get_action_catalog():
+    """Returns all available actions per agent type"""
+    return AGENT_ACTIONS
+
+@api_router.get("/workflows/templates")
+async def get_workflow_templates():
+    """Returns pre-built workflow templates"""
+    return WORKFLOW_TEMPLATES
+
+@api_router.post("/actions/execute")
+async def execute_action(req: ActionRequest, request: Request):
+    """Execute a single agent action — AI generates the deliverable"""
+    user = await get_current_user(request)
+    user_id = user["_id"]
+
+    # Find the action definition
+    agent_actions = AGENT_ACTIONS.get(req.agent_type, [])
+    action_def = next((a for a in agent_actions if a["id"] == req.action_id), None)
+    if not action_def:
+        raise HTTPException(status_code=404, detail="Action not found")
+
+    # Create action record
+    action_doc = {
+        "id": str(uuid.uuid4()), "user_id": user_id, "agent_type": req.agent_type,
+        "action_id": req.action_id, "action_name": action_def["name"],
+        "status": "executing", "store_id": req.store_id,
+        "params": req.params or {}, "result": None,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "completed_at": None,
+    }
+    await db.actions.insert_one(action_doc)
+
+    # Build context-aware prompt for the action
+    context = await build_agent_context(user_id, req.agent_type)
+    store_context = ""
+    if req.store_id:
+        store = await db.stores.find_one({"id": req.store_id, "user_id": user_id}, {"_id": 0, "access_token": 0})
+        if store:
+            store_context = f"\nTARGET STORE: {store.get('name', '')} ({store.get('platform', '')}) — {store.get('products_synced', 0)} products, {store.get('orders_total', 0)} orders, ${store.get('revenue', 0):,.2f} revenue"
+
+    action_prompt = f"""Execute the following action and produce a COMPLETE, READY-TO-USE deliverable.
+
+ACTION: {action_def['name']}
+DESCRIPTION: {action_def['desc']}
+{store_context}
+
+USER CONTEXT:
+{context}
+
+ADDITIONAL PARAMS: {req.params if req.params else 'None'}
+
+RULES:
+- Produce a COMPLETE deliverable, not a summary or overview
+- Make it specific to this user's actual business, stores, and products
+- Include specific numbers, names, and actionable details
+- Format cleanly with headers, bullet points, and clear sections
+- Everything should be copy-paste ready or immediately actionable
+- End with estimated revenue impact or cost savings where applicable"""
+
+    try:
+        chat = LlmChat(api_key=EMERGENT_LLM_KEY, session_id=f"action_{action_doc['id']}",
+            system_message=AGENT_BASE_PROMPTS.get(req.agent_type, AGENT_BASE_PROMPTS["general"]))
+        chat.with_model("openai", "gpt-5.2")
+        result = await chat.send_message(UserMessage(text=action_prompt))
+
+        await db.actions.update_one({"id": action_doc["id"]}, {"$set": {
+            "status": "completed", "result": result, "completed_at": datetime.now(timezone.utc).isoformat()
+        }})
+        await db.agents.update_one({"user_id": user_id, "agent_type": req.agent_type},
+            {"$set": {"last_active": datetime.now(timezone.utc).isoformat()}, "$inc": {"tasks_completed": 1}})
+        await db.activity_log.insert_one({"user_id": user_id, "type": "action_completed",
+            "message": f"{action_def['name']} completed by {req.agent_type.replace('_', ' ').title()}",
+            "timestamp": datetime.now(timezone.utc).isoformat()})
+
+        return {"id": action_doc["id"], "status": "completed", "action_name": action_def["name"],
+                "agent_type": req.agent_type, "result": result}
+    except Exception as e:
+        await db.actions.update_one({"id": action_doc["id"]}, {"$set": {"status": "failed", "result": str(e)}})
+        logger.error(f"Action execution error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@api_router.get("/actions/history")
+async def get_action_history(request: Request):
+    """Returns user's executed actions"""
+    user = await get_current_user(request)
+    actions = await db.actions.find({"user_id": user["_id"]}, {"_id": 0, "user_id": 0}).sort("created_at", -1).to_list(50)
+    return actions
+
+@api_router.get("/actions/{action_id}")
+async def get_action_detail(action_id: str, request: Request):
+    """Returns full action result"""
+    user = await get_current_user(request)
+    action = await db.actions.find_one({"id": action_id, "user_id": user["_id"]}, {"_id": 0, "user_id": 0})
+    if not action:
+        raise HTTPException(status_code=404, detail="Action not found")
+    return action
+
+@api_router.post("/workflows/execute")
+async def execute_workflow(req: WorkflowRequest, request: Request):
+    """Execute a multi-step workflow — runs each action in sequence"""
+    user = await get_current_user(request)
+    user_id = user["_id"]
+
+    if req.template_id:
+        template = next((t for t in WORKFLOW_TEMPLATES if t["id"] == req.template_id), None)
+        if not template:
+            raise HTTPException(status_code=404, detail="Workflow template not found")
+        steps = template["steps"]
+        name = template["name"]
+    elif req.steps:
+        steps = req.steps
+        name = req.name or "Custom Workflow"
+    else:
+        raise HTTPException(status_code=400, detail="Provide template_id or steps")
+
+    workflow_doc = {
+        "id": str(uuid.uuid4()), "user_id": user_id, "name": name,
+        "status": "running", "total_steps": len(steps), "completed_steps": 0,
+        "steps_results": [], "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    await db.workflows.insert_one(workflow_doc)
+
+    # Execute steps sequentially
+    for step in sorted(steps, key=lambda x: x.get("order", 0)):
+        agent_type = step["agent"]
+        action_id = step["action"]
+        try:
+            # Reuse the action execution logic
+            action_req = ActionRequest(action_id=action_id, agent_type=agent_type)
+            agent_actions = AGENT_ACTIONS.get(agent_type, [])
+            action_def = next((a for a in agent_actions if a["id"] == action_id), None)
+            if not action_def:
+                workflow_doc["steps_results"].append({"step": step, "status": "skipped", "reason": "action not found"})
+                continue
+
+            context = await build_agent_context(user_id, agent_type)
+            # Include previous step results as context
+            prev_results = "\n".join(
+                f"Previous: {sr.get('action_name', '')}: {sr.get('result', '')[:200]}..."
+                for sr in workflow_doc["steps_results"] if sr.get("status") == "completed"
+            )
+
+            prompt = f"""Execute this action as part of the workflow "{name}".
+
+ACTION: {action_def['name']} — {action_def['desc']}
+
+USER CONTEXT:
+{context}
+
+{'PREVIOUS WORKFLOW STEPS COMPLETED:' + chr(10) + prev_results if prev_results else ''}
+
+Produce a complete, actionable deliverable. Be specific to this user's business. End with estimated revenue impact."""
+
+            chat = LlmChat(api_key=EMERGENT_LLM_KEY, session_id=f"wf_{workflow_doc['id']}_{action_id}",
+                system_message=AGENT_BASE_PROMPTS.get(agent_type, AGENT_BASE_PROMPTS["general"]))
+            chat.with_model("openai", "gpt-5.2")
+            result = await chat.send_message(UserMessage(text=prompt))
+
+            workflow_doc["steps_results"].append({
+                "action_id": action_id, "action_name": action_def["name"],
+                "agent_type": agent_type, "status": "completed", "result": result
+            })
+            workflow_doc["completed_steps"] += 1
+            await db.workflows.update_one({"id": workflow_doc["id"]}, {"$set": {
+                "steps_results": workflow_doc["steps_results"],
+                "completed_steps": workflow_doc["completed_steps"]
+            }})
+        except Exception as e:
+            workflow_doc["steps_results"].append({
+                "action_id": action_id, "action_name": action_def["name"] if action_def else action_id,
+                "agent_type": agent_type, "status": "failed", "result": str(e)
+            })
+
+    final_status = "completed" if workflow_doc["completed_steps"] == len(steps) else "partial"
+    await db.workflows.update_one({"id": workflow_doc["id"]}, {"$set": {"status": final_status}})
+    await db.activity_log.insert_one({"user_id": user_id, "type": "workflow_completed",
+        "message": f"Workflow '{name}' completed ({workflow_doc['completed_steps']}/{len(steps)} steps)",
+        "timestamp": datetime.now(timezone.utc).isoformat()})
+
+    return {"id": workflow_doc["id"], "name": name, "status": final_status,
+            "completed_steps": workflow_doc["completed_steps"], "total_steps": len(steps),
+            "steps_results": workflow_doc["steps_results"]}
+
+@api_router.get("/workflows/history")
+async def get_workflow_history(request: Request):
+    user = await get_current_user(request)
+    workflows = await db.workflows.find({"user_id": user["_id"]}, {"_id": 0, "user_id": 0}).sort("created_at", -1).to_list(20)
+    return workflows
+
+# ──────────────── Store Builder Agent ────────────────
+
+class StoreBuildRequest(BaseModel):
+    niche: str  # "vintage jewelry", "fitness gear", "handmade candles"
+    store_name: Optional[str] = None
+    product_count: int = 10
+    style: str = "modern"  # modern, minimal, bold, luxury, playful
+    target_audience: Optional[str] = None
+    price_range: Optional[str] = None  # "budget", "mid", "premium", "luxury"
+
+@api_router.post("/store-builder/plan")
+async def create_store_plan(req: StoreBuildRequest, request: Request):
+    """AI generates a complete store blueprint — products, descriptions, pricing, collections"""
+    user = await get_current_user(request)
+    user_id = user["_id"]
+
+    plan_doc = {
+        "id": str(uuid.uuid4()), "user_id": user_id, "niche": req.niche,
+        "store_name": req.store_name, "product_count": req.product_count,
+        "style": req.style, "target_audience": req.target_audience,
+        "price_range": req.price_range, "status": "generating",
+        "plan": None, "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    await db.store_plans.insert_one(plan_doc)
+
+    prompt = f"""You are orchestrAI's Store Architect. Generate a COMPLETE eCommerce store blueprint.
+
+NICHE: {req.niche}
+STORE NAME: {req.store_name or 'Suggest a catchy brand name'}
+PRODUCT COUNT: {req.product_count}
+STYLE: {req.style}
+TARGET AUDIENCE: {req.target_audience or 'Determine the ideal customer'}
+PRICE RANGE: {req.price_range or 'Suggest optimal pricing'}
+
+Generate a JSON response with this EXACT structure:
+{{
+  "brand_name": "...",
+  "tagline": "...",
+  "target_audience": "...",
+  "collections": [
+    {{"name": "...", "description": "..."}}
+  ],
+  "products": [
+    {{
+      "title": "...",
+      "description": "...(50-100 words, SEO-optimized)...",
+      "price": 29.99,
+      "compare_at_price": 39.99,
+      "collection": "...",
+      "tags": ["tag1", "tag2", "tag3"],
+      "sku_prefix": "..."
+    }}
+  ],
+  "store_policies": {{
+    "shipping": "...",
+    "returns": "...",
+    "about_us": "..."
+  }},
+  "marketing_hooks": ["...", "...", "..."],
+  "estimated_monthly_revenue": "$X,XXX - $X,XXX"
+}}
+
+Make ALL product descriptions unique, compelling, and SEO-optimized. Pricing should be psychologically optimized. Every detail should be ready to copy-paste into a real store. This plan should be worth paying for."""
+
+    try:
+        chat = LlmChat(api_key=EMERGENT_LLM_KEY, session_id=f"builder_{plan_doc['id']}",
+            system_message="You are orchestrAI's Store Architect — you build profitable eCommerce stores from scratch. Always respond in valid JSON. Be specific, creative, and revenue-focused.")
+        chat.with_model("openai", "gpt-5.2")
+        result = await chat.send_message(UserMessage(text=prompt))
+
+        # Try to parse JSON from response
+        import json as json_lib
+        plan_data = None
+        try:
+            # Strip markdown code blocks if present
+            clean = result.strip()
+            if clean.startswith("```"):
+                clean = clean.split("\n", 1)[1] if "\n" in clean else clean[3:]
+            if clean.endswith("```"):
+                clean = clean[:-3]
+            if clean.startswith("json"):
+                clean = clean[4:]
+            plan_data = json_lib.loads(clean.strip())
+        except json_lib.JSONDecodeError:
+            plan_data = {"raw_plan": result}
+
+        await db.store_plans.update_one({"id": plan_doc["id"]}, {"$set": {
+            "status": "ready", "plan": plan_data
+        }})
+
+        await db.activity_log.insert_one({"user_id": user_id, "type": "store_plan_created",
+            "message": f"Store blueprint generated for '{req.niche}' niche",
+            "timestamp": datetime.now(timezone.utc).isoformat()})
+
+        return {"id": plan_doc["id"], "status": "ready", "plan": plan_data}
+
+    except Exception as e:
+        await db.store_plans.update_one({"id": plan_doc["id"]}, {"$set": {"status": "failed"}})
+        logger.error(f"Store plan error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@api_router.get("/store-builder/plans")
+async def get_store_plans(request: Request):
+    user = await get_current_user(request)
+    plans = await db.store_plans.find({"user_id": user["_id"]}, {"_id": 0, "user_id": 0}).sort("created_at", -1).to_list(10)
+    return plans
+
+@api_router.post("/store-builder/deploy/{plan_id}")
+async def deploy_store_plan(plan_id: str, store_id: str, request: Request):
+    """Deploy a store plan to a connected Shopify store via API — creates real products"""
+    import httpx
+    user = await get_current_user(request)
+    user_id = user["_id"]
+
+    plan = await db.store_plans.find_one({"id": plan_id, "user_id": user_id})
+    if not plan or not plan.get("plan"):
+        raise HTTPException(status_code=404, detail="Store plan not found")
+
+    store = await db.stores.find_one({"id": store_id, "user_id": user_id})
+    if not store or not store.get("access_token"):
+        raise HTTPException(status_code=400, detail="Store not connected via OAuth — connect with Shopify first")
+
+    shop = store["store_url"].replace("https://", "")
+    token = store["access_token"]
+    plan_data = plan["plan"]
+    products = plan_data.get("products", [])
+
+    created = 0
+    errors = []
+    async with httpx.AsyncClient() as http:
+        for product in products:
+            try:
+                payload = {
+                    "product": {
+                        "title": product.get("title", ""),
+                        "body_html": product.get("description", ""),
+                        "vendor": plan_data.get("brand_name", store["name"]),
+                        "product_type": plan.get("niche", ""),
+                        "tags": ",".join(product.get("tags", [])),
+                        "variants": [{
+                            "price": str(product.get("price", "0")),
+                            "compare_at_price": str(product.get("compare_at_price", "")) if product.get("compare_at_price") else None,
+                            "sku": product.get("sku_prefix", ""),
+                            "inventory_management": "shopify",
+                            "inventory_quantity": 100,
+                        }]
+                    }
+                }
+                resp = await http.post(f"https://{shop}/admin/api/2024-01/products.json",
+                    json=payload, headers={"X-Shopify-Access-Token": token})
+                if resp.status_code in (200, 201):
+                    created += 1
+                else:
+                    errors.append(f"{product.get('title', '?')}: {resp.status_code}")
+            except Exception as e:
+                errors.append(f"{product.get('title', '?')}: {str(e)}")
+
+    # Update store metrics
+    await db.stores.update_one({"id": store_id}, {"$inc": {"products_synced": created}})
+    await db.store_plans.update_one({"id": plan_id}, {"$set": {"status": "deployed", "deployed_to": store_id}})
+    await db.activity_log.insert_one({"user_id": user_id, "type": "store_deployed",
+        "message": f"Deployed {created} products to {store['name']}",
+        "timestamp": datetime.now(timezone.utc).isoformat()})
+
+    return {"created": created, "errors": errors, "total": len(products)}
+
+# ──────────────── Dashboard ────────────────
+
+@api_router.get("/dashboard")
+async def get_dashboard(request: Request):
+    user = await get_current_user(request)
+    user_id = user["_id"]
+    stores = await db.stores.count_documents({"user_id": user_id})
+    agents = await db.agents.count_documents({"user_id": user_id, "is_active": True})
+    tasks = await db.tasks.count_documents({"user_id": user_id, "status": "completed"})
+    social = await db.social_content.count_documents({"user_id": user_id})
+    pending = await db.actions.count_documents({"user_id": user_id, "status": "executing"})
+    active_wf = await db.workflows.count_documents({"user_id": user_id, "status": "running"})
+    pipeline = [{"$match": {"user_id": user_id}}, {"$group": {"_id": None, "total_revenue": {"$sum": "$revenue"}, "total_orders": {"$sum": "$orders_total"}}}]
+    agg = await db.stores.aggregate(pipeline).to_list(1)
+    revenue = agg[0]["total_revenue"] if agg else 0
+    orders = agg[0]["total_orders"] if agg else 0
+    recent = await db.activity_log.find({"user_id": user_id}, {"_id": 0}).sort("timestamp", -1).to_list(10)
+    return {"total_stores": stores, "active_agents": agents, "tasks_completed": tasks,
+            "total_revenue": revenue, "total_orders": orders, "social_posts": social,
+            "pending_actions": pending, "active_workflows": active_wf, "recent_activity": recent}
+
 # ──────────────── Shopify OAuth ────────────────
 
 SHOPIFY_CLIENT_ID = os.environ.get('SHOPIFY_PARTNER_CLIENT_ID', '')
@@ -900,6 +1257,29 @@ async def etsy_auth_start(request: Request):
     scopes = "transactions_r%20listings_r%20listings_w%20shops_r"
     auth_url = f"https://www.etsy.com/oauth/connect?response_type=code&redirect_uri={redirect_uri}&scope={scopes}&client_id={ETSY_API_KEY}&state={state}&code_challenge={code_challenge}&code_challenge_method=S256"
     return {"auth_url": auth_url}
+
+# ──────────────── Promo Codes ────────────────
+
+PROMO_CODES = {
+    "Peanut1212!": {"plan": "agency", "discount": 100, "label": "Founder Forever Free"},
+}
+
+@api_router.post("/promo/validate")
+async def validate_promo(request: Request, code: str = ""):
+    """Validate a promo code and apply it to the user's account"""
+    user = await get_current_user(request)
+    promo = PROMO_CODES.get(code)
+    if not promo:
+        raise HTTPException(status_code=400, detail="Invalid promo code")
+    # Apply promo — upgrade plan, remove trial expiry
+    await db.users.update_one({"_id": ObjectId(user["_id"])}, {"$set": {
+        "plan": promo["plan"], "promo_code": code, "promo_label": promo["label"],
+        "trial_ends_at": None,  # No trial needed — it's free forever
+    }})
+    await db.activity_log.insert_one({"user_id": user["_id"], "type": "promo_applied",
+        "message": f"Promo code applied: {promo['label']}",
+        "timestamp": datetime.now(timezone.utc).isoformat()})
+    return {"status": "applied", "plan": promo["plan"], "label": promo["label"], "discount": promo["discount"]}
 
 # ──────────────── Health ────────────────
 
