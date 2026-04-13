@@ -1696,34 +1696,119 @@ async def launch_campaign(req: CampaignRequest, request: Request):
     }
     await db.campaigns.insert_one(campaign_doc)
 
-    posts_created = []
-    posts_published = []
-
-    for platform in target_platforms:
-        # Generate platform-specific content via AI
-        platform_hints = {
-            "twitter": "Twitter/X post. Max 280 chars total (including hashtags). Punchy, viral-worthy. Use 2-3 hashtags max.",
-            "pinterest": "Pinterest pin description. 100-200 chars. Aspirational, keyword-rich. 3-5 hashtags.",
-            "instagram": "Instagram caption. 150-300 chars. Lifestyle-focused, use emojis strategically. 5-8 hashtags.",
-            "facebook": "Facebook post. 100-300 chars. Conversational, shareable. 2-3 hashtags.",
-        }
-        prompt = f"""Generate a {platform} post for this product.
-
-Product: {req.product_name}
+    PLATFORM_STRATEGIES = {
+        "twitter": {
+            "system": "You are a viral Twitter/X copywriter. Your tweets get millions of impressions. You know the algorithm rewards controversy, curiosity gaps, and bold takes. Never be generic.",
+            "brief": f"""Create a TWITTER/X post for: {req.product_name}
 Description: {req.product_description or req.product_name}
 
-{platform_hints.get(platform, '')}
+TWITTER STRATEGY:
+- Max 280 characters TOTAL (including hashtags)
+- Lead with a curiosity gap or hot take (e.g., "Most people don't know this about...")
+- Use 1-2 hashtags MAX (Twitter punishes hashtag spam)
+- No emojis at the start — text-first
+- Make it quotable, retweetable, controversial enough to engage
+- Thread hooks work: end with something that makes people want to respond
 
 USER CONTEXT:
 {context}
 
-Return ONLY the post text followed by hashtags on a new line. No explanations, no labels. Just the ready-to-publish content."""
+Return ONLY the tweet. Nothing else. No labels, no explanations."""
+        },
+        "pinterest": {
+            "system": "You are a Pinterest SEO expert. You create pins that rank #1 in Pinterest search. Every word is a searchable keyword. You write for the algorithm first, humans second.",
+            "brief": f"""Create a PINTEREST pin for: {req.product_name}
+Description: {req.product_description or req.product_name}
+
+PINTEREST STRATEGY:
+- Title: 40-60 chars, keyword-rich, aspirational (this is the headline)
+- Description: 150-300 chars, packed with searchable keywords
+- Use 3-5 hashtags that are actual Pinterest search terms
+- Format: lifestyle-focused, aspirational, "save for later" worthy
+- Pinterest users are PLANNERS — frame it as inspiration, not a hard sell
+- Include a subtle CTA like "tap to shop" or "save for later"
+
+USER CONTEXT:
+{context}
+
+Return the pin title on line 1, then description, then hashtags on a new line. Nothing else."""
+        },
+        "instagram": {
+            "system": "You are an Instagram growth hacker. Your captions stop the scroll. You know Reels captions need different treatment than feed posts. You weaponize the hashtag strategy.",
+            "brief": f"""Create an INSTAGRAM caption for: {req.product_name}
+Description: {req.product_description or req.product_name}
+
+INSTAGRAM STRATEGY:
+- First line is EVERYTHING (it shows before "...more") — make it a hook
+- 150-250 chars for the caption body
+- Storytelling angle: behind-the-scenes, customer transformation, or lifestyle aspirational
+- Emojis are strategic — use 3-5 max, never random
+- CTA: "Link in bio", "Save this", "Tag someone who needs this"
+- 20-30 hashtags in a SEPARATE paragraph (mix of: 5 broad, 10 niche, 10 micro-niche)
+- First 5 hashtags are most important for reach
+
+USER CONTEXT:
+{context}
+
+Return caption, then hashtags in a separate block. Nothing else."""
+        },
+        "facebook": {
+            "system": "You are a Facebook community builder. Your posts start conversations and get shared. You know Facebook rewards meaningful interactions and longer dwell time.",
+            "brief": f"""Create a FACEBOOK post for: {req.product_name}
+Description: {req.product_description or req.product_name}
+
+FACEBOOK STRATEGY:
+- Conversational, warm, community-oriented
+- 100-300 chars
+- Ask a question or tell a micro-story — Facebook rewards comments
+- Use 2-3 hashtags max (Facebook de-prioritizes hashtag-heavy posts)
+- Frame it as sharing with friends, not selling
+- "What do you think?" / "Have you tried this?" type endings
+- Emojis: 1-2 max, natural placement
+
+USER CONTEXT:
+{context}
+
+Return ONLY the post text with hashtags at the end. Nothing else."""
+        },
+        "tiktok": {
+            "system": "You are a TikTok content strategist. You ride trends and create hooks that prevent swipe-aways. Every caption you write makes people watch the full video.",
+            "brief": f"""Create a TIKTOK caption for: {req.product_name}
+Description: {req.product_description or req.product_name}
+
+TIKTOK STRATEGY:
+- 100-150 chars MAX (TikTok truncates long captions)
+- Start with a HOOK that creates FOMO or curiosity
+- Reference trends: "POV:", "Things TikTok made me buy:", "Wait for it..."
+- Use 3-5 trending hashtags + #fyp #foryoupage
+- Casual, gen-z energy, slightly chaotic
+- Never sound corporate — sound like a real person
+
+USER CONTEXT:
+{context}
+
+Return ONLY the caption with hashtags. Nothing else."""
+        },
+    }
+
+    for platform in target_platforms:
+        strategy = PLATFORM_STRATEGIES.get(platform, PLATFORM_STRATEGIES.get("twitter"))
+        if not strategy:
+            continue
+
+    posts_created = []
+    posts_published = []
+
+    for platform in target_platforms:
+        strategy = PLATFORM_STRATEGIES.get(platform, PLATFORM_STRATEGIES.get("twitter"))
+        if not strategy:
+            continue
 
         try:
             chat = LlmChat(api_key=EMERGENT_LLM_KEY, session_id=f"campaign_{campaign_id}_{platform}",
-                system_message=AGENT_BASE_PROMPTS["marketing"])
+                system_message=strategy["system"])
             chat.with_model("openai", "gpt-5.2")
-            result = await chat.send_message(UserMessage(text=prompt))
+            result = await chat.send_message(UserMessage(text=strategy["brief"]))
 
             # Parse content and hashtags
             lines = result.strip().split('\n')
