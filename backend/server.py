@@ -702,6 +702,15 @@ async def seed_admin():
 async def startup():
     await db.users.create_index("email", unique=True)
     await db.login_attempts.create_index("identifier")
+    await db.agents.create_index([("user_id", 1), ("agent_type", 1)])
+    await db.stores.create_index("user_id")
+    await db.chat_messages.create_index([("user_id", 1), ("agent_type", 1)])
+    await db.actions.create_index([("user_id", 1), ("status", 1)])
+    await db.social_content.create_index("user_id")
+    await db.tasks.create_index("user_id")
+    await db.activity_log.create_index([("user_id", 1), ("timestamp", -1)])
+    await db.agent_memory.create_index([("user_id", 1), ("agent_type", 1)])
+    await db.user_profiles.create_index("user_id")
     await seed_admin()
 
 # ──────────────── Stores ────────────────

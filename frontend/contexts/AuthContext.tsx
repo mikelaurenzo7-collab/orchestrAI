@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { setCachedToken } from '../utils/api';
 
 const API = process.env.EXPO_PUBLIC_BACKEND_URL;
 
@@ -45,6 +46,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       const savedToken = await AsyncStorage.getItem('auth_token');
       if (savedToken) {
+        setCachedToken(savedToken);
         const res = await fetch(`${API}/api/auth/me`, {
           headers: { 'Authorization': `Bearer ${savedToken}` },
         });
@@ -114,6 +116,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     } catch (e) { /* ignore */ }
     await AsyncStorage.removeItem('auth_token');
+    setCachedToken(null);
     setUser(null);
     setToken(null);
   };
