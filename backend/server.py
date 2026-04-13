@@ -556,6 +556,111 @@ async def delete_task(task_id: str, request: Request):
         raise HTTPException(status_code=404, detail="Task not found")
     return {"status": "deleted"}
 
+# ──────────────── Shopify OAuth ────────────────
+
+SHOPIFY_CLIENT_ID = os.environ.get('SHOPIFY_PARTNER_CLIENT_ID', '')
+SHOPIFY_CLIENT_SECRET = os.environ.get('SHOPIFY_PARTNER_CLIENT_SECRET', '')
+SHOPIFY_SCOPES = "read_products,write_products,read_orders,read_inventory,write_inventory,read_customers"
+
+@api_router.get("/shopify/auth")
+async def shopify_auth_start(shop: str, request: Request):
+    """Start Shopify OAuth — redirects user to Shopify authorization page"""
+    user = await get_current_user(request)
+    if not SHOPIFY_CLIENT_ID:
+        raise HTTPException(status_code=503, detail="Shopify integration not configured")
+    shop = shop.strip().replace("https://", "").replace("http://", "").split("/")[0]
+    if not shop.endswith(".myshopify.com"):
+        shop = f"{shop}.myshopify.com"
+    state = secrets.token_urlsafe(32)
+    await db.oauth_states.insert_one({"state": state, "user_id": user["_id"], "shop": shop, "platform": "shopify",
+        "created_at": datetime.now(timezone.utc).isoformat()})
+    redirect_uri = f"{os.environ.get('EXPO_PUBLIC_BACKEND_URL', 'https://agent-marketplace-69.preview.emergentagent.com')}/api/shopify/callback"
+    auth_url = f"https://{shop}/admin/oauth/authorize?client_id={SHOPIFY_CLIENT_ID}&scope={SHOPIFY_SCOPES}&redirect_uri={redirect_uri}&state={state}"
+    return {"auth_url": auth_url, "shop": shop}
+
+@api_router.get("/shopify/callback")
+async def shopify_callback(code: str, state: str, shop: str):
+    """Shopify OAuth callback — exchanges code for access token"""
+    import httpx
+    oauth_state = await db.oauth_states.find_one({"state": state})
+    if not oauth_state:
+        raise HTTPException(status_code=400, detail="Invalid OAuth state")
+    user_id = oauth_state["user_id"]
+    try:
+        async with httpx.AsyncClient() as client_http:
+            resp = await client_http.post(f"https://{shop}/admin/oauth/access_token", json={
+                "client_id": SHOPIFY_CLIENT_ID, "client_secret": SHOPIFY_CLIENT_SECRET, "code": code
+            })
+            if resp.status_code != 200:
+                raise HTTPException(status_code=400, detail="Failed to get access token")
+            token_data = resp.json()
+            access_token = token_data.get("access_token")
+            # Save store with access token
+            store_doc = {
+                "id": str(uuid.uuid4()), "user_id": user_id, "name": shop.replace(".myshopify.com", ""),
+                "platform": "shopify", "store_url": f"https://{shop}", "status": "connected",
+                "access_token": access_token, "shopify_scope": token_data.get("scope", ""),
+                "connected_at": datetime.now(timezone.utc).isoformat(),
+                "products_synced": 0, "orders_total": 0, "revenue": 0.0,
+            }
+            await db.stores.insert_one(store_doc)
+            await db.activity_log.insert_one({"user_id": user_id, "type": "store_connected",
+                "message": f"Connected Shopify store: {shop}", "timestamp": datetime.now(timezone.utc).isoformat()})
+            await db.oauth_states.delete_one({"state": state})
+            # Redirect back to app
+            return Response(content="<html><body><script>window.close();</script><h2>Store connected! You can close this window.</h2></body></html>", media_type="text/html")
+    except httpx.HTTPError as e:
+        logger.error(f"Shopify OAuth error: {e}")
+        raise HTTPException(status_code=500, detail="Shopify connection failed")
+
+@api_router.post("/shopify/sync/{store_id}")
+async def sync_shopify_store(store_id: str, request: Request):
+    """Sync products and orders from Shopify"""
+    import httpx
+    user = await get_current_user(request)
+    store = await db.stores.find_one({"id": store_id, "user_id": user["_id"], "platform": "shopify"})
+    if not store or not store.get("access_token"):
+        raise HTTPException(status_code=404, detail="Shopify store not found or not authorized")
+    shop = store["store_url"].replace("https://", "")
+    token = store["access_token"]
+    try:
+        async with httpx.AsyncClient() as client_http:
+            # Fetch products count
+            prod_resp = await client_http.get(f"https://{shop}/admin/api/2024-01/products/count.json",
+                headers={"X-Shopify-Access-Token": token})
+            products = prod_resp.json().get("count", 0) if prod_resp.status_code == 200 else 0
+            # Fetch orders count
+            ord_resp = await client_http.get(f"https://{shop}/admin/api/2024-01/orders/count.json?status=any",
+                headers={"X-Shopify-Access-Token": token})
+            orders = ord_resp.json().get("count", 0) if ord_resp.status_code == 200 else 0
+            await db.stores.update_one({"id": store_id}, {"$set": {"products_synced": products, "orders_total": orders,
+                "last_synced": datetime.now(timezone.utc).isoformat()}})
+            return {"products_synced": products, "orders_total": orders}
+    except Exception as e:
+        logger.error(f"Shopify sync error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+# ──────────────── Etsy OAuth ────────────────
+
+ETSY_API_KEY = os.environ.get('ETSY_API_KEY', '')
+
+@api_router.get("/etsy/auth")
+async def etsy_auth_start(request: Request):
+    """Start Etsy OAuth flow"""
+    user = await get_current_user(request)
+    if not ETSY_API_KEY:
+        raise HTTPException(status_code=503, detail="Etsy integration not configured")
+    state = secrets.token_urlsafe(32)
+    code_verifier = secrets.token_urlsafe(64)
+    import hashlib, base64
+    code_challenge = base64.urlsafe_b64encode(hashlib.sha256(code_verifier.encode()).digest()).rstrip(b'=').decode()
+    await db.oauth_states.insert_one({"state": state, "user_id": user["_id"], "platform": "etsy",
+        "code_verifier": code_verifier, "created_at": datetime.now(timezone.utc).isoformat()})
+    redirect_uri = f"{os.environ.get('EXPO_PUBLIC_BACKEND_URL', 'https://agent-marketplace-69.preview.emergentagent.com')}/api/etsy/callback"
+    scopes = "transactions_r%20listings_r%20listings_w%20shops_r"
+    auth_url = f"https://www.etsy.com/oauth/connect?response_type=code&redirect_uri={redirect_uri}&scope={scopes}&client_id={ETSY_API_KEY}&state={state}&code_challenge={code_challenge}&code_challenge_method=S256"
+    return {"auth_url": auth_url}
+
 # ──────────────── Health ────────────────
 
 @api_router.get("/")

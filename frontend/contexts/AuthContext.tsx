@@ -9,6 +9,8 @@ type User = {
   name: string;
   role: string;
   token?: string;
+  plan?: string;
+  trial_ends_at?: string;
 };
 
 type AuthContextType = {
