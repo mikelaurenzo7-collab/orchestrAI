@@ -1644,7 +1644,136 @@ async def sync_shopify_store(store_id: str, request: Request):
         logger.error(f"Shopify sync error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-# ──────────────── Etsy OAuth ────────────────
+# ──────────────── eBay OAuth ────────────────
+
+EBAY_CLIENT_ID = os.environ.get('EBAY_CLIENT_ID', '')
+EBAY_CLIENT_SECRET = os.environ.get('EBAY_CLIENT_SECRET', '')
+EBAY_RUNAME = os.environ.get('EBAY_RUNAME', '')
+EBAY_API_BASE = "https://api.ebay.com"
+EBAY_AUTH_BASE = "https://auth.ebay.com"
+EBAY_SCOPES = "https://api.ebay.com/oauth/api_scope https://api.ebay.com/oauth/api_scope/sell.inventory https://api.ebay.com/oauth/api_scope/sell.fulfillment https://api.ebay.com/oauth/api_scope/sell.account https://api.ebay.com/oauth/api_scope/sell.marketing"
+
+@api_router.get("/ebay/auth")
+async def ebay_auth_start(request: Request):
+    """Start eBay OAuth2 flow"""
+    import urllib.parse
+    user = await get_current_user(request)
+    if not EBAY_CLIENT_ID or not EBAY_RUNAME:
+        raise HTTPException(status_code=503, detail="eBay integration not configured")
+    state = secrets.token_urlsafe(32)
+    await db.oauth_states.insert_one({"state": state, "user_id": user["_id"], "platform": "ebay",
+        "created_at": datetime.now(timezone.utc).isoformat()})
+    params = urllib.parse.urlencode({
+        "client_id": EBAY_CLIENT_ID,
+        "redirect_uri": EBAY_RUNAME,
+        "response_type": "code",
+        "scope": EBAY_SCOPES,
+        "state": state,
+    })
+    auth_url = f"{EBAY_AUTH_BASE}/oauth2/authorize?{params}"
+    return {"auth_url": auth_url}
+
+@api_router.get("/ebay/callback")
+async def ebay_callback(code: str, state: str):
+    """eBay OAuth callback — exchanges code for access token"""
+    import httpx, base64
+    oauth_state = await db.oauth_states.find_one({"state": state, "platform": "ebay"})
+    if not oauth_state:
+        raise HTTPException(status_code=400, detail="Invalid OAuth state")
+    user_id = oauth_state["user_id"]
+    try:
+        credentials = base64.b64encode(f"{EBAY_CLIENT_ID}:{EBAY_CLIENT_SECRET}".encode()).decode()
+        async with httpx.AsyncClient(timeout=30) as hc:
+            resp = await hc.post(f"{EBAY_API_BASE}/identity/v1/oauth2/token",
+                headers={"Authorization": f"Basic {credentials}", "Content-Type": "application/x-www-form-urlencoded"},
+                data={"grant_type": "authorization_code", "code": code, "redirect_uri": EBAY_RUNAME})
+            if resp.status_code != 200:
+                logger.error(f"eBay token error: {resp.status_code} {resp.text}")
+                raise HTTPException(status_code=400, detail="Failed to get eBay access token")
+            token_data = resp.json()
+            access_token = token_data.get("access_token")
+            refresh_token = token_data.get("refresh_token", "")
+
+            store_name = "My eBay Store"
+            try:
+                user_resp = await hc.get(f"{EBAY_API_BASE}/commerce/identity/v1/user/",
+                    headers={"Authorization": f"Bearer {access_token}"})
+                if user_resp.status_code == 200:
+                    store_name = user_resp.json().get("username", store_name)
+            except Exception:
+                pass
+
+            store_doc = {
+                "id": str(uuid.uuid4()), "user_id": user_id, "name": store_name,
+                "platform": "ebay", "store_url": f"https://www.ebay.com/usr/{store_name}",
+                "status": "connected", "access_token": access_token, "refresh_token": refresh_token,
+                "connected_at": datetime.now(timezone.utc).isoformat(),
+                "products_synced": 0, "orders_total": 0, "revenue": 0.0,
+            }
+            await db.stores.insert_one(store_doc)
+            await db.activity_log.insert_one({"user_id": user_id, "type": "store_connected",
+                "message": f"Connected eBay store: {store_name}", "timestamp": datetime.now(timezone.utc).isoformat()})
+            await db.oauth_states.delete_one({"state": state})
+
+            app_url = os.environ.get('EXPO_PUBLIC_BACKEND_URL', 'https://agent-marketplace-69.preview.emergentagent.com')
+            return Response(
+                content=f"""<html><head><meta http-equiv="refresh" content="2;url={app_url}/stores"></head>
+                <body style="background:#030712;color:#E53238;font-family:system-ui;display:flex;align-items:center;justify-content:center;height:100vh;flex-direction:column">
+                <h1 style="font-size:48px">✅</h1><h2>eBay Connected!</h2><p style="color:#94A3B8">Redirecting to orchestrAI...</p>
+                </body></html>""", media_type="text/html")
+    except httpx.HTTPError as e:
+        logger.error(f"eBay OAuth error: {e}")
+        raise HTTPException(status_code=500, detail="eBay connection failed")
+
+@api_router.get("/ebay/declined")
+async def ebay_declined():
+    """eBay OAuth declined by user"""
+    app_url = os.environ.get('EXPO_PUBLIC_BACKEND_URL', 'https://agent-marketplace-69.preview.emergentagent.com')
+    return Response(
+        content=f"""<html><head><meta http-equiv="refresh" content="2;url={app_url}/stores"></head>
+        <body style="background:#030712;color:#E53238;font-family:system-ui;display:flex;align-items:center;justify-content:center;height:100vh;flex-direction:column">
+        <h1 style="font-size:48px">❌</h1><h2>Authorization Declined</h2><p style="color:#94A3B8">Redirecting back...</p>
+        </body></html>""", media_type="text/html")
+
+@api_router.post("/ebay/sync/{store_id}")
+async def sync_ebay_store(store_id: str, request: Request):
+    """Sync inventory and orders from eBay"""
+    import httpx
+    user = await get_current_user(request)
+    store = await db.stores.find_one({"id": store_id, "user_id": user["_id"], "platform": "ebay"})
+    if not store or not store.get("access_token"):
+        raise HTTPException(status_code=404, detail="eBay store not found or not authorized")
+    token = store["access_token"]
+    headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
+    try:
+        async with httpx.AsyncClient(timeout=30) as hc:
+            products = 0
+            inv_resp = await hc.get(f"{EBAY_API_BASE}/sell/inventory/v1/inventory_item?limit=1", headers=headers)
+            if inv_resp.status_code == 200:
+                products = inv_resp.json().get("total", 0)
+
+            orders = 0
+            revenue = 0.0
+            ord_resp = await hc.get(f"{EBAY_API_BASE}/sell/fulfillment/v1/order?limit=200", headers=headers)
+            if ord_resp.status_code == 200:
+                order_data = ord_resp.json()
+                orders = order_data.get("total", 0)
+                for order in order_data.get("orders", []):
+                    price_str = order.get("pricingSummary", {}).get("total", {}).get("value", "0")
+                    revenue += float(price_str)
+
+            await db.stores.update_one({"id": store_id}, {"$set": {
+                "products_synced": products, "orders_total": orders, "revenue": revenue,
+                "last_synced": datetime.now(timezone.utc).isoformat()}})
+            await db.activity_log.insert_one({"user_id": user["_id"], "type": "store_synced",
+                "message": f"Synced eBay: {products} listings, {orders} orders, ${revenue:,.2f}",
+                "timestamp": datetime.now(timezone.utc).isoformat()})
+            return {"products_synced": products, "orders_total": orders, "revenue": revenue}
+    except Exception as e:
+        logger.error(f"eBay sync error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+# ──────────────── Etsy OAuth (duplicate header removed) ────────────────
 
 # ──────────────── Twitter / X Integration ────────────────
 
@@ -2120,6 +2249,7 @@ async def get_integration_status(request: Request):
     return {
         "shopify": {"configured": bool(SHOPIFY_CLIENT_ID), "type": "oauth"},
         "etsy": {"configured": bool(ETSY_API_KEY), "type": "oauth"},
+        "ebay": {"configured": bool(EBAY_CLIENT_ID and EBAY_CLIENT_SECRET), "type": "oauth"},
         "twitter": {"configured": bool(TWITTER_API_KEY and TWITTER_ACCESS_TOKEN), "type": "direct"},
         "pinterest": {"configured": bool(PINTEREST_ACCESS_TOKEN), "type": "direct"},
         "tiktok": {"configured": bool(os.environ.get('TIKTOK_CLIENT_KEY', '')), "type": "oauth"},

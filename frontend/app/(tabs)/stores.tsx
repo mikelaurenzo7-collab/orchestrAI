@@ -13,9 +13,9 @@ type Store = { id: string; name: string; platform: string; store_url: string | n
 const STORE_PLATFORMS = [
   { id: 'shopify', name: 'Shopify', icon: '🟢', color: PlatformColors.shopify, hasOAuth: true },
   { id: 'etsy', name: 'Etsy', icon: '🟠', color: PlatformColors.etsy, hasOAuth: true },
+  { id: 'ebay', name: 'eBay', icon: '🏷️', color: '#E53238', hasOAuth: true },
   { id: 'woocommerce', name: 'WooCommerce', icon: '🟣', color: PlatformColors.woocommerce, hasOAuth: false },
   { id: 'amazon', name: 'Amazon', icon: '📦', color: '#FF9900', hasOAuth: false },
-  { id: 'ebay', name: 'eBay', icon: '🏷️', color: '#E53238', hasOAuth: false },
   { id: 'bigcommerce', name: 'BigCommerce', icon: '🔷', color: '#34313F', hasOAuth: false },
   { id: 'square', name: 'Square', icon: '⬛', color: '#006AFF', hasOAuth: false },
   { id: 'wix', name: 'Wix', icon: '🌐', color: '#0C6EFC', hasOAuth: false },
@@ -73,6 +73,21 @@ export default function StoresScreen() {
     finally { setOauthLoading(false); }
   };
 
+  const startEbayOAuth = async () => {
+    setOauthLoading(true);
+    try {
+      const res = await authFetch('/api/ebay/auth');
+      const data = await res.json();
+      if (data.auth_url) {
+        await Linking.openURL(data.auth_url);
+        setShowModal(false);
+        setTimeout(() => fetchStores(), 5000);
+        setTimeout(() => fetchStores(), 10000);
+      }
+    } catch (e) { console.error(e); }
+    finally { setOauthLoading(false); }
+  };
+
   const connectManualStore = async () => {
     if (!storeName.trim()) return;
     setConnecting(true); Keyboard.dismiss();
@@ -83,10 +98,11 @@ export default function StoresScreen() {
     } catch (e) { console.error(e); } finally { setConnecting(false); }
   };
 
-  const syncStore = async (storeId: string) => {
+  const syncStore = async (storeId: string, platform: string) => {
     setSyncing(storeId);
     try {
-      const res = await authFetch(`/api/shopify/sync/${storeId}`, { method: 'POST' });
+      const syncUrl = platform === 'ebay' ? `/api/ebay/sync/${storeId}` : `/api/shopify/sync/${storeId}`;
+      const res = await authFetch(syncUrl, { method: 'POST' });
       if (res.ok) await fetchStores();
     } catch (e) { console.error(e); }
     finally { setSyncing(null); }
@@ -155,7 +171,7 @@ export default function StoresScreen() {
                 <View style={{ flex: 1 }}><Text style={s.metricVal}>${store.revenue.toLocaleString()}</Text><Text style={s.metricLabel}>Revenue</Text></View>
               </View>
               <View style={s.actions}>
-                <TouchableOpacity testID={`sync-store-${store.id}`} style={s.syncBtn} onPress={() => syncStore(store.id)} disabled={isSyncing}>
+                <TouchableOpacity testID={`sync-store-${store.id}`} style={s.syncBtn} onPress={() => syncStore(store.id, store.platform)} disabled={isSyncing}>
                   {isSyncing ? <ActivityIndicator size="small" color={Colors.emerald} /> : <Text style={s.syncText}>Sync</Text>}
                 </TouchableOpacity>
                 <TouchableOpacity testID={`disconnect-store-${store.id}`} style={s.discBtn} onPress={() => disconnectStore(store.id)}>
@@ -212,6 +228,20 @@ export default function StoresScreen() {
                   onPress={startEtsyOAuth} disabled={oauthLoading}>
                   {oauthLoading ? <ActivityIndicator size="small" color="#fff" /> :
                     <Text style={s.oauthConnText}>Authorize with Etsy</Text>}
+                </TouchableOpacity>
+                <View style={s.divider}><View style={s.divLine} /><Text style={s.divText}>or add manually</Text><View style={s.divLine} /></View>
+              </View>
+            )}
+
+            {/* eBay OAuth flow */}
+            {selectedPlatform === 'ebay' && (
+              <View style={s.oauthSection}>
+                <Text style={s.oauthTitle}>Connect via eBay OAuth</Text>
+                <Text style={s.oauthDesc}>Authorize orchestrAI to manage your eBay listings and orders</Text>
+                <TouchableOpacity testID="ebay-oauth-btn" style={[s.oauthConnBtn, { backgroundColor: '#E53238' }]}
+                  onPress={startEbayOAuth} disabled={oauthLoading}>
+                  {oauthLoading ? <ActivityIndicator size="small" color="#fff" /> :
+                    <Text style={s.oauthConnText}>Authorize with eBay</Text>}
                 </TouchableOpacity>
                 <View style={s.divider}><View style={s.divLine} /><Text style={s.divText}>or add manually</Text><View style={s.divLine} /></View>
               </View>
