@@ -75,7 +75,7 @@ export default function AgentsScreen() {
               <Text style={s.desc}>{agent.description}</Text>
               <View style={s.statsRow}>
                 <View style={{ flex: 1 }}><Text style={[s.statVal, { color: ac.primary }]}>{agent.tasks_completed}</Text><Text style={s.statLabel}>Tasks</Text></View>
-                <View style={{ flex: 1 }}><Text style={[s.statVal, { color: ac.primary }]}>{agent.capabilities.length}</Text><Text style={s.statLabel}>Caps</Text></View>
+                <View style={{ flex: 1 }}><Text style={[s.statVal, { color: ac.primary }]}>{agent.capabilities.length}</Text><Text style={s.statLabel}>Skills</Text></View>
                 <View style={{ flex: 1 }}><Text style={[s.statVal, { color: ac.primary }]}>{agent.personality}</Text><Text style={s.statLabel}>Persona</Text></View>
               </View>
               {exp && (
