@@ -46,9 +46,9 @@ export default function AgentsScreen() {
     <SafeAreaView style={s.container}>
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={s.scroll}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); fetchAgents(); }} tintColor={Colors.emerald} />}>
-        <Text style={s.overline}>AI FLEET</Text>
+        <Text style={s.overline}>THE SYMPHONY</Text>
         <Text style={s.title}>Agent Hub</Text>
-        <Text style={s.subtitle}>{agents.length} specialized agents at your command</Text>
+        <Text style={s.subtitle}>{agents.length} virtuoso agents conducting your empire</Text>
 
         {agents.map((agent) => {
           const ac = AgentColors[agent.agent_type] || AgentColors.general;
@@ -114,7 +114,7 @@ const s = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.bg },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   scroll: { padding: Spacing.lg },
-  overline: { fontSize: FontSizes.xs, fontWeight: '800', letterSpacing: 3, color: Colors.amber, marginBottom: 4 },
+  overline: { fontSize: FontSizes.xs, fontWeight: '800', letterSpacing: 3, color: Colors.emerald, marginBottom: 4 },
   title: { fontSize: FontSizes.xxxl, fontWeight: '900', color: Colors.textPrimary, letterSpacing: -0.5 },
   subtitle: { fontSize: FontSizes.md, color: Colors.textSecondary, marginBottom: Spacing.xxl },
   card: { backgroundColor: Colors.surface, borderRadius: BorderRadius.xl, padding: Spacing.xl, borderWidth: 1, marginBottom: Spacing.lg, ...Shadows.card },

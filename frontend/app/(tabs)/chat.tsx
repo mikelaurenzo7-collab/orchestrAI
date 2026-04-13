@@ -9,7 +9,7 @@ import { Colors, Spacing, BorderRadius, FontSizes, AgentColors } from '../../con
 
 type Message = { role: string; content: string; timestamp: string; agent_type?: string };
 const AGENTS = [
-  { type: 'general', name: 'THEONE', icon: '⚡' },
+  { type: 'general', name: 'orchestrAI', icon: '🎵' },
   { type: 'store_manager', name: 'Store', icon: '📦' },
   { type: 'marketing', name: 'Growth', icon: '📣' },
   { type: 'analytics', name: 'Insights', icon: '📊' },

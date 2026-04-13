@@ -1,6 +1,6 @@
 """
-THEONE Auth Testing - Iteration 2
-Tests for: Registration, Login, Logout, Token Auth, Brute Force Protection, Protected Endpoints
+orchestrAI Auth Testing - Iteration 3
+Tests for: Registration, Login, Logout, Token Auth, Brute Force Protection, Protected Endpoints, 30-day Trial
 """
 import pytest
 import requests
@@ -24,7 +24,8 @@ class TestPublicEndpoints:
         response = api_client.get(f"{BASE_URL}/api/")
         assert response.status_code == 200
         data = response.json()
-        assert data["app"] == "THEONE"
+        assert data["app"] == "orchestrAI"
+        assert data["version"] == "3.0.0"
         assert data["status"] == "operational"
     
     def test_health_endpoint_public(self, api_client):
@@ -63,7 +64,7 @@ class TestRegistration:
     def test_register_duplicate_email(self, api_client):
         """Registering with existing email should fail"""
         response = api_client.post(f"{BASE_URL}/api/auth/register", json={
-            "email": "admin@theone.ai",
+            "email": "admin@orchestrai.app",
             "password": "AnyPassword123",
             "name": "Duplicate"
         })
@@ -123,16 +124,16 @@ class TestLogin:
     """User login flow"""
     
     def test_login_admin_success(self, api_client):
-        """Login with admin credentials"""
+        """Login with admin credentials (orchestrAI v3.0)"""
         response = api_client.post(f"{BASE_URL}/api/auth/login", json={
-            "email": "admin@theone.ai",
-            "password": "TheOne2026!"
+            "email": "admin@orchestrai.app",
+            "password": "Orchestr2026!"
         })
         assert response.status_code == 200
         
         data = response.json()
         assert "id" in data
-        assert data["email"] == "admin@theone.ai"
+        assert data["email"] == "admin@orchestrai.app"
         assert data["name"] == "Admin"
         assert data["role"] == "admin"
         assert "token" in data
@@ -144,7 +145,7 @@ class TestLogin:
     def test_login_wrong_password(self, api_client):
         """Login with wrong password should fail"""
         response = api_client.post(f"{BASE_URL}/api/auth/login", json={
-            "email": "admin@theone.ai",
+            "email": "admin@orchestrai.app",
             "password": "WrongPassword123"
         })
         assert response.status_code == 401
@@ -162,12 +163,12 @@ class TestLogin:
     def test_login_case_insensitive_email(self, api_client):
         """Email should be case-insensitive"""
         response = api_client.post(f"{BASE_URL}/api/auth/login", json={
-            "email": "ADMIN@THEONE.AI",
-            "password": "TheOne2026!"
+            "email": "ADMIN@ORCHESTRAI.APP",
+            "password": "Orchestr2026!"
         })
         assert response.status_code == 200
         data = response.json()
-        assert data["email"] == "admin@theone.ai"
+        assert data["email"] == "admin@orchestrai.app"
 
 
 class TestBruteForceProtection:
@@ -280,8 +281,8 @@ class TestProtectedEndpoints:
         """Verify protected endpoints work with valid token"""
         # Login first
         login_response = api_client.post(f"{BASE_URL}/api/auth/login", json={
-            "email": "admin@theone.ai",
-            "password": "TheOne2026!"
+            "email": "admin@orchestrai.app",
+            "password": "Orchestr2026!"
         })
         token = login_response.json()["token"]
         headers = {"Authorization": f"Bearer {token}"}
@@ -307,8 +308,8 @@ class TestLogout:
         """POST /api/auth/logout should clear cookies"""
         # Login first
         login_response = api_client.post(f"{BASE_URL}/api/auth/login", json={
-            "email": "admin@theone.ai",
-            "password": "TheOne2026!"
+            "email": "admin@orchestrai.app",
+            "password": "Orchestr2026!"
         })
         token = login_response.json()["token"]
         
@@ -363,4 +364,67 @@ class TestRefreshToken:
         """POST /api/auth/refresh should exist"""
         response = api_client.post(f"{BASE_URL}/api/auth/refresh")
         # Should return 401 without refresh token cookie
+
+
+class TestTrialFeature:
+    """30-day free trial feature tests (orchestrAI v3.0)"""
+    
+    def test_register_sets_trial_ends_at(self, api_client):
+        """New user registration should set trial_ends_at to 30 days from now"""
+        timestamp = int(time.time())
+        user_data = {
+            "email": f"TEST_trial_{timestamp}@example.com",
+            "password": "TrialPass123!",
+            "name": "Trial Test User"
+        }
+        
+        response = api_client.post(f"{BASE_URL}/api/auth/register", json=user_data)
+        assert response.status_code == 200
+        
+        token = response.json()["token"]
+        
+        # Get user details via /api/auth/me
+        response = api_client.get(
+            f"{BASE_URL}/api/auth/me",
+            headers={"Authorization": f"Bearer {token}"}
+        )
+        assert response.status_code == 200
+        
+        data = response.json()
+        assert "plan" in data
+        assert data["plan"] == "trial"
+        assert "trial_ends_at" in data
+        assert data["trial_ends_at"] is not None
+        
+        # Verify trial_ends_at is approximately 30 days from now
+        from datetime import datetime, timezone, timedelta
+        trial_end = datetime.fromisoformat(data["trial_ends_at"].replace('Z', '+00:00'))
+        now = datetime.now(timezone.utc)
+        expected_end = now + timedelta(days=30)
+        
+        # Allow 1 minute tolerance for test execution time
+        time_diff = abs((trial_end - expected_end).total_seconds())
+        assert time_diff < 60, f"Trial end date is not ~30 days from now (diff: {time_diff}s)"
+    
+    def test_auth_me_returns_plan_and_trial(self, api_client):
+        """GET /api/auth/me should return plan and trial_ends_at fields"""
+        # Login with admin
+        login_response = api_client.post(f"{BASE_URL}/api/auth/login", json={
+            "email": "admin@orchestrai.app",
+            "password": "Orchestr2026!"
+        })
+        token = login_response.json()["token"]
+        
+        # Get current user
+        response = api_client.get(
+            f"{BASE_URL}/api/auth/me",
+            headers={"Authorization": f"Bearer {token}"}
+        )
+        assert response.status_code == 200
+        
+        data = response.json()
+        assert "plan" in data
+        assert "trial_ends_at" in data
+        # Admin may not have trial_ends_at, but field should exist
+
         assert response.status_code == 401

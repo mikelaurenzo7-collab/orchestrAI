@@ -55,8 +55,8 @@ export default function Dashboard() {
         <View style={s.header}>
           <View>
             <Text style={s.overline}>COMMAND CENTER</Text>
-            <Text style={s.heroTitle}>THEONE</Text>
-            <Text style={s.subtitle}>Welcome, {user?.name || 'Commander'}</Text>
+            <Text style={s.heroTitle}>orchestr<Text style={{ color: Colors.emerald }}>AI</Text></Text>
+            <Text style={s.subtitle}>Welcome, {user?.name || 'Maestro'}</Text>
           </View>
           <TouchableOpacity testID="logout-btn" onPress={logout} style={s.logoutBtn}>
             <Text style={s.logoutText}>Logout</Text>

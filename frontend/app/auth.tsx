@@ -33,9 +33,9 @@ export default function AuthScreen() {
       <KeyboardAvoidingView style={s.flex} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         <ScrollView contentContainerStyle={s.scroll} keyboardShouldPersistTaps="handled">
           <View style={s.logoWrap}>
-            <Text style={s.logoMark}>T1</Text>
-            <Text style={s.logoText}>THEONE</Text>
-            <Text style={s.tagline}>Your AI eCommerce Empire</Text>
+            <Text style={s.logoMark}>orchestr</Text>
+            <Text style={s.logoAI}>AI</Text>
+            <Text style={s.tagline}>Conduct Your Commerce Symphony</Text>
           </View>
 
           <View style={s.card}>
@@ -68,7 +68,7 @@ export default function AuthScreen() {
             </TouchableOpacity>
           </View>
 
-          <Text style={s.footer}>Powered by GPT-5.2 AI</Text>
+          <Text style={s.footer}>30-day free trial  ·  No credit card required</Text>
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -80,9 +80,9 @@ const s = StyleSheet.create({
   flex: { flex: 1 },
   scroll: { flexGrow: 1, justifyContent: 'center', padding: Spacing.xxl },
   logoWrap: { alignItems: 'center', marginBottom: 40 },
-  logoMark: { fontSize: 56, fontWeight: '900', color: Colors.emerald, letterSpacing: -2 },
-  logoText: { fontSize: FontSizes.xxxl, fontWeight: '900', color: Colors.textPrimary, letterSpacing: 4, marginTop: -4 },
-  tagline: { fontSize: FontSizes.md, color: Colors.textSecondary, marginTop: 8 },
+  logoMark: { fontSize: 42, fontWeight: '300', color: Colors.textPrimary, letterSpacing: 2 },
+  logoAI: { fontSize: 42, fontWeight: '900', color: Colors.emerald, letterSpacing: -1, marginTop: -48, marginLeft: 180 },
+  tagline: { fontSize: FontSizes.md, color: Colors.textSecondary, marginTop: 16 },
   card: {
     backgroundColor: Colors.surface, borderRadius: BorderRadius.xxl, padding: Spacing.xxl,
     borderWidth: 1, borderColor: Colors.border,

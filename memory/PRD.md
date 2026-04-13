@@ -1,62 +1,49 @@
-# THEONE - AI eCommerce Agent Platform
+# orchestrAI — Conduct Your Commerce Symphony
 
 ## Vision
-THEONE is an AI-powered eCommerce command center. Autonomous AI agents connect to your stores (Shopify, WooCommerce, Etsy), manage operations, generate social media content, provide analytics, and handle customer service — all from one mobile app.
+orchestrAI is the maestro of eCommerce — an AI agent orchestration platform that connects autonomous AI agents to your online stores. Each agent is a virtuoso: managing operations, generating viral content, analyzing trends, and handling customers — conducted from a single beautiful mobile app.
 
-## v2.0 Features
+## v3.0 Features
 
-### Authentication (NEW)
-- JWT-based email/password auth with bcrypt hashing
-- Admin account auto-seeded on startup
-- Per-user data isolation (each user gets own agents, stores, content)
-- Token refresh, brute force protection, secure logout
+### Authentication & Trial
+- JWT auth with bcrypt, 30-day free trial for new users
+- Per-user data isolation, admin seeded on startup
 
 ### Command Dashboard
-- Real-time metrics: stores, agents, revenue, orders, tasks, social posts
-- Agent fleet status, recent activity feed, personalized greeting
+- Real-time metrics, agent fleet status, personalized greeting
+- Quick actions, recent activity feed, pull-to-refresh
 
-### AI Agent Hub
-- **Store Commander** — Inventory, pricing, orders
-- **Growth Engine** — Social media, ad copy, campaigns
-- **Insight Oracle** — Analytics, forecasting, trends
-- **Support Shield** — Customer service, FAQs, reviews
-- Toggle on/off, auto-execute, expandable capabilities
+### Agent Hub (The Symphony)
+- **Store Commander** — Inventory, pricing, orders virtuoso
+- **Growth Engine** — Marketing & social media maestro
+- **Insight Oracle** — Analytics & forecasting conductor
+- **Support Shield** — Customer experience virtuoso
+- Configurable personality, tone, auto-execute
 
 ### AI Chat Interface
-- Multi-agent conversation powered by GPT-5.2
+- Multi-agent GPT-5.2 conversations, persistent history
 - 5 agent types with contextual suggestions
-- Persistent chat history per user
 
 ### Social Media Studio
 - AI-generated posts for Instagram, Twitter/X, Facebook, TikTok
-- Tone & platform optimization, hashtag generation
+- Platform-optimized with tone selection & hashtags
 
 ### Store Connection Hub
-- Connect Shopify, WooCommerce, Etsy, Custom API
+- Shopify, WooCommerce, Etsy, Custom API
 - Secure API key storage, sync controls
 
-### iOS App Store Ready (NEW)
-- Custom T1 monogram app icon and splash screen
-- Proper app.json with bundleIdentifier, permissions, dark theme
-- EAS Build compatible configuration
-
-### Web App Ready (NEW)
-- Expo web output configured, works on any browser
-- Already functional at preview URL
+### iOS/Android/Web Ready
+- Custom conductor baton + waveform app icon
+- com.orchestrai.app bundle ID, EAS Build compatible
 
 ## Tech Stack
-- **Frontend**: React Native Expo SDK 54, Expo Router, TypeScript
-- **Backend**: FastAPI, Motor (async MongoDB), Pydantic
-- **Database**: MongoDB (per-user data isolation)
-- **AI**: GPT-5.2 via Emergent Universal Key
-- **Auth**: JWT + bcrypt + AsyncStorage
-- **Design**: Dark Jewel theme (#030712, Emerald/Amber accents)
+- Expo SDK 54, FastAPI, MongoDB, GPT-5.2 via Emergent Key
+- JWT + bcrypt auth, Dark theme with emerald accents
+
+## Pricing Model
+- 30-day free trial (no credit card)
+- Pro: $29/mo (5 stores, all agents, unlimited AI)
+- Agency: $99/mo (unlimited stores, white-label, priority)
 
 ## Credentials
-- Admin: admin@theone.ai / TheOne2026!
-
-## Next Steps
-- Shopify OAuth real integration (user will provide keys)
-- Social media API posting (Instagram, Twitter APIs)
-- Subscription tiers (Free/Pro/Enterprise)
-- Push notifications for agent actions
+- Admin: admin@orchestrai.app / Orchestr2026!

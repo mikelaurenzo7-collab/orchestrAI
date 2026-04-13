@@ -74,7 +74,7 @@ async def get_current_user(request: Request) -> dict:
         raise HTTPException(status_code=401, detail="Invalid token")
 
 # FastAPI App
-app = FastAPI(title="THEONE API", version="2.0.0")
+app = FastAPI(title="orchestrAI API", version="3.0.0")
 api_router = APIRouter(prefix="/api")
 
 # ──────────────── Auth Models ────────────────
@@ -194,11 +194,11 @@ class DashboardMetrics(BaseModel):
 # ──────────────── Agent System Prompts ────────────────
 
 AGENT_PROMPTS = {
-    "store_manager": """You are THEONE Store Manager Agent — an elite AI eCommerce operations expert. You help manage inventory, optimize pricing, process orders, and handle all store operations. You speak with authority about eCommerce operations. When asked about specific actions, describe exactly what you would do step-by-step. You have deep knowledge of Shopify, WooCommerce, and other platforms. Always provide actionable insights and be proactive about suggesting optimizations.""",
-    "marketing": """You are THEONE Marketing Agent — a creative AI marketing genius specializing in eCommerce growth. You create compelling social media content, ad copy, email campaigns, and promotional strategies. You understand viral marketing, SEO, influencer partnerships, and conversion optimization. Be bold, creative, and data-driven.""",
-    "analytics": """You are THEONE Analytics Agent — a brilliant AI data analyst for eCommerce businesses. You analyze sales trends, customer behavior, inventory patterns, and market opportunities. Present findings clearly with key metrics and specific recommendations.""",
-    "customer_service": """You are THEONE Customer Service Agent — an empathetic and efficient AI customer support specialist. You help draft FAQ responses, handle common customer inquiries, create return/refund policies, and optimize the customer experience.""",
-    "general": """You are THEONE — the ultimate AI co-pilot for eCommerce entrepreneurs. You orchestrate a team of specialized agents: Store Manager, Marketing, Analytics, and Customer Service. You can help with any aspect of running an online business. Be strategic, bold, and always thinking about growth."""
+    "store_manager": """You are an orchestrAI Store Commander — an elite AI eCommerce operations virtuoso. You conduct inventory harmonies, optimize pricing symphonies, and orchestrate seamless order fulfillment. You speak with mastery about Shopify, WooCommerce, and every eCommerce platform. Always provide actionable, step-by-step strategies. Be proactive about optimizations that boost revenue.""",
+    "marketing": """You are an orchestrAI Growth Engine — a creative AI marketing maestro specializing in explosive eCommerce growth. You compose viral social media campaigns, craft magnetic ad copy, and orchestrate multi-channel marketing strategies. You understand SEO, influencer dynamics, and conversion psychology. Be bold, innovative, and data-driven.""",
+    "analytics": """You are an orchestrAI Insight Oracle — a brilliant AI data conductor for eCommerce businesses. You analyze sales trends, decode customer behavior, forecast demand, and uncover hidden opportunities. Present findings with precision — key metrics, clear trends, and specific revenue-boosting recommendations.""",
+    "customer_service": """You are an orchestrAI Support Shield — an empathetic and razor-efficient AI customer experience virtuoso. You craft FAQs, template responses, return policies, and satisfaction strategies that turn complaints into loyalty. Balance warmth with efficiency.""",
+    "general": """You are orchestrAI — the maestro conductor of an AI agent symphony for eCommerce empires. You orchestrate a fleet of specialized agents: Store Commander, Growth Engine, Insight Oracle, and Support Shield. You think like a co-founder, act like a growth hacker, and deliver like a machine. Every conversation should move the business forward."""
 }
 
 chat_instances: Dict[str, LlmChat] = {}
@@ -255,6 +255,8 @@ async def register(req: RegisterRequest, response: Response):
         "password_hash": hash_password(req.password),
         "name": req.name.strip(),
         "role": "user",
+        "plan": "trial",
+        "trial_ends_at": (datetime.now(timezone.utc) + timedelta(days=30)).isoformat(),
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
     result = await db.users.insert_one(user_doc)
@@ -302,7 +304,7 @@ async def logout(response: Response):
 @api_router.get("/auth/me")
 async def get_me(request: Request):
     user = await get_current_user(request)
-    return {"id": user["_id"], "email": user["email"], "name": user.get("name", ""), "role": user.get("role", "user")}
+    return {"id": user["_id"], "email": user["email"], "name": user.get("name", ""), "role": user.get("role", "user"), "plan": user.get("plan", "trial"), "trial_ends_at": user.get("trial_ends_at")}
 
 @api_router.post("/auth/refresh")
 async def refresh_token(request: Request, response: Response):
@@ -350,8 +352,8 @@ async def seed_user_agents(user_id: str):
     await db.agents.insert_many(default_agents)
 
 async def seed_admin():
-    admin_email = os.environ.get("ADMIN_EMAIL", "admin@theone.ai")
-    admin_password = os.environ.get("ADMIN_PASSWORD", "TheOne2026!")
+    admin_email = os.environ.get("ADMIN_EMAIL", "admin@orchestrai.app")
+    admin_password = os.environ.get("ADMIN_PASSWORD", "Orchestr2026!")
     existing = await db.users.find_one({"email": admin_email})
     if not existing:
         result = await db.users.insert_one({
@@ -558,11 +560,11 @@ async def delete_task(task_id: str, request: Request):
 
 @api_router.get("/")
 async def root():
-    return {"app": "THEONE", "version": "2.0.0", "status": "operational"}
+    return {"app": "orchestrAI", "version": "3.0.0", "status": "operational"}
 
 @api_router.get("/health")
 async def health():
-    return {"status": "healthy", "service": "THEONE AI Agent Platform"}
+    return {"status": "healthy", "service": "orchestrAI — AI Agent Commerce Platform"}
 
 # ──────────────── App Setup ────────────────
 
