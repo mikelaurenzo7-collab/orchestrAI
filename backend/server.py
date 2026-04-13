@@ -497,7 +497,7 @@ async def build_agent_context(user_id: str, agent_type: str) -> str:
     if agent_type == "store_manager":
         tasks = await db.tasks.find({"user_id": user_id, "agent_type": "store_manager"}, {"_id": 0}).sort("created_at", -1).to_list(3)
         if tasks:
-            context_parts.append(f"RECENT TASKS: " + ", ".join(t.get("title", "") for t in tasks))
+            context_parts.append("RECENT TASKS: " + ", ".join(t.get("title", "") for t in tasks))
     elif agent_type == "marketing":
         content = await db.social_content.find({"user_id": user_id}, {"_id": 0}).sort("created_at", -1).to_list(3)
         if content:
@@ -826,7 +826,7 @@ async def clear_chat_history(agent_type: str, request: Request):
 async def generate_social_content(req: SocialContentRequest, request: Request):
     user = await get_current_user(request)
     chat = LlmChat(api_key=EMERGENT_LLM_KEY, session_id=f"social_{uuid.uuid4()}",
-        system_message=f"""You are orchestrAI's Growth Engine generating social media content for an eCommerce brand.
+        system_message="""You are orchestrAI's Growth Engine generating social media content for an eCommerce brand.
 Rules: Return ONLY the post text followed by hashtags. No explanations. Be catchy, trendy, conversion-focused.
 Match the platform's style perfectly. Use emojis strategically. Every word should drive engagement or clicks.""")
     chat.with_model("openai", "gpt-5.2")
@@ -1581,15 +1581,21 @@ async def shopify_callback(code: str, state: str, shop: str):
             await db.activity_log.insert_one({"user_id": user_id, "type": "store_connected",
                 "message": f"Connected Shopify store: {shop}", "timestamp": datetime.now(timezone.utc).isoformat()})
             await db.oauth_states.delete_one({"state": state})
-            # Redirect back to app
-            return Response(content="<html><body><script>window.close();</script><h2>Store connected! You can close this window.</h2></body></html>", media_type="text/html")
+            # Redirect back to app stores page
+            app_url = os.environ.get('EXPO_PUBLIC_BACKEND_URL', 'https://agent-marketplace-69.preview.emergentagent.com')
+            return Response(
+                content=f"""<html><head><meta http-equiv="refresh" content="2;url={app_url}/stores"></head>
+                <body style="background:#030712;color:#34D399;font-family:system-ui;display:flex;align-items:center;justify-content:center;height:100vh;flex-direction:column">
+                <h1 style="font-size:48px">✅</h1><h2>Shopify Connected!</h2><p style="color:#94A3B8">Redirecting to orchestrAI...</p>
+                </body></html>""", media_type="text/html"
+            )
     except httpx.HTTPError as e:
         logger.error(f"Shopify OAuth error: {e}")
         raise HTTPException(status_code=500, detail="Shopify connection failed")
 
 @api_router.post("/shopify/sync/{store_id}")
 async def sync_shopify_store(store_id: str, request: Request):
-    """Sync products and orders from Shopify"""
+    """Sync products, orders, and revenue from Shopify"""
     import httpx
     user = await get_current_user(request)
     store = await db.stores.find_one({"id": store_id, "user_id": user["_id"], "platform": "shopify"})
@@ -1597,22 +1603,443 @@ async def sync_shopify_store(store_id: str, request: Request):
         raise HTTPException(status_code=404, detail="Shopify store not found or not authorized")
     shop = store["store_url"].replace("https://", "")
     token = store["access_token"]
+    api_version = "2024-10"
+    headers = {"X-Shopify-Access-Token": token}
     try:
-        async with httpx.AsyncClient() as client_http:
+        async with httpx.AsyncClient(timeout=30) as hc:
             # Fetch products count
-            prod_resp = await client_http.get(f"https://{shop}/admin/api/2024-01/products/count.json",
-                headers={"X-Shopify-Access-Token": token})
+            prod_resp = await hc.get(f"https://{shop}/admin/api/{api_version}/products/count.json", headers=headers)
             products = prod_resp.json().get("count", 0) if prod_resp.status_code == 200 else 0
+
             # Fetch orders count
-            ord_resp = await client_http.get(f"https://{shop}/admin/api/2024-01/orders/count.json?status=any",
-                headers={"X-Shopify-Access-Token": token})
+            ord_resp = await hc.get(f"https://{shop}/admin/api/{api_version}/orders/count.json?status=any", headers=headers)
             orders = ord_resp.json().get("count", 0) if ord_resp.status_code == 200 else 0
-            await db.stores.update_one({"id": store_id}, {"$set": {"products_synced": products, "orders_total": orders,
-                "last_synced": datetime.now(timezone.utc).isoformat()}})
-            return {"products_synced": products, "orders_total": orders}
+
+            # Fetch recent orders for revenue calculation
+            revenue = 0.0
+            rev_resp = await hc.get(f"https://{shop}/admin/api/{api_version}/orders.json?status=any&limit=250&fields=total_price",
+                headers=headers)
+            if rev_resp.status_code == 200:
+                order_list = rev_resp.json().get("orders", [])
+                revenue = sum(float(o.get("total_price", 0)) for o in order_list)
+
+            # Fetch shop info for name
+            shop_resp = await hc.get(f"https://{shop}/admin/api/{api_version}/shop.json", headers=headers)
+            shop_name = store.get("name", shop.replace(".myshopify.com", ""))
+            if shop_resp.status_code == 200:
+                shop_data = shop_resp.json().get("shop", {})
+                shop_name = shop_data.get("name", shop_name)
+
+            await db.stores.update_one({"id": store_id}, {"$set": {
+                "name": shop_name, "products_synced": products, "orders_total": orders,
+                "revenue": revenue, "last_synced": datetime.now(timezone.utc).isoformat()
+            }})
+
+            await db.activity_log.insert_one({"user_id": user["_id"], "type": "store_synced",
+                "message": f"Synced {shop_name}: {products} products, {orders} orders, ${revenue:,.2f} revenue",
+                "timestamp": datetime.now(timezone.utc).isoformat()})
+
+            return {"products_synced": products, "orders_total": orders, "revenue": revenue, "name": shop_name}
     except Exception as e:
         logger.error(f"Shopify sync error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+# ──────────────── Etsy OAuth ────────────────
+
+# ──────────────── Twitter / X Integration ────────────────
+
+TWITTER_API_KEY = os.environ.get('TWITTER_API_KEY', '')
+TWITTER_API_SECRET = os.environ.get('TWITTER_API_SECRET', '')
+TWITTER_ACCESS_TOKEN = os.environ.get('TWITTER_ACCESS_TOKEN', '')
+TWITTER_ACCESS_TOKEN_SECRET = os.environ.get('TWITTER_ACCESS_TOKEN_SECRET', '')
+TWITTER_BEARER_TOKEN = os.environ.get('TWITTER_BEARER_TOKEN', '')
+
+class TwitterPostRequest(BaseModel):
+    text: str
+    content_id: Optional[str] = None  # link to social_content doc
+
+class CampaignRequest(BaseModel):
+    product_name: str
+    product_description: Optional[str] = None
+    platforms: List[str] = ["twitter", "pinterest"]  # which platforms to target
+    auto_post: bool = True  # True = post immediately, False = queue for approval
+
+@api_router.post("/campaigns/launch")
+async def launch_campaign(req: CampaignRequest, request: Request):
+    """Autonomous campaign: AI generates platform-specific content and posts to ALL connected platforms"""
+    user = await get_current_user(request)
+    user_id = user["_id"]
+
+    # Check which integrations are actually configured
+    available = {
+        "twitter": bool(TWITTER_API_KEY and TWITTER_ACCESS_TOKEN),
+        "pinterest": bool(PINTEREST_ACCESS_TOKEN),
+    }
+    target_platforms = [p for p in req.platforms if available.get(p)]
+    if not target_platforms:
+        raise HTTPException(status_code=400, detail="No connected platforms found. Connect Twitter or Pinterest first.")
+
+    # Check if user's Growth Engine has auto_execute enabled
+    growth_agent = await db.agents.find_one({"user_id": user_id, "agent_type": "marketing"})
+    agent_auto = growth_agent.get("auto_execute", False) if growth_agent else False
+    should_auto_post = req.auto_post and agent_auto
+
+    # Build context for personalized content
+    context = await build_agent_context(user_id, "marketing")
+
+    campaign_id = str(uuid.uuid4())
+    campaign_doc = {
+        "id": campaign_id, "user_id": user_id, "product_name": req.product_name,
+        "status": "generating", "platforms": target_platforms,
+        "auto_post": should_auto_post, "posts": [],
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    await db.campaigns.insert_one(campaign_doc)
+
+    posts_created = []
+    posts_published = []
+
+    for platform in target_platforms:
+        # Generate platform-specific content via AI
+        platform_hints = {
+            "twitter": "Twitter/X post. Max 280 chars total (including hashtags). Punchy, viral-worthy. Use 2-3 hashtags max.",
+            "pinterest": "Pinterest pin description. 100-200 chars. Aspirational, keyword-rich. 3-5 hashtags.",
+            "instagram": "Instagram caption. 150-300 chars. Lifestyle-focused, use emojis strategically. 5-8 hashtags.",
+            "facebook": "Facebook post. 100-300 chars. Conversational, shareable. 2-3 hashtags.",
+        }
+        prompt = f"""Generate a {platform} post for this product.
+
+Product: {req.product_name}
+Description: {req.product_description or req.product_name}
+
+{platform_hints.get(platform, '')}
+
+USER CONTEXT:
+{context}
+
+Return ONLY the post text followed by hashtags on a new line. No explanations, no labels. Just the ready-to-publish content."""
+
+        try:
+            chat = LlmChat(api_key=EMERGENT_LLM_KEY, session_id=f"campaign_{campaign_id}_{platform}",
+                system_message=AGENT_BASE_PROMPTS["marketing"])
+            chat.with_model("openai", "gpt-5.2")
+            result = await chat.send_message(UserMessage(text=prompt))
+
+            # Parse content and hashtags
+            lines = result.strip().split('\n')
+            hashtags = []
+            content_lines = []
+            for line in lines:
+                tags = [w.strip() for w in line.split() if w.startswith('#')]
+                if tags:
+                    hashtags.extend(tags)
+                    remaining = ' '.join(w for w in line.split() if not w.startswith('#')).strip()
+                    if remaining:
+                        content_lines.append(remaining)
+                else:
+                    content_lines.append(line)
+            content = '\n'.join(content_lines).strip() or result.strip()
+            if not hashtags:
+                hashtags = [f"#{req.product_name.replace(' ', '')}", "#ecommerce"]
+
+            post_doc = {
+                "id": str(uuid.uuid4()), "user_id": user_id, "campaign_id": campaign_id,
+                "platform": platform, "content": content, "hashtags": hashtags[:8],
+                "product_name": req.product_name,
+                "created_at": datetime.now(timezone.utc).isoformat(),
+                "status": "pending_approval" if not should_auto_post else "publishing",
+                "platform_post_id": None, "platform_url": None,
+            }
+            await db.social_content.insert_one(post_doc)
+            posts_created.append(post_doc)
+
+            # Auto-post if enabled
+            if should_auto_post:
+                post_result = await _publish_post(post_doc)
+                if post_result:
+                    post_doc.update(post_result)
+                    posts_published.append(post_doc)
+
+        except Exception as e:
+            logger.error(f"Campaign content generation error for {platform}: {e}")
+
+    # Update campaign status
+    final_status = "posted" if len(posts_published) == len(target_platforms) else "partial" if posts_published else "queued"
+    if not should_auto_post:
+        final_status = "pending_approval"
+    await db.campaigns.update_one({"id": campaign_id}, {"$set": {
+        "status": final_status, "posts": [{"id": p["id"], "platform": p["platform"], "status": p["status"]} for p in posts_created],
+    }})
+
+    await db.agents.update_one({"user_id": user_id, "agent_type": "marketing"},
+        {"$set": {"last_active": datetime.now(timezone.utc).isoformat()}, "$inc": {"tasks_completed": 1}})
+    await db.activity_log.insert_one({"user_id": user_id, "type": "campaign_launched",
+        "message": f"Growth Engine {'auto-posted' if should_auto_post else 'queued'} campaign for {req.product_name} across {len(target_platforms)} platform(s)",
+        "timestamp": datetime.now(timezone.utc).isoformat()})
+
+    return {
+        "campaign_id": campaign_id, "status": final_status,
+        "posts_created": len(posts_created), "posts_published": len(posts_published),
+        "auto_posted": should_auto_post,
+        "posts": [{
+            "id": p["id"], "platform": p["platform"], "content": p["content"],
+            "hashtags": p["hashtags"], "status": p["status"],
+            "platform_url": p.get("platform_url"),
+        } for p in posts_created],
+    }
+
+async def _publish_post(post: dict) -> Optional[dict]:
+    """Internal: publish a single post to its target platform"""
+    try:
+        if post["platform"] == "twitter":
+            import tweepy
+            client_tw = tweepy.Client(
+                consumer_key=TWITTER_API_KEY, consumer_secret=TWITTER_API_SECRET,
+                access_token=TWITTER_ACCESS_TOKEN, access_token_secret=TWITTER_ACCESS_TOKEN_SECRET,
+            )
+            full_text = (post["content"] + '\n' + ' '.join(post.get("hashtags", [])))[:280]
+            response = client_tw.create_tweet(text=full_text)
+            tweet_id = response.data.get("id") if response.data else None
+            tweet_url = f"https://x.com/i/status/{tweet_id}" if tweet_id else None
+            await db.social_content.update_one({"id": post["id"]}, {"$set": {
+                "status": "posted", "posted_at": datetime.now(timezone.utc).isoformat(),
+                "platform_post_id": tweet_id, "platform_url": tweet_url,
+            }})
+            return {"status": "posted", "platform_post_id": tweet_id, "platform_url": tweet_url}
+
+        elif post["platform"] == "pinterest":
+            import httpx
+            headers = {"Authorization": f"Bearer {PINTEREST_ACCESS_TOKEN}", "Content-Type": "application/json"}
+            async with httpx.AsyncClient() as hc:
+                boards_resp = await hc.get(f"{PINTEREST_API_BASE}/boards", headers=headers)
+                board_id = None
+                if boards_resp.status_code == 200:
+                    boards = boards_resp.json().get("items", [])
+                    if boards:
+                        board_id = boards[0]["id"]
+                if not board_id:
+                    return None
+                pin_data = {
+                    "title": post["product_name"][:100],
+                    "description": (post["content"] + '\n' + ' '.join(post.get("hashtags", [])))[:500],
+                    "board_id": board_id,
+                }
+                resp = await hc.post(f"{PINTEREST_API_BASE}/pins", headers=headers, json=pin_data)
+                if resp.status_code in (200, 201):
+                    pin = resp.json()
+                    await db.social_content.update_one({"id": post["id"]}, {"$set": {
+                        "status": "posted", "posted_at": datetime.now(timezone.utc).isoformat(),
+                        "platform_post_id": pin.get("id"),
+                    }})
+                    return {"status": "posted", "platform_post_id": pin.get("id")}
+        return None
+    except Exception as e:
+        logger.error(f"Publish error for {post['platform']}: {e}")
+        await db.social_content.update_one({"id": post["id"]}, {"$set": {"status": "failed", "error": str(e)}})
+        return None
+
+@api_router.post("/campaigns/approve/{post_id}")
+async def approve_post(post_id: str, request: Request):
+    """Approve and publish a pending post"""
+    user = await get_current_user(request)
+    post = await db.social_content.find_one({"id": post_id, "user_id": user["_id"]})
+    if not post:
+        raise HTTPException(status_code=404, detail="Post not found")
+    if post["status"] != "pending_approval":
+        raise HTTPException(status_code=400, detail=f"Post is already {post['status']}")
+    result = await _publish_post(post)
+    if result:
+        return {"status": "posted", **result}
+    raise HTTPException(status_code=500, detail="Failed to publish")
+
+@api_router.post("/campaigns/reject/{post_id}")
+async def reject_post(post_id: str, request: Request):
+    """Reject a pending post"""
+    user = await get_current_user(request)
+    await db.social_content.update_one({"id": post_id, "user_id": user["_id"]}, {"$set": {"status": "rejected"}})
+    return {"status": "rejected"}
+
+@api_router.get("/campaigns")
+async def get_campaigns(request: Request):
+    """Get user's campaign history"""
+    user = await get_current_user(request)
+    campaigns = await db.campaigns.find({"user_id": user["_id"]}, {"_id": 0, "user_id": 0}).sort("created_at", -1).to_list(20)
+    return campaigns
+
+@api_router.post("/twitter/post")
+async def post_to_twitter(req: TwitterPostRequest, request: Request):
+    """Post a tweet using OAuth 1.0a user context"""
+    import tweepy
+    user = await get_current_user(request)
+    if not TWITTER_API_KEY or not TWITTER_ACCESS_TOKEN:
+        raise HTTPException(status_code=503, detail="Twitter integration not configured. Add API keys.")
+    try:
+        client_tw = tweepy.Client(
+            consumer_key=TWITTER_API_KEY,
+            consumer_secret=TWITTER_API_SECRET,
+            access_token=TWITTER_ACCESS_TOKEN,
+            access_token_secret=TWITTER_ACCESS_TOKEN_SECRET,
+        )
+        response = client_tw.create_tweet(text=req.text[:280])
+        tweet_id = response.data.get("id") if response.data else None
+        tweet_url = f"https://x.com/i/status/{tweet_id}" if tweet_id else None
+
+        # Update content status if linked
+        if req.content_id:
+            await db.social_content.update_one({"id": req.content_id, "user_id": user["_id"]},
+                {"$set": {"status": "posted", "posted_at": datetime.now(timezone.utc).isoformat(),
+                          "platform_post_id": tweet_id, "platform_url": tweet_url}})
+
+        await db.activity_log.insert_one({"user_id": user["_id"], "type": "twitter_posted",
+            "message": f"Posted to Twitter/X: {req.text[:60]}...",
+            "timestamp": datetime.now(timezone.utc).isoformat()})
+
+        return {"status": "posted", "tweet_id": tweet_id, "url": tweet_url}
+    except tweepy.TweepyException as e:
+        logger.error(f"Twitter post error: {e}")
+        raise HTTPException(status_code=500, detail=f"Twitter error: {str(e)}")
+
+@api_router.get("/twitter/verify")
+async def verify_twitter(request: Request):
+    """Verify Twitter credentials are working"""
+    import tweepy
+    await get_current_user(request)
+    if not TWITTER_API_KEY:
+        return {"status": "not_configured"}
+    try:
+        client_tw = tweepy.Client(
+            consumer_key=TWITTER_API_KEY,
+            consumer_secret=TWITTER_API_SECRET,
+            access_token=TWITTER_ACCESS_TOKEN,
+            access_token_secret=TWITTER_ACCESS_TOKEN_SECRET,
+        )
+        me = client_tw.get_me()
+        if me.data:
+            return {"status": "connected", "username": me.data.username, "name": me.data.name, "id": me.data.id}
+        return {"status": "error", "detail": "Could not verify"}
+    except Exception as e:
+        return {"status": "error", "detail": str(e)}
+
+# ──────────────── Pinterest Integration ────────────────
+
+PINTEREST_ACCESS_TOKEN = os.environ.get('PINTEREST_ACCESS_TOKEN', '')
+PINTEREST_APP_ID = os.environ.get('PINTEREST_APP_ID', '')
+PINTEREST_API_BASE = "https://api.pinterest.com/v5"
+
+class PinterestPinRequest(BaseModel):
+    title: str
+    description: str
+    link: Optional[str] = None
+    image_url: Optional[str] = None
+    board_id: Optional[str] = None
+    content_id: Optional[str] = None
+
+@api_router.post("/pinterest/pin")
+async def create_pinterest_pin(req: PinterestPinRequest, request: Request):
+    """Create a pin on Pinterest"""
+    import httpx
+    user = await get_current_user(request)
+    if not PINTEREST_ACCESS_TOKEN:
+        raise HTTPException(status_code=503, detail="Pinterest not configured. Add access token.")
+    try:
+        headers = {"Authorization": f"Bearer {PINTEREST_ACCESS_TOKEN}", "Content-Type": "application/json"}
+
+        # If no board specified, get the first board
+        board_id = req.board_id
+        if not board_id:
+            async with httpx.AsyncClient() as hc:
+                boards_resp = await hc.get(f"{PINTEREST_API_BASE}/boards", headers=headers)
+                if boards_resp.status_code == 200:
+                    boards = boards_resp.json().get("items", [])
+                    if boards:
+                        board_id = boards[0]["id"]
+                    else:
+                        raise HTTPException(status_code=400, detail="No Pinterest boards found. Create a board first.")
+                else:
+                    raise HTTPException(status_code=400, detail=f"Pinterest API error: {boards_resp.text}")
+
+        pin_data: Dict[str, Any] = {
+            "title": req.title[:100],
+            "description": req.description[:500],
+            "board_id": board_id,
+        }
+        if req.link:
+            pin_data["link"] = req.link
+        if req.image_url:
+            pin_data["media_source"] = {"source_type": "image_url", "url": req.image_url}
+
+        async with httpx.AsyncClient() as hc:
+            resp = await hc.post(f"{PINTEREST_API_BASE}/pins", headers=headers, json=pin_data)
+            if resp.status_code in (200, 201):
+                pin = resp.json()
+                pin_id = pin.get("id")
+
+                if req.content_id:
+                    await db.social_content.update_one({"id": req.content_id, "user_id": user["_id"]},
+                        {"$set": {"status": "posted", "posted_at": datetime.now(timezone.utc).isoformat(),
+                                  "platform_post_id": pin_id}})
+
+                await db.activity_log.insert_one({"user_id": user["_id"], "type": "pinterest_posted",
+                    "message": f"Created Pinterest pin: {req.title[:60]}",
+                    "timestamp": datetime.now(timezone.utc).isoformat()})
+
+                return {"status": "posted", "pin_id": pin_id, "pin": pin}
+            else:
+                raise HTTPException(status_code=resp.status_code, detail=f"Pinterest error: {resp.text}")
+    except httpx.HTTPError as e:
+        logger.error(f"Pinterest error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@api_router.get("/pinterest/boards")
+async def get_pinterest_boards(request: Request):
+    """Get user's Pinterest boards"""
+    import httpx
+    await get_current_user(request)
+    if not PINTEREST_ACCESS_TOKEN:
+        return {"status": "not_configured", "boards": []}
+    try:
+        headers = {"Authorization": f"Bearer {PINTEREST_ACCESS_TOKEN}"}
+        async with httpx.AsyncClient() as hc:
+            resp = await hc.get(f"{PINTEREST_API_BASE}/boards", headers=headers)
+            if resp.status_code == 200:
+                boards = resp.json().get("items", [])
+                return {"status": "connected", "boards": [{"id": b["id"], "name": b["name"]} for b in boards]}
+            return {"status": "error", "boards": [], "detail": resp.text}
+    except Exception as e:
+        return {"status": "error", "boards": [], "detail": str(e)}
+
+@api_router.get("/pinterest/verify")
+async def verify_pinterest(request: Request):
+    """Verify Pinterest credentials"""
+    import httpx
+    await get_current_user(request)
+    if not PINTEREST_ACCESS_TOKEN:
+        return {"status": "not_configured"}
+    try:
+        headers = {"Authorization": f"Bearer {PINTEREST_ACCESS_TOKEN}"}
+        async with httpx.AsyncClient() as hc:
+            resp = await hc.get(f"{PINTEREST_API_BASE}/user_account", headers=headers)
+            if resp.status_code == 200:
+                data = resp.json()
+                return {"status": "connected", "username": data.get("username", ""), "profile_image": data.get("profile_image", "")}
+            return {"status": "error", "detail": resp.text}
+    except Exception as e:
+        return {"status": "error", "detail": str(e)}
+
+# ──────────────── Integration Status ────────────────
+
+@api_router.get("/integrations/status")
+async def get_integration_status(request: Request):
+    """Returns which integrations are configured"""
+    await get_current_user(request)
+    return {
+        "shopify": {"configured": bool(SHOPIFY_CLIENT_ID), "type": "oauth"},
+        "etsy": {"configured": bool(ETSY_API_KEY), "type": "oauth"},
+        "twitter": {"configured": bool(TWITTER_API_KEY and TWITTER_ACCESS_TOKEN), "type": "direct"},
+        "pinterest": {"configured": bool(PINTEREST_ACCESS_TOKEN), "type": "direct"},
+        "tiktok": {"configured": bool(os.environ.get('TIKTOK_CLIENT_KEY', '')), "type": "oauth"},
+        "meta": {"configured": bool(os.environ.get('META_APP_ID', '')), "type": "oauth"},
+    }
 
 # ──────────────── Etsy OAuth ────────────────
 
@@ -1626,7 +2053,8 @@ async def etsy_auth_start(request: Request):
         raise HTTPException(status_code=503, detail="Etsy integration not configured")
     state = secrets.token_urlsafe(32)
     code_verifier = secrets.token_urlsafe(64)
-    import hashlib, base64
+    import hashlib
+    import base64
     code_challenge = base64.urlsafe_b64encode(hashlib.sha256(code_verifier.encode()).digest()).rstrip(b'=').decode()
     await db.oauth_states.insert_one({"state": state, "user_id": user["_id"], "platform": "etsy",
         "code_verifier": code_verifier, "created_at": datetime.now(timezone.utc).isoformat()})

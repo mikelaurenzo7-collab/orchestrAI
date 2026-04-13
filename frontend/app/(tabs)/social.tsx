@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, RefreshControl, TouchableOpacity,
-  TextInput, ActivityIndicator, KeyboardAvoidingView, Platform, Keyboard, Modal,
+  TextInput, ActivityIndicator, KeyboardAvoidingView, Platform, Keyboard, Modal, Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { authFetch } from '../../utils/api';
@@ -9,9 +9,10 @@ import { Colors, Spacing, BorderRadius, FontSizes, Shadows, AgentColors } from '
 
 type ActionDef = { id: string; name: string; icon: string; desc: string };
 type WorkflowTemplate = { id: string; name: string; icon: string; desc: string; steps: any[] };
+type SocialContent = { id: string; platform: string; content: string; hashtags: string[]; product_name: string; created_at: string; status: string; platform_url?: string };
 
 export default function ExecuteScreen() {
-  const [tab, setTab] = useState<'actions' | 'workflows' | 'builder'>('actions');
+  const [tab, setTab] = useState<'actions' | 'workflows' | 'builder' | 'social'>('actions');
   const [catalog, setCatalog] = useState<Record<string, ActionDef[]>>({});
   const [templates, setTemplates] = useState<WorkflowTemplate[]>([]);
   const [history, setHistory] = useState<any[]>([]);
@@ -31,24 +32,30 @@ export default function ExecuteScreen() {
   const [buildMsg, setBuildMsg] = useState('');
   const [autopilot, setAutopilot] = useState(true);
   const buildScrollRef = useRef<ScrollView>(null);
-  // Browser agent state
-  const [browserUrl, setBrowserUrl] = useState('');
-  const [browserInstructions, setBrowserInstructions] = useState('');
-  const [browserType, setBrowserType] = useState('research');
-  const [browsing, setBrowsing] = useState(false);
-  const [browserResult, setBrowserResult] = useState<any>(null);
+  // Social posting state
+  const [socialContent, setSocialContent] = useState<SocialContent[]>([]);
+  const [posting, setPosting] = useState<string | null>(null);
+  const [integrations, setIntegrations] = useState<any>({});
+  const [campaignProduct, setCampaignProduct] = useState('');
+  const [campaignDesc, setCampaignDesc] = useState('');
+  const [launching, setLaunching] = useState(false);
+  const [campaignResult, setCampaignResult] = useState<any>(null);
   const [refreshing, setRefreshing] = useState(false);
 
   const fetchData = useCallback(async () => {
     try {
-      const [catRes, tplRes, histRes] = await Promise.all([
+      const [catRes, tplRes, histRes, socialRes, intRes] = await Promise.all([
         authFetch('/api/actions/catalog'),
         authFetch('/api/workflows/templates'),
         authFetch('/api/actions/history'),
+        authFetch('/api/social/content'),
+        authFetch('/api/integrations/status'),
       ]);
       if (catRes.ok) setCatalog(await catRes.json());
       if (tplRes.ok) setTemplates(await tplRes.json());
       if (histRes.ok) setHistory(await histRes.json());
+      if (socialRes.ok) setSocialContent(await socialRes.json());
+      if (intRes.ok) setIntegrations(await intRes.json());
     } catch (e) { console.error(e); }
     finally { setLoading(false); setRefreshing(false); }
   }, []);
@@ -79,6 +86,55 @@ export default function ExecuteScreen() {
       fetchData();
     } catch (e) { console.error(e); }
     finally { setExecuting(null); }
+  };
+
+  const launchCampaign = async () => {
+    if (!campaignProduct.trim()) return;
+    setLaunching(true); Keyboard.dismiss();
+    try {
+      const platforms = [];
+      if (integrations.twitter?.configured) platforms.push('twitter');
+      if (integrations.pinterest?.configured) platforms.push('pinterest');
+      const res = await authFetch('/api/campaigns/launch', {
+        method: 'POST', body: JSON.stringify({
+          product_name: campaignProduct.trim(),
+          product_description: campaignDesc.trim() || undefined,
+          platforms, auto_post: true,
+        }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setCampaignResult(data);
+        setCampaignProduct(''); setCampaignDesc('');
+        fetchData(); // refresh content list
+      } else {
+        Alert.alert('Campaign Error', data.detail || 'Failed to launch');
+      }
+    } catch (e) { Alert.alert('Error', 'Campaign launch failed'); }
+    finally { setLaunching(false); }
+  };
+
+  const approvePost = async (postId: string) => {
+    setPosting(`approve_${postId}`);
+    try {
+      const res = await authFetch(`/api/campaigns/approve/${postId}`, { method: 'POST' });
+      if (res.ok) {
+        setSocialContent(prev => prev.map(c => c.id === postId ? { ...c, status: 'posted' } : c));
+      } else {
+        const data = await res.json();
+        Alert.alert('Error', data.detail || 'Publish failed');
+      }
+    } catch (e) { Alert.alert('Error', 'Failed to publish'); }
+    finally { setPosting(null); }
+  };
+
+  const rejectPost = async (postId: string) => {
+    setPosting(`reject_${postId}`);
+    try {
+      await authFetch(`/api/campaigns/reject/${postId}`, { method: 'POST' });
+      setSocialContent(prev => prev.map(c => c.id === postId ? { ...c, status: 'rejected' } : c));
+    } catch (e) { console.error(e); }
+    finally { setPosting(null); }
   };
 
   const startBuild = async () => {
@@ -156,9 +212,9 @@ export default function ExecuteScreen() {
         <View style={s.tabs}>
           {[
             { id: 'actions' as const, label: 'Actions', icon: '⚡' },
-            { id: 'workflows' as const, label: 'Workflows', icon: '🔄' },
+            { id: 'workflows' as const, label: 'Flows', icon: '🔄' },
+            { id: 'social' as const, label: 'Post', icon: '📣' },
             { id: 'builder' as const, label: 'Build', icon: '🏗️' },
-            { id: 'browser' as const, label: 'Browse', icon: '🌐' },
           ].map(t => (
             <TouchableOpacity key={t.id} testID={`tab-${t.id}`}
               style={[s.tabBtn, tab === t.id && s.tabActive]} onPress={() => setTab(t.id)}>
@@ -302,64 +358,149 @@ export default function ExecuteScreen() {
           </View>
         )}
 
-        {/* BROWSER AGENT TAB */}
-        {tab === 'browser' && (
+        {/* AUTONOMOUS CAMPAIGN CONTROL TAB */}
+        {tab === 'social' && (
           <View>
-            <Text style={s.sectionSub}>AI-powered browser agent — researches competitors, scrapes products, monitors prices, and more.</Text>
-
-            <Text style={s.agentLabel}>Task Type</Text>
-            <View style={s.styleRow}>
+            {/* Connected Platforms */}
+            <View style={s.intBadges}>
               {[
-                { id: 'research', label: 'Research', icon: '🔍' },
-                { id: 'scrape', label: 'Scrape', icon: '📋' },
-                { id: 'monitor', label: 'Monitor', icon: '👁️' },
-                { id: 'screenshot', label: 'Screenshot', icon: '📸' },
-                { id: 'custom', label: 'Custom', icon: '🎯' },
-              ].map(t => (
-                <TouchableOpacity key={t.id} testID={`browser-type-${t.id}`}
-                  style={[s.stylePill, browserType === t.id && { borderColor: Colors.cyan, backgroundColor: Colors.cyanGlow }]}
-                  onPress={() => setBrowserType(t.id)}>
-                  <Text style={{ fontSize: 14 }}>{t.icon}</Text>
-                  <Text style={[s.styleText, browserType === t.id && { color: Colors.cyan }]}>{t.label}</Text>
-                </TouchableOpacity>
-              ))}
+                { key: 'twitter', label: 'X / Twitter', icon: '🐦', color: '#1DA1F2' },
+                { key: 'pinterest', label: 'Pinterest', icon: '📌', color: '#E60023' },
+              ].map(p => {
+                const connected = integrations[p.key]?.configured;
+                return (
+                  <View key={p.key} style={[s.intBadge, { borderColor: connected ? p.color + '40' : Colors.border }]}>
+                    <View style={[s.intDot, { backgroundColor: connected ? p.color : Colors.textMuted }]} />
+                    <Text style={{ fontSize: 14 }}>{p.icon}</Text>
+                    <Text style={[s.intBadgeText, { color: connected ? p.color : Colors.textMuted }]}>{p.label}</Text>
+                  </View>
+                );
+              })}
             </View>
 
-            <Text style={[s.label, { marginTop: 16 }]}>URL (optional for research)</Text>
-            <TextInput testID="browser-url-input" style={s.input} value={browserUrl} onChangeText={setBrowserUrl}
-              placeholder="https://competitor-store.com" placeholderTextColor={Colors.textMuted} autoCapitalize="none" />
+            {/* Campaign Launcher */}
+            <View style={s.genCard}>
+              <Text style={s.genTitle}>Launch Campaign</Text>
+              <Text style={s.genSub}>Growth Engine generates optimized content for each platform and auto-publishes. One tap, all platforms.</Text>
+              <TextInput testID="campaign-product-input" style={s.input} value={campaignProduct} onChangeText={setCampaignProduct}
+                placeholder="What are you promoting?" placeholderTextColor={Colors.textMuted} />
+              <TextInput testID="campaign-desc-input" style={[s.input, { marginTop: 8 }]} value={campaignDesc} onChangeText={setCampaignDesc}
+                placeholder="Extra context for the AI (optional)" placeholderTextColor={Colors.textMuted} />
+              <TouchableOpacity testID="launch-campaign-btn"
+                style={[s.launchBtn, !campaignProduct.trim() && { opacity: 0.4 }]}
+                onPress={launchCampaign} disabled={!campaignProduct.trim() || launching}>
+                {launching ? (
+                  <View style={s.launchingRow}>
+                    <ActivityIndicator size="small" color={Colors.bg} />
+                    <Text style={s.launchBtnText}>Growth Engine is working...</Text>
+                  </View>
+                ) : (
+                  <View style={s.launchingRow}>
+                    <Text style={{ fontSize: 18 }}>🚀</Text>
+                    <Text style={s.launchBtnText}>Launch Autonomous Campaign</Text>
+                  </View>
+                )}
+              </TouchableOpacity>
+              <Text style={s.autoNote}>
+                {integrations.twitter?.configured && integrations.pinterest?.configured
+                  ? 'Will auto-post to Twitter + Pinterest'
+                  : integrations.twitter?.configured ? 'Will auto-post to Twitter'
+                  : integrations.pinterest?.configured ? 'Will auto-post to Pinterest'
+                  : 'Connect a platform in Stores tab first'}
+              </Text>
+            </View>
 
-            <Text style={s.label}>Instructions</Text>
-            <TextInput testID="browser-instructions-input" style={[s.input, { height: 80, textAlignVertical: 'top' }]}
-              value={browserInstructions} onChangeText={setBrowserInstructions} multiline
-              placeholder="e.g., Find their bestselling products and pricing strategy" placeholderTextColor={Colors.textMuted} />
+            {/* Campaign Result */}
+            {campaignResult && (
+              <View style={[s.campaignResultCard, { borderColor: campaignResult.auto_posted ? Colors.emerald + '30' : Colors.amber + '30' }]}>
+                <View style={s.campaignResultHeader}>
+                  <Text style={{ fontSize: 24 }}>{campaignResult.auto_posted ? '✅' : '⏳'}</Text>
+                  <View style={{ flex: 1, marginLeft: 12 }}>
+                    <Text style={s.campaignResultTitle}>
+                      {campaignResult.auto_posted ? 'Campaign Live!' : 'Awaiting Approval'}
+                    </Text>
+                    <Text style={s.campaignResultSub}>
+                      {campaignResult.posts_published}/{campaignResult.posts_created} posts published across {campaignResult.posts?.length} platforms
+                    </Text>
+                  </View>
+                </View>
+                {campaignResult.posts?.map((post: any) => (
+                  <View key={post.id} style={s.campaignPost}>
+                    <Text style={s.campaignPostPlatform}>{post.platform.toUpperCase()}</Text>
+                    <Text style={s.campaignPostContent}>{post.content}</Text>
+                    <Text style={s.hashtagText}>{post.hashtags?.join(' ')}</Text>
+                    {post.platform_url && <Text style={s.linkText}>{post.platform_url}</Text>}
+                    <View style={[s.statusPill, { backgroundColor: post.status === 'posted' ? Colors.emeraldGlow : Colors.amberGlow }]}>
+                      <Text style={[s.statusText, { color: post.status === 'posted' ? Colors.emerald : Colors.amber }]}>
+                        {post.status === 'posted' ? 'LIVE' : post.status.toUpperCase()}
+                      </Text>
+                    </View>
+                  </View>
+                ))}
+              </View>
+            )}
 
-            <TouchableOpacity testID="browser-execute-btn"
-              style={[s.wfRunBtn, { backgroundColor: Colors.cyan }]}
-              onPress={executeBrowser} disabled={browsing}>
-              {browsing ? <ActivityIndicator size="small" color={Colors.bg} /> :
-                <Text style={s.wfRunText}>Launch Browser Agent</Text>}
-            </TouchableOpacity>
+            {/* Mission Log — Pending Approvals + Posted Feed */}
+            {socialContent.length > 0 && (
+              <View style={{ marginTop: Spacing.xl }}>
+                <Text style={s.histTitle}>Mission Log</Text>
 
-            {browserResult && (
-              <View style={[s.planCard, { borderColor: Colors.cyan + '25', marginTop: 16 }]}>
-                <Text style={[s.planTitle, { color: Colors.cyan }]}>Browser Agent Report</Text>
-                {browserResult.scraped_data?.length > 0 && (
-                  <View>
-                    <Text style={s.planSection}>Extracted Data ({browserResult.scraped_data.length} items)</Text>
-                    {browserResult.scraped_data.slice(0, 5).map((item: any, i: number) => (
-                      <View key={i} style={s.productRow}>
-                        <Text style={s.productName}>{item.title || item.price || JSON.stringify(item)}</Text>
-                        {item.price && <Text style={[s.productPrice, { color: Colors.cyan }]}>{item.price}</Text>}
+                {/* Pending approvals first */}
+                {socialContent.filter(c => c.status === 'pending_approval').length > 0 && (
+                  <View style={s.approvalSection}>
+                    <Text style={s.approvalTitle}>Awaiting Your Approval</Text>
+                    {socialContent.filter(c => c.status === 'pending_approval').map(item => (
+                      <View key={item.id} style={[s.contentCard, { borderColor: Colors.amber + '30' }]}>
+                        <View style={s.contentHeader}>
+                          <Text style={[s.contentPlatform, { color: Colors.amber }]}>{item.platform.toUpperCase()}</Text>
+                          <Text style={s.contentProduct}>{item.product_name}</Text>
+                        </View>
+                        <Text style={s.contentText}>{item.content}</Text>
+                        <Text style={s.hashtagText}>{item.hashtags?.join(' ')}</Text>
+                        <View style={s.approvalActions}>
+                          <TouchableOpacity testID={`approve-${item.id}`}
+                            style={[s.approveBtn]} onPress={() => approvePost(item.id)}
+                            disabled={posting === `approve_${item.id}`}>
+                            {posting === `approve_${item.id}` ? <ActivityIndicator size="small" color={Colors.emerald} /> :
+                              <Text style={s.approveBtnText}>Approve & Publish</Text>}
+                          </TouchableOpacity>
+                          <TouchableOpacity testID={`reject-${item.id}`}
+                            style={s.rejectBtn} onPress={() => rejectPost(item.id)}>
+                            <Text style={s.rejectBtnText}>Skip</Text>
+                          </TouchableOpacity>
+                        </View>
                       </View>
                     ))}
                   </View>
                 )}
-                <Text style={s.planSection}>AI Analysis</Text>
-                <Text style={s.resultContent}>{browserResult.result}</Text>
-                {browserResult.screenshots?.length > 0 && (
-                  <Text style={[s.moreText, { color: Colors.cyan }]}>{browserResult.screenshots.length} screenshot(s) captured</Text>
-                )}
+
+                {/* Posted feed */}
+                {socialContent.filter(c => c.status === 'posted').map(item => (
+                  <View key={item.id} style={[s.contentCard, { borderColor: Colors.emerald + '15' }]}>
+                    <View style={s.contentHeader}>
+                      <View style={[s.liveDot, { backgroundColor: Colors.emerald }]} />
+                      <Text style={[s.contentPlatform, { color: Colors.emerald }]}>{item.platform.toUpperCase()}</Text>
+                      <Text style={s.contentProduct}>{item.product_name}</Text>
+                      <View style={s.postedBadge}><Text style={s.postedText}>LIVE</Text></View>
+                    </View>
+                    <Text style={s.contentText} numberOfLines={3}>{item.content}</Text>
+                    {item.platform_url && <Text style={s.linkText}>{item.platform_url}</Text>}
+                    <Text style={s.contentTime}>{new Date(item.created_at).toLocaleString()}</Text>
+                  </View>
+                ))}
+
+                {/* Draft/failed */}
+                {socialContent.filter(c => c.status === 'draft').map(item => (
+                  <View key={item.id} style={[s.contentCard, { borderColor: Colors.border }]}>
+                    <View style={s.contentHeader}>
+                      <Text style={s.contentPlatform}>{item.platform.toUpperCase()}</Text>
+                      <Text style={s.contentProduct}>{item.product_name}</Text>
+                      <View style={[s.postedBadge, { backgroundColor: Colors.surfaceElevated }]}><Text style={[s.postedText, { color: Colors.textMuted }]}>DRAFT</Text></View>
+                    </View>
+                    <Text style={s.contentText} numberOfLines={2}>{item.content}</Text>
+                    <Text style={s.contentTime}>{new Date(item.created_at).toLocaleString()}</Text>
+                  </View>
+                ))}
               </View>
             )}
           </View>
@@ -524,6 +665,45 @@ const s = StyleSheet.create({
   closeBtn: { backgroundColor: Colors.surfaceElevated, paddingVertical: 14, borderRadius: BorderRadius.lg, alignItems: 'center', marginTop: Spacing.xl, borderWidth: 1, borderColor: Colors.border },
   closeBtnText: { fontSize: FontSizes.md, fontWeight: '700', color: Colors.textSecondary },
   builderSub: { fontSize: FontSizes.md, color: Colors.textSecondary, marginBottom: Spacing.xl },
+  // Social / Campaign styles
+  intBadges: { flexDirection: 'row', gap: Spacing.sm, marginBottom: Spacing.lg },
+  intBadge: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 14, paddingVertical: 8, borderRadius: BorderRadius.full, backgroundColor: Colors.surface, borderWidth: 1 },
+  intBadgeText: { fontSize: FontSizes.sm, fontWeight: '700' },
+  intDot: { width: 6, height: 6, borderRadius: 3 },
+  genCard: { backgroundColor: Colors.surface, borderRadius: BorderRadius.xl, padding: Spacing.xl, borderWidth: 1, borderColor: Colors.amber + '20', ...Shadows.card },
+  genTitle: { fontSize: FontSizes.xl, fontWeight: '900', color: Colors.textPrimary, marginBottom: 4 },
+  genSub: { fontSize: FontSizes.sm, color: Colors.textSecondary, marginBottom: Spacing.lg, lineHeight: 20 },
+  launchBtn: { backgroundColor: Colors.amber, borderRadius: BorderRadius.lg, paddingVertical: 16, alignItems: 'center', marginTop: Spacing.lg },
+  launchBtnText: { fontSize: FontSizes.md, fontWeight: '900', color: Colors.bg },
+  launchingRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  autoNote: { fontSize: FontSizes.xs, color: Colors.textMuted, textAlign: 'center', marginTop: Spacing.sm, fontStyle: 'italic' },
+  campaignResultCard: { backgroundColor: Colors.surface, borderRadius: BorderRadius.xl, padding: Spacing.xl, borderWidth: 1, marginTop: Spacing.xl, ...Shadows.card },
+  campaignResultHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: Spacing.lg },
+  campaignResultTitle: { fontSize: FontSizes.lg, fontWeight: '800', color: Colors.textPrimary },
+  campaignResultSub: { fontSize: FontSizes.sm, color: Colors.textSecondary, marginTop: 2 },
+  campaignPost: { backgroundColor: Colors.surfaceElevated, borderRadius: BorderRadius.lg, padding: Spacing.lg, marginBottom: Spacing.sm },
+  campaignPostPlatform: { fontSize: FontSizes.xs, fontWeight: '800', color: Colors.amber, letterSpacing: 1, marginBottom: 6 },
+  campaignPostContent: { fontSize: FontSizes.md, color: Colors.textPrimary, lineHeight: 22, marginBottom: 4 },
+  statusPill: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: BorderRadius.full, alignSelf: 'flex-start', marginTop: 8 },
+  statusText: { fontSize: FontSizes.xs, fontWeight: '800', letterSpacing: 0.5 },
+  contentCard: { backgroundColor: Colors.surface, borderRadius: BorderRadius.lg, padding: Spacing.lg, borderWidth: 1, borderColor: Colors.border, marginBottom: Spacing.md, ...Shadows.card },
+  contentHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 },
+  contentPlatform: { fontSize: FontSizes.xs, fontWeight: '800', color: Colors.textMuted, letterSpacing: 1 },
+  contentProduct: { fontSize: FontSizes.sm, fontWeight: '600', color: Colors.textSecondary, flex: 1 },
+  contentText: { fontSize: FontSizes.md, color: Colors.textPrimary, lineHeight: 22, marginBottom: 4 },
+  hashtagText: { fontSize: FontSizes.sm, color: Colors.amber, marginTop: 4 },
+  linkText: { fontSize: FontSizes.xs, color: Colors.cyan, marginTop: 4 },
+  postedBadge: { backgroundColor: Colors.emeraldGlow, paddingHorizontal: 8, paddingVertical: 2, borderRadius: BorderRadius.full },
+  postedText: { fontSize: 9, fontWeight: '800', color: Colors.emerald, letterSpacing: 0.5 },
+  liveDot: { width: 6, height: 6, borderRadius: 3 },
+  contentTime: { fontSize: FontSizes.xs, color: Colors.textMuted, marginTop: 8 },
+  approvalSection: { marginBottom: Spacing.lg },
+  approvalTitle: { fontSize: FontSizes.md, fontWeight: '800', color: Colors.amber, marginBottom: Spacing.md },
+  approvalActions: { flexDirection: 'row', gap: Spacing.md, marginTop: Spacing.md },
+  approveBtn: { flex: 2, backgroundColor: Colors.emerald, borderRadius: BorderRadius.lg, paddingVertical: 12, alignItems: 'center' },
+  approveBtnText: { fontSize: FontSizes.md, fontWeight: '800', color: Colors.bg },
+  rejectBtn: { flex: 1, backgroundColor: Colors.surfaceElevated, borderRadius: BorderRadius.lg, paddingVertical: 12, alignItems: 'center', borderWidth: 1, borderColor: Colors.border },
+  rejectBtnText: { fontSize: FontSizes.md, fontWeight: '600', color: Colors.textMuted },
   label: { fontSize: FontSizes.sm, fontWeight: '700', color: Colors.textSecondary, marginBottom: 6, marginTop: Spacing.md },
   input: { backgroundColor: Colors.surfaceElevated, borderRadius: BorderRadius.md, paddingHorizontal: Spacing.lg, paddingVertical: Spacing.md, color: Colors.textPrimary, fontSize: FontSizes.md, borderWidth: 1, borderColor: Colors.border },
   styleRow: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.sm },

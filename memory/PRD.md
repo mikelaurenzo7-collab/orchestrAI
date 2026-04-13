@@ -73,3 +73,19 @@ orchestrAI is the maestro of eCommerce — an AI agent orchestration platform th
 - Add Shopify redirect URL in Partner dashboard
 - Add Etsy redirect URL in Developer dashboard
 - See /app/memory/API_KEYS_SETUP.md for details
+
+## Integration Status (Updated June 2025)
+
+### Live Integrations:
+- **Shopify OAuth**: Configured via CLI. Redirect URL set. Ready for store connection.
+- **Twitter/X**: Direct posting via OAuth 1.0a. All 7 keys saved. Autonomous posting live.
+- **Pinterest**: Direct pinning via access token. Autonomous posting live.
+- **Etsy OAuth**: Keys saved, awaiting redirect URL update.
+- **Meta/FB/IG**: Keys saved, awaiting redirect URL update.
+- **TikTok**: Keys saved, awaiting redirect URL update.
+
+### Autonomous Campaign System:
+- POST /api/campaigns/launch - AI generates + auto-publishes across all connected platforms
+- POST /api/campaigns/approve/{post_id} - Approve pending posts
+- POST /api/campaigns/reject/{post_id} - Reject pending posts
+- GET /api/integrations/status - Check configured platforms
