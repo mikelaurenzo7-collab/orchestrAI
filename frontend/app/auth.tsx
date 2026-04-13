@@ -10,88 +10,79 @@ import { Colors, BorderRadius } from '../constants/theme';
 
 const { width: W, height: H } = Dimensions.get('window');
 const CENTER = W / 2;
-const ROBOT_SIZE = 160;
-const ORBIT_R = 120;
+const ROBOT_SIZE = 130;
+const ORBIT_R = 110;
 
-// Integration logos that orbit the robot
 const INTEGRATIONS = [
-  { label: 'Shopify', emoji: '🟢', color: '#96BF48' },
-  { label: 'Etsy', emoji: '🟠', color: '#F1641E' },
-  { label: 'Woo', emoji: '🟣', color: '#7B51AD' },
-  { label: 'Insta', emoji: '📸', color: '#E1306C' },
-  { label: 'X', emoji: '🐦', color: '#1DA1F2' },
+  { label: 'Shopify', emoji: '🛍️', color: '#96BF48' },
+  { label: 'Etsy', emoji: '🧶', color: '#F1641E' },
+  { label: 'WooCommerce', emoji: '🛒', color: '#7B51AD' },
+  { label: 'Instagram', emoji: '📷', color: '#E1306C' },
+  { label: 'X', emoji: '✖️', color: '#1DA1F2' },
   { label: 'TikTok', emoji: '🎵', color: '#FE2C55' },
   { label: 'GPT', emoji: '🧠', color: '#10A37F' },
-  { label: 'Meta', emoji: '📘', color: '#1877F2' },
+  { label: 'Facebook', emoji: '👤', color: '#1877F2' },
 ];
 
 function OrbitalHero() {
   const robotPulse = useRef(new Animated.Value(1)).current;
   const robotGlow = useRef(new Animated.Value(0.3)).current;
-  const orbitAngle = useRef(new Animated.Value(0)).current;
-  // Individual integration pulses
   const intPulses = useRef(INTEGRATIONS.map(() => new Animated.Value(0.6))).current;
 
   useEffect(() => {
-    // Robot breathe
     Animated.loop(Animated.sequence([
       Animated.timing(robotPulse, { toValue: 1.06, duration: 2000, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
       Animated.timing(robotPulse, { toValue: 0.96, duration: 2000, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
     ])).start();
-    // Robot glow breathe
     Animated.loop(Animated.sequence([
       Animated.timing(robotGlow, { toValue: 0.6, duration: 2500, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
       Animated.timing(robotGlow, { toValue: 0.2, duration: 2500, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
     ])).start();
-    // Orbit rotation
-    Animated.loop(
-      Animated.timing(orbitAngle, { toValue: 1, duration: 30000, easing: Easing.linear, useNativeDriver: false })
-    ).start();
-    // Integration pulses
     intPulses.forEach((p, i) => {
-      const delay = i * 400;
       setTimeout(() => {
         Animated.loop(Animated.sequence([
           Animated.timing(p, { toValue: 1, duration: 1200 + i * 200, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
           Animated.timing(p, { toValue: 0.5, duration: 1200 + i * 200, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
         ])).start();
-      }, delay);
+      }, i * 300);
     });
   }, []);
 
-  // Calculate orbital positions
-  const rotation = orbitAngle.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '360deg'] });
+  const containerSize = ORBIT_R * 2 + 60;
+  const centerOffset = containerSize / 2;
 
   return (
-    <View style={o.container}>
-      {/* Glow ring behind robot */}
-      <Animated.View style={[o.glowRing, { opacity: robotGlow }]} />
-      <Animated.View style={[o.glowRing2, { opacity: robotGlow }]} />
+    <View style={[o.container, { width: containerSize, height: containerSize, alignSelf: 'center' }]}>      
+      {/* Glow rings */}
+      <Animated.View style={[o.glowRing, { opacity: robotGlow, left: centerOffset - (ROBOT_SIZE + 80) / 2, top: centerOffset - (ROBOT_SIZE + 80) / 2 }]} />
+      <Animated.View style={[o.glowRing2, { opacity: robotGlow, left: centerOffset - (ROBOT_SIZE + 140) / 2, top: centerOffset - (ROBOT_SIZE + 140) / 2 }]} />
 
-      {/* Orbit ring visual */}
-      <View style={o.orbitRing} />
+      {/* Dashed orbit circle */}
+      <View style={[o.orbitRing, { left: centerOffset - ORBIT_R - 22, top: centerOffset - ORBIT_R - 22 }]} />
 
-      {/* Orbiting integrations */}
-      <Animated.View style={[o.orbitGroup, { transform: [{ rotate: rotation }] }]}>
-        {INTEGRATIONS.map((int, i) => {
-          const angle = (i / INTEGRATIONS.length) * Math.PI * 2;
-          const x = Math.cos(angle) * ORBIT_R;
-          const y = Math.sin(angle) * ORBIT_R;
-          return (
-            <Animated.View key={i} style={[o.intBubble, {
-              left: CENTER - 22 + x, top: ROBOT_SIZE / 2 + 20 - 22 + y,
-              opacity: intPulses[i],
-              borderColor: int.color + '50',
-              shadowColor: int.color, shadowOpacity: 0.4, shadowRadius: 12, shadowOffset: { width: 0, height: 0 },
-            }]}>
-              <Text style={o.intEmoji}>{int.emoji}</Text>
-            </Animated.View>
-          );
-        })}
-      </Animated.View>
+      {/* Static integration icons in perfect circle */}
+      {INTEGRATIONS.map((int, i) => {
+        const angle = (i / INTEGRATIONS.length) * Math.PI * 2 - Math.PI / 2;
+        const x = centerOffset + Math.cos(angle) * ORBIT_R - 24;
+        const y = centerOffset + Math.sin(angle) * ORBIT_R - 24;
+        return (
+          <Animated.View key={i} style={[o.intBubble, {
+            position: 'absolute', left: x, top: y,
+            opacity: intPulses[i],
+            borderColor: int.color + '60',
+            shadowColor: int.color, shadowOpacity: 0.5, shadowRadius: 14, shadowOffset: { width: 0, height: 0 },
+          }]}>
+            <Text style={o.intEmoji}>{int.emoji}</Text>
+            <Text style={[o.intLabel, { color: int.color }]}>{int.label}</Text>
+          </Animated.View>
+        );
+      })}
 
       {/* Central Robot */}
-      <Animated.View style={[o.robotWrap, { transform: [{ scale: robotPulse }] }]}>
+      <Animated.View style={[o.robotWrap, { 
+        position: 'absolute', left: centerOffset - ROBOT_SIZE / 2, top: centerOffset - ROBOT_SIZE / 2,
+        transform: [{ scale: robotPulse }] 
+      }]}>
         <Image source={require('../assets/images/robot.png')} style={o.robotImg} resizeMode="contain" />
       </Animated.View>
     </View>
@@ -238,26 +229,25 @@ export default function AuthScreen() {
 }
 
 const o = StyleSheet.create({
-  container: { height: ROBOT_SIZE + ORBIT_R * 2 + 60, alignItems: 'center', justifyContent: 'center', marginBottom: 10 },
+  container: { position: 'relative', marginBottom: 10 },
   glowRing: {
     position: 'absolute', width: ROBOT_SIZE + 80, height: ROBOT_SIZE + 80, borderRadius: (ROBOT_SIZE + 80) / 2,
-    backgroundColor: Colors.emerald, top: ORBIT_R - 20, alignSelf: 'center',
+    backgroundColor: Colors.emerald,
   },
   glowRing2: {
     position: 'absolute', width: ROBOT_SIZE + 140, height: ROBOT_SIZE + 140, borderRadius: (ROBOT_SIZE + 140) / 2,
-    backgroundColor: Colors.emerald, opacity: 0.08, top: ORBIT_R - 50, alignSelf: 'center',
+    backgroundColor: Colors.emerald, opacity: 0.08,
   },
   orbitRing: {
     position: 'absolute', width: ORBIT_R * 2 + 44, height: ORBIT_R * 2 + 44, borderRadius: ORBIT_R + 22,
-    borderWidth: 1, borderColor: Colors.emerald + '20', borderStyle: 'dashed',
-    top: ROBOT_SIZE / 2 + 20 - ORBIT_R - 22, alignSelf: 'center',
+    borderWidth: 1, borderColor: Colors.emerald + '15', borderStyle: 'dashed',
   },
-  orbitGroup: { position: 'absolute', width: W, height: ROBOT_SIZE + ORBIT_R * 2 + 60 },
   intBubble: {
-    position: 'absolute', width: 44, height: 44, borderRadius: 22,
+    width: 48, height: 48, borderRadius: 24,
     backgroundColor: '#0D1424', borderWidth: 1.5, justifyContent: 'center', alignItems: 'center',
   },
-  intEmoji: { fontSize: 20 },
+  intEmoji: { fontSize: 18 },
+  intLabel: { fontSize: 7, fontWeight: '800', marginTop: 1, letterSpacing: 0.3 },
   robotWrap: { zIndex: 10 },
   robotImg: { width: ROBOT_SIZE, height: ROBOT_SIZE },
 });
