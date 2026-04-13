@@ -1082,109 +1082,210 @@ async def get_workflow_history(request: Request):
 
 # ──────────────── Store Builder Agent ────────────────
 
+# ──────────────── Conversational Store Builder ────────────────
+
 class StoreBuildRequest(BaseModel):
-    niche: str  # "vintage jewelry", "fitness gear", "handmade candles"
+    niche: str
     store_name: Optional[str] = None
     product_count: int = 10
-    style: str = "modern"  # modern, minimal, bold, luxury, playful
+    style: str = "modern"
     target_audience: Optional[str] = None
-    price_range: Optional[str] = None  # "budget", "mid", "premium", "luxury"
+    price_range: Optional[str] = None
+    autopilot: bool = True  # True = do everything, False = pause for feedback
 
-@api_router.post("/store-builder/plan")
-async def create_store_plan(req: StoreBuildRequest, request: Request):
-    """AI generates a complete store blueprint — products, descriptions, pricing, collections"""
+class BuildChatRequest(BaseModel):
+    build_id: str
+    message: str  # user feedback during build
+
+BUILD_STEPS = [
+    {"id": "brand", "label": "Naming your brand", "emoji": "🏷️", "agent": "general",
+     "prompt_tpl": "Create a brand identity for a {niche} eCommerce store. Style: {style}. Suggest: 1) A catchy brand name, 2) A tagline (under 8 words), 3) Brand personality description. Be creative and memorable. Respond in JSON: {{\"brand_name\":\"...\",\"tagline\":\"...\",\"personality\":\"...\"}}"},
+    {"id": "audience", "label": "Defining your audience", "emoji": "👥", "agent": "analytics",
+     "prompt_tpl": "Define the ideal target customer for a {niche} store called '{brand_name}'. Include: demographics, psychographics, pain points, buying triggers. Respond in JSON: {{\"target_audience\":\"...\",\"demographics\":\"...\",\"pain_points\":[\"...\"],\"buying_triggers\":[\"...\"]}}"},
+    {"id": "products", "label": "Creating your product catalog", "emoji": "📦", "agent": "store_manager",
+     "prompt_tpl": "Create {product_count} products for '{brand_name}', a {niche} store targeting {target_audience}. Style: {style}. Price range: {price_range}. Each product needs: title, SEO description (60-100 words), price (psychologically optimized), compare_at_price, collection, 3 tags, SKU prefix. Respond in JSON: {{\"products\":[{{\"title\":\"...\",\"description\":\"...\",\"price\":29.99,\"compare_at_price\":39.99,\"collection\":\"...\",\"tags\":[\"...\"],\"sku_prefix\":\"...\"}}]}}"},
+    {"id": "collections", "label": "Organizing collections", "emoji": "📂", "agent": "store_manager",
+     "prompt_tpl": "Based on these products for '{brand_name}': {product_titles} — create 3-5 product collections with names and SEO descriptions. Respond in JSON: {{\"collections\":[{{\"name\":\"...\",\"description\":\"...\"}}]}}"},
+    {"id": "policies", "label": "Writing store policies", "emoji": "📜", "agent": "customer_service",
+     "prompt_tpl": "Write store policies for '{brand_name}', a {niche} store. Voice: {style}. Create: shipping policy, return/refund policy, and About Us page copy. Each should feel authentic and customer-friendly. Respond in JSON: {{\"shipping\":\"...\",\"returns\":\"...\",\"about_us\":\"...\"}}"},
+    {"id": "marketing", "label": "Planning launch marketing", "emoji": "🚀", "agent": "marketing",
+     "prompt_tpl": "Create a launch marketing plan for '{brand_name}', a new {niche} store. Include: 3 marketing hooks, 3 social media post ideas, email welcome sequence outline, and estimated monthly revenue range. Respond in JSON: {{\"marketing_hooks\":[\"...\"],\"social_posts\":[\"...\"],\"email_sequence\":\"...\",\"estimated_monthly_revenue\":\"$X,XXX - $X,XXX\"}}"},
+]
+
+@api_router.post("/store-builder/start")
+async def start_store_build(req: StoreBuildRequest, request: Request):
+    """Start a conversational store build session"""
     user = await get_current_user(request)
     user_id = user["_id"]
+    build_id = str(uuid.uuid4())
 
-    plan_doc = {
-        "id": str(uuid.uuid4()), "user_id": user_id, "niche": req.niche,
+    build_doc = {
+        "id": build_id, "user_id": user_id, "niche": req.niche,
         "store_name": req.store_name, "product_count": req.product_count,
         "style": req.style, "target_audience": req.target_audience,
-        "price_range": req.price_range, "status": "generating",
-        "plan": None, "created_at": datetime.now(timezone.utc).isoformat(),
+        "price_range": req.price_range or "mid", "autopilot": req.autopilot,
+        "status": "in_progress", "current_step": 0, "total_steps": len(BUILD_STEPS),
+        "steps_completed": [], "plan": {}, "chat_log": [],
+        "created_at": datetime.now(timezone.utc).isoformat(),
     }
-    await db.store_plans.insert_one(plan_doc)
 
-    prompt = f"""You are orchestrAI's Store Architect. Generate a COMPLETE eCommerce store blueprint.
+    # Add welcome message
+    autopilot_msg = "Full autopilot — sit back and watch!" if req.autopilot else "I'll check in at each step for your feedback."
+    build_doc["chat_log"].append({
+        "role": "system", "content": f"Hey! I'm building your {req.niche} store. {autopilot_msg} Let's go!",
+        "timestamp": datetime.now(timezone.utc).isoformat(), "step": "start"
+    })
 
-NICHE: {req.niche}
-STORE NAME: {req.store_name or 'Suggest a catchy brand name'}
-PRODUCT COUNT: {req.product_count}
-STYLE: {req.style}
-TARGET AUDIENCE: {req.target_audience or 'Determine the ideal customer'}
-PRICE RANGE: {req.price_range or 'Suggest optimal pricing'}
+    await db.store_builds.insert_one(build_doc)
+    return {"build_id": build_id, "status": "started", "chat_log": build_doc["chat_log"]}
 
-Generate a JSON response with this EXACT structure:
-{{
-  "brand_name": "...",
-  "tagline": "...",
-  "target_audience": "...",
-  "collections": [
-    {{"name": "...", "description": "..."}}
-  ],
-  "products": [
-    {{
-      "title": "...",
-      "description": "...(50-100 words, SEO-optimized)...",
-      "price": 29.99,
-      "compare_at_price": 39.99,
-      "collection": "...",
-      "tags": ["tag1", "tag2", "tag3"],
-      "sku_prefix": "..."
-    }}
-  ],
-  "store_policies": {{
-    "shipping": "...",
-    "returns": "...",
-    "about_us": "..."
-  }},
-  "marketing_hooks": ["...", "...", "..."],
-  "estimated_monthly_revenue": "$X,XXX - $X,XXX"
-}}
+@api_router.post("/store-builder/step/{build_id}")
+async def execute_build_step(build_id: str, request: Request):
+    """Execute the next step in the build process"""
+    user = await get_current_user(request)
+    build = await db.store_builds.find_one({"id": build_id, "user_id": user["_id"]})
+    if not build:
+        raise HTTPException(status_code=404, detail="Build not found")
 
-Make ALL product descriptions unique, compelling, and SEO-optimized. Pricing should be psychologically optimized. Every detail should be ready to copy-paste into a real store. This plan should be worth paying for."""
+    step_idx = build["current_step"]
+    if step_idx >= len(BUILD_STEPS):
+        return {"status": "complete", "plan": build["plan"], "chat_log": build.get("chat_log", [])}
+
+    step = BUILD_STEPS[step_idx]
+    plan = build.get("plan", {})
+
+    # Build prompt with accumulated context
+    prompt_vars = {
+        "niche": build["niche"], "style": build["style"],
+        "product_count": build["product_count"],
+        "price_range": build.get("price_range", "mid"),
+        "brand_name": plan.get("brand_name", build.get("store_name", "the store")),
+        "target_audience": plan.get("target_audience", build.get("target_audience", "general consumers")),
+        "product_titles": ", ".join(p.get("title", "") for p in plan.get("products", [])[:5]),
+    }
+    prompt = step["prompt_tpl"].format(**{k: v for k, v in prompt_vars.items() if v})
+
+    # Add progress message
+    chat_entry = {
+        "role": "agent", "content": f"{step['emoji']} {step['label']}...",
+        "timestamp": datetime.now(timezone.utc).isoformat(), "step": step["id"]
+    }
+    await db.store_builds.update_one({"id": build_id}, {"$push": {"chat_log": chat_entry}})
 
     try:
-        chat = LlmChat(api_key=EMERGENT_LLM_KEY, session_id=f"builder_{plan_doc['id']}",
-            system_message="You are orchestrAI's Store Architect — you build profitable eCommerce stores from scratch. Always respond in valid JSON. Be specific, creative, and revenue-focused.")
+        base_prompt = AGENT_BASE_PROMPTS.get(step["agent"], AGENT_BASE_PROMPTS["general"])
+        chat = LlmChat(api_key=EMERGENT_LLM_KEY, session_id=f"build_{build_id}_{step['id']}",
+            system_message=f"{base_prompt}\n\nYou are building a store step by step. Respond ONLY in valid JSON as instructed. Be specific, creative, and revenue-focused.")
         chat.with_model("openai", "gpt-5.2")
         result = await chat.send_message(UserMessage(text=prompt))
 
-        # Try to parse JSON from response
+        # Parse JSON
         import json as json_lib
-        plan_data = None
+        parsed = None
         try:
-            # Strip markdown code blocks if present
             clean = result.strip()
-            if clean.startswith("```"):
-                clean = clean.split("\n", 1)[1] if "\n" in clean else clean[3:]
-            if clean.endswith("```"):
-                clean = clean[:-3]
-            if clean.startswith("json"):
-                clean = clean[4:]
-            plan_data = json_lib.loads(clean.strip())
+            if clean.startswith("```"): clean = clean.split("\n", 1)[1] if "\n" in clean else clean[3:]
+            if clean.endswith("```"): clean = clean[:-3]
+            if clean.startswith("json"): clean = clean[4:]
+            parsed = json_lib.loads(clean.strip())
         except json_lib.JSONDecodeError:
-            plan_data = {"raw_plan": result}
+            parsed = {"raw": result}
 
-        await db.store_plans.update_one({"id": plan_doc["id"]}, {"$set": {
-            "status": "ready", "plan": plan_data
-        }})
+        # Merge into plan
+        if step["id"] == "brand":
+            plan["brand_name"] = parsed.get("brand_name", plan.get("brand_name", ""))
+            plan["tagline"] = parsed.get("tagline", "")
+            plan["personality"] = parsed.get("personality", "")
+        elif step["id"] == "audience":
+            plan["target_audience"] = parsed.get("target_audience", "")
+            plan["demographics"] = parsed.get("demographics", "")
+        elif step["id"] == "products":
+            plan["products"] = parsed.get("products", [])
+        elif step["id"] == "collections":
+            plan["collections"] = parsed.get("collections", [])
+        elif step["id"] == "policies":
+            plan["store_policies"] = {"shipping": parsed.get("shipping", ""), "returns": parsed.get("returns", ""), "about_us": parsed.get("about_us", "")}
+        elif step["id"] == "marketing":
+            plan["marketing_hooks"] = parsed.get("marketing_hooks", [])
+            plan["estimated_monthly_revenue"] = parsed.get("estimated_monthly_revenue", "")
 
-        await db.activity_log.insert_one({"user_id": user_id, "type": "store_plan_created",
-            "message": f"Store blueprint generated for '{req.niche}' niche",
-            "timestamp": datetime.now(timezone.utc).isoformat()})
+        # Summary message for chat
+        summaries = {
+            "brand": f"Your brand: **{plan.get('brand_name', '?')}** — \"{plan.get('tagline', '')}\"",
+            "audience": f"Target customer: {plan.get('target_audience', '?')[:120]}",
+            "products": f"Created {len(plan.get('products', []))} products! Top picks: {', '.join(p.get('title','') for p in plan.get('products',[])[:3])}",
+            "collections": f"Organized into {len(plan.get('collections', []))} collections: {', '.join(c.get('name','') for c in plan.get('collections',[]))}",
+            "policies": "Shipping, returns, and About Us — all written and ready.",
+            "marketing": f"Launch plan ready! Est. revenue: {plan.get('estimated_monthly_revenue', 'TBD')}",
+        }
 
-        return {"id": plan_doc["id"], "status": "ready", "plan": plan_data}
+        result_msg = {
+            "role": "agent", "content": f"✅ {summaries.get(step['id'], 'Done!')}",
+            "timestamp": datetime.now(timezone.utc).isoformat(), "step": step["id"],
+            "data": parsed
+        }
+
+        await db.store_builds.update_one({"id": build_id}, {
+            "$set": {"current_step": step_idx + 1, "plan": plan},
+            "$push": {"chat_log": result_msg, "steps_completed": step["id"]}
+        })
+
+        is_complete = step_idx + 1 >= len(BUILD_STEPS)
+        if is_complete:
+            await db.store_builds.update_one({"id": build_id}, {"$set": {"status": "complete"}})
+            await db.activity_log.insert_one({"user_id": user["_id"], "type": "store_built",
+                "message": f"Store '{plan.get('brand_name','')}' built for {build['niche']}",
+                "timestamp": datetime.now(timezone.utc).isoformat()})
+
+        return {"status": "complete" if is_complete else "in_progress",
+                "step": step["id"], "step_num": step_idx + 1, "total": len(BUILD_STEPS),
+                "summary": summaries.get(step["id"], ""), "data": parsed,
+                "plan": plan if is_complete else None,
+                "chat_log": (await db.store_builds.find_one({"id": build_id}, {"chat_log": 1, "_id": 0})).get("chat_log", [])}
 
     except Exception as e:
-        await db.store_plans.update_one({"id": plan_doc["id"]}, {"$set": {"status": "failed"}})
-        logger.error(f"Store plan error: {e}")
+        logger.error(f"Build step error: {e}")
+        err_msg = {"role": "system", "content": f"Hit a snag on {step['label']}: {str(e)[:100]}. Let me retry...",
+                   "timestamp": datetime.now(timezone.utc).isoformat(), "step": step["id"]}
+        await db.store_builds.update_one({"id": build_id}, {"$push": {"chat_log": err_msg}})
         raise HTTPException(status_code=500, detail=str(e))
+
+@api_router.post("/store-builder/chat/{build_id}")
+async def chat_during_build(build_id: str, req: BuildChatRequest, request: Request):
+    """User sends feedback during a build — AI incorporates it"""
+    user = await get_current_user(request)
+    build = await db.store_builds.find_one({"id": build_id, "user_id": user["_id"]})
+    if not build:
+        raise HTTPException(status_code=404, detail="Build not found")
+
+    user_msg = {"role": "user", "content": req.message, "timestamp": datetime.now(timezone.utc).isoformat()}
+    await db.store_builds.update_one({"id": build_id}, {"$push": {"chat_log": user_msg}})
+
+    # AI responds to feedback
+    context = f"Building a {build['niche']} store called '{build.get('plan',{}).get('brand_name','TBD')}'. Current progress: {len(build.get('steps_completed',[]))}/{len(BUILD_STEPS)} steps complete. User says: {req.message}"
+    chat = LlmChat(api_key=EMERGENT_LLM_KEY, session_id=f"buildchat_{build_id}",
+        system_message="You are orchestrAI's Store Architect mid-build. The user is giving feedback on the store being built. Acknowledge their input warmly, explain how you'll incorporate it, and keep it brief (2-3 sentences max). Be a great co-founder.")
+    chat.with_model("openai", "gpt-5.2")
+    response = await chat.send_message(UserMessage(text=context))
+
+    agent_msg = {"role": "agent", "content": response, "timestamp": datetime.now(timezone.utc).isoformat()}
+    await db.store_builds.update_one({"id": build_id}, {"$push": {"chat_log": agent_msg}})
+
+    return {"chat_log": (await db.store_builds.find_one({"id": build_id}, {"chat_log": 1, "_id": 0})).get("chat_log", [])}
+
+@api_router.get("/store-builder/status/{build_id}")
+async def get_build_status(build_id: str, request: Request):
+    """Get current build status and chat log"""
+    user = await get_current_user(request)
+    build = await db.store_builds.find_one({"id": build_id, "user_id": user["_id"]}, {"_id": 0, "user_id": 0})
+    if not build:
+        raise HTTPException(status_code=404, detail="Build not found")
+    return build
 
 @api_router.get("/store-builder/plans")
 async def get_store_plans(request: Request):
     user = await get_current_user(request)
-    plans = await db.store_plans.find({"user_id": user["_id"]}, {"_id": 0, "user_id": 0}).sort("created_at", -1).to_list(10)
+    plans = await db.store_builds.find({"user_id": user["_id"]}, {"_id": 0, "user_id": 0, "chat_log": 0}).sort("created_at", -1).to_list(10)
     return plans
 
 @api_router.post("/store-builder/deploy/{plan_id}")

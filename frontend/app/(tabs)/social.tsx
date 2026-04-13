@@ -18,13 +18,19 @@ export default function ExecuteScreen() {
   const [loading, setLoading] = useState(true);
   const [executing, setExecuting] = useState<string | null>(null);
   const [resultModal, setResultModal] = useState<any>(null);
-  // Builder state
+  // Builder state — conversational
   const [showBuilder, setShowBuilder] = useState(false);
   const [niche, setNiche] = useState('');
   const [storeName, setStoreName] = useState('');
   const [style, setStyle] = useState('modern');
   const [building, setBuilding] = useState(false);
-  const [buildResult, setBuildResult] = useState<any>(null);
+  const [buildId, setBuildId] = useState<string | null>(null);
+  const [buildChat, setBuildChat] = useState<any[]>([]);
+  const [buildComplete, setBuildComplete] = useState(false);
+  const [buildPlan, setBuildPlan] = useState<any>(null);
+  const [buildMsg, setBuildMsg] = useState('');
+  const [autopilot, setAutopilot] = useState(true);
+  const buildScrollRef = useRef<ScrollView>(null);
   // Browser agent state
   const [browserUrl, setBrowserUrl] = useState('');
   const [browserInstructions, setBrowserInstructions] = useState('');
@@ -75,18 +81,48 @@ export default function ExecuteScreen() {
     finally { setExecuting(null); }
   };
 
-  const buildStore = async () => {
+  const startBuild = async () => {
     if (!niche.trim()) return;
     setBuilding(true); Keyboard.dismiss();
     try {
-      const res = await authFetch('/api/store-builder/plan', {
-        method: 'POST', body: JSON.stringify({ niche: niche.trim(), store_name: storeName.trim() || null, style, product_count: 10 }),
+      const res = await authFetch('/api/store-builder/start', {
+        method: 'POST', body: JSON.stringify({ niche: niche.trim(), store_name: storeName.trim() || null, style, autopilot }),
       });
       const data = await res.json();
-      setBuildResult(data);
+      setBuildId(data.build_id);
+      setBuildChat(data.chat_log || []);
       setShowBuilder(false);
+      // Auto-run all steps
+      runBuildSteps(data.build_id);
+    } catch (e) { console.error(e); setBuilding(false); }
+  };
+
+  const runBuildSteps = async (id: string) => {
+    for (let i = 0; i < 6; i++) {
+      try {
+        const res = await authFetch(`/api/store-builder/step/${id}`, { method: 'POST' });
+        const data = await res.json();
+        setBuildChat(data.chat_log || []);
+        if (data.plan) setBuildPlan(data.plan);
+        if (data.status === 'complete') { setBuildComplete(true); break; }
+        // Small delay between steps for UX
+        await new Promise(r => setTimeout(r, 500));
+      } catch (e) { console.error(e); break; }
+    }
+    setBuilding(false);
+  };
+
+  const sendBuildChat = async () => {
+    if (!buildMsg.trim() || !buildId) return;
+    const msg = buildMsg.trim();
+    setBuildMsg(''); Keyboard.dismiss();
+    try {
+      const res = await authFetch(`/api/store-builder/chat/${buildId}`, {
+        method: 'POST', body: JSON.stringify({ build_id: buildId, message: msg }),
+      });
+      const data = await res.json();
+      setBuildChat(data.chat_log || []);
     } catch (e) { console.error(e); }
-    finally { setBuilding(false); }
   };
 
   const executeBrowser = async () => {
