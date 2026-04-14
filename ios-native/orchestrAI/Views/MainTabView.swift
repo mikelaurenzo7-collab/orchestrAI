@@ -2,36 +2,38 @@ import SwiftUI
 
 struct MainTabView: View {
     @State private var selectedTab = 0
+    @Environment(AuthService.self) private var authService
     
     var body: some View {
         TabView(selection: $selectedTab) {
             DashboardView()
+                .environment(authService)
                 .tabItem {
-                    Label("HQ", systemImage: "house.fill")
+                    Label("HQ", systemImage: selectedTab == 0 ? "house.fill" : "house")
                 }
                 .tag(0)
             
             AgentsView()
                 .tabItem {
-                    Label("Agents", systemImage: "person.3.fill")
+                    Label("Agents", systemImage: selectedTab == 1 ? "cpu.fill" : "cpu")
                 }
                 .tag(1)
             
             ChatView()
                 .tabItem {
-                    Label("Chat", systemImage: "message.fill")
+                    Label("Chat", systemImage: selectedTab == 2 ? "message.fill" : "message")
                 }
                 .tag(2)
             
             StoresView()
                 .tabItem {
-                    Label("Integrations", systemImage: "link")
+                    Label("Integrations", systemImage: selectedTab == 3 ? "link.circle.fill" : "link.circle")
                 }
                 .tag(3)
             
             SocialView()
                 .tabItem {
-                    Label("Broadcast", systemImage: "megaphone.fill")
+                    Label("Broadcast", systemImage: selectedTab == 4 ? "megaphone.fill" : "megaphone")
                 }
                 .tag(4)
         }

@@ -5,13 +5,14 @@ import Security
 // MARK: - Auth Service
 
 @MainActor
-class AuthService: ObservableObject {
+@Observable
+class AuthService {
     static let shared = AuthService()
     
-    @Published var isAuthenticated = false
-    @Published var currentUser: User?
-    @Published var isLoading = false
-    @Published var error: String?
+    var isAuthenticated = false
+    var currentUser: User?
+    var isLoading = false
+    var error: String?
     
     private let apiClient = APIClient.shared
     private let keychainService = "com.orchestrai.app"
@@ -28,7 +29,6 @@ class AuthService: ObservableObject {
                 self.currentUser = user
                 self.isAuthenticated = true
             } catch {
-                // Token invalid, clear it
                 clearToken()
                 self.isAuthenticated = false
             }
@@ -38,7 +38,6 @@ class AuthService: ObservableObject {
     func login(email: String, password: String) async throws {
         isLoading = true
         error = nil
-        
         defer { isLoading = false }
         
         let request = LoginRequest(email: email, password: password)
@@ -46,15 +45,13 @@ class AuthService: ObservableObject {
         
         saveToken(response.accessToken)
         apiClient.setAccessToken(response.accessToken)
-        
-        self.currentUser = response.user
-        self.isAuthenticated = true
+        currentUser = response.user
+        isAuthenticated = true
     }
     
     func register(name: String, email: String, password: String) async throws {
         isLoading = true
         error = nil
-        
         defer { isLoading = false }
         
         let request = RegisterRequest(email: email, password: password, name: name)
@@ -62,30 +59,27 @@ class AuthService: ObservableObject {
         
         saveToken(response.accessToken)
         apiClient.setAccessToken(response.accessToken)
-        
-        self.currentUser = response.user
-        self.isAuthenticated = true
+        currentUser = response.user
+        isAuthenticated = true
     }
     
     func logout() {
         clearToken()
         apiClient.setAccessToken(nil)
-        self.currentUser = nil
-        self.isAuthenticated = false
+        currentUser = nil
+        isAuthenticated = false
     }
     
-    // MARK: - Keychain Helpers
+    // MARK: - Keychain
     
     private func saveToken(_ token: String) {
-        let data = token.data(using: .utf8)!
-        
+        guard let data = token.data(using: .utf8) else { return }
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: keychainService,
             kSecAttrAccount as String: "accessToken",
             kSecValueData as String: data
         ]
-        
         SecItemDelete(query as CFDictionary)
         SecItemAdd(query as CFDictionary, nil)
     }
@@ -97,16 +91,11 @@ class AuthService: ObservableObject {
             kSecAttrAccount as String: "accessToken",
             kSecReturnData as String: true
         ]
-        
         var result: AnyObject?
         let status = SecItemCopyMatching(query as CFDictionary, &result)
-        
         guard status == errSecSuccess,
               let data = result as? Data,
-              let token = String(data: data, encoding: .utf8) else {
-            return nil
-        }
-        
+              let token = String(data: data, encoding: .utf8) else { return nil }
         return token
     }
     
@@ -116,7 +105,6 @@ class AuthService: ObservableObject {
             kSecAttrService as String: keychainService,
             kSecAttrAccount as String: "accessToken"
         ]
-        
         SecItemDelete(query as CFDictionary)
     }
 }

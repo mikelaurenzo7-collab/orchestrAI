@@ -1,38 +1,56 @@
-import Foundation
+import SwiftUI
 
 // MARK: - Configuration
+
 enum AppConfig {
     static let apiBaseURL = ProcessInfo.processInfo.environment["API_BASE_URL"] ?? "https://api.orchestrai.app"
     static let appVersion = "1.0.0"
     static let buildNumber = "1"
-    static let appStoreID = "com.orchestrai.app"
+    static let bundleID = "com.orchestrai.app"
     
-    // Rate limiting
     static let maxChatRequestsPerMinute = 30
     static let requestTimeout: TimeInterval = 30
     
-    // UI Constants
     static let cornerRadius: CGFloat = 24
     static let smallCornerRadius: CGFloat = 16
+    static let tinyCornerRadius: CGFloat = 10
     static let cardPadding: CGFloat = 20
     static let screenPadding: CGFloat = 24
 }
 
-// MARK: - Theme
+// MARK: - Design System
+
 enum Theme {
-    // Colors
-    static let emerald = "10B981" // #10B981
-    static let accent = "F59E0B"   // #F59E0B
-    static let blue = "3B82F6"     // #3B82F6
-    static let error = "EF4444"    // #EF4444
+    // Primary Palette
+    static let emerald = "10B981"
+    static let emeraldDark = "059669"
+    static let emeraldLight = "34D399"
     
-    static let bgPrimary = "0A0A0A"       // #0A0A0A
-    static let bgSecondary = "151515"     // #151515
-    static let textPrimary = "FFFFFF"     // #FFFFFF
-    static let textSecondary = "9CA3AF"   // #9CA3AF
-    static let textDisabled = "4B5563"    // #4B5563
+    // Secondary
+    static let purple = "8B5CF6"
+    static let purpleLight = "A78BFA"
+    static let blue = "3B82F6"
+    static let cyan = "06B6D4"
     
-    // Fonts
+    // Semantic
+    static let accent = "F59E0B"
+    static let error = "EF4444"
+    static let success = "22C55E"
+    static let warning = "F97316"
+    
+    // Surfaces
+    static let bgPrimary = "050505"
+    static let bgSecondary = "0F0F0F"
+    static let bgTertiary = "1A1A1A"
+    static let bgElevated = "141414"
+    
+    // Text
+    static let textPrimary = "FFFFFF"
+    static let textSecondary = "9CA3AF"
+    static let textTertiary = "6B7280"
+    static let textDisabled = "374151"
+    
+    // Typography
     enum FontWeight {
         static let light = "Outfit-Light"
         static let regular = "Outfit-Regular"
@@ -46,20 +64,45 @@ enum Theme {
         static let bodySemiBold = "Manrope-SemiBold"
         static let bodyBold = "Manrope-Bold"
     }
+    
+    // Animation Presets
+    enum Anim {
+        static let snappy = SwiftUI.Animation.spring(response: 0.3, dampingFraction: 0.7)
+        static let smooth = SwiftUI.Animation.spring(response: 0.5, dampingFraction: 0.8)
+        static let bouncy = SwiftUI.Animation.spring(response: 0.4, dampingFraction: 0.55)
+        static let gentle = SwiftUI.Animation.easeInOut(duration: 0.3)
+    }
+    
+    // Gradients
+    static var emeraldGradient: LinearGradient {
+        LinearGradient(
+            colors: [emerald.hexColor, emeraldDark.hexColor],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
+    }
+    
+    static var purpleGradient: LinearGradient {
+        LinearGradient(
+            colors: [purple.hexColor, "6D28D9".hexColor],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
+    }
 }
+
+// MARK: - Hex Color Extension
 
 extension String {
     var hexColor: Color {
-        var hexSanitized = self.trimmingCharacters(in: .whitespacesAndNewlines)
-        hexSanitized = hexSanitized.replacingOccurrences(of: "#", with: "")
-        
+        var hex = trimmingCharacters(in: .whitespacesAndNewlines)
+        hex = hex.replacingOccurrences(of: "#", with: "")
         var rgb: UInt64 = 0
-        Scanner(string: hexSanitized).scanHexInt64(&rgb)
-        
-        let r = Double((rgb & 0xFF0000) >> 16) / 255.0
-        let g = Double((rgb & 0x00FF00) >> 8) / 255.0
-        let b = Double(rgb & 0x0000FF) / 255.0
-        
-        return Color(red: r, green: g, blue: b)
+        Scanner(string: hex).scanHexInt64(&rgb)
+        return Color(
+            red: Double((rgb & 0xFF0000) >> 16) / 255.0,
+            green: Double((rgb & 0x00FF00) >> 8) / 255.0,
+            blue: Double(rgb & 0x0000FF) / 255.0
+        )
     }
 }

@@ -6,139 +6,198 @@ struct AuthView: View {
     @State private var email = ""
     @State private var password = ""
     @State private var name = ""
+    @State private var showPassword = false
     @State private var showError = false
     @State private var errorMessage = ""
-    
-    @Namespace private var animation
+    @State private var appeared = false
     
     var body: some View {
         ZStack {
-            // Background
-            Theme.bgPrimary.hexColor
-                .ignoresSafeArea()
+            Theme.bgPrimary.hexColor.ignoresSafeArea()
             
-            // Floating Orbs Background
-            FloatingOrbsView()
+            AmbientOrbsBackground()
             
-            // Content
             ScrollView {
-                VStack(spacing: 32) {
-                    Spacer()
-                        .frame(height: 60)
+                VStack(spacing: 0) {
+                    Spacer().frame(height: 80)
                     
-                    // Logo & Title
+                    // Brand Mark
                     VStack(spacing: 16) {
                         ZStack {
                             Circle()
-                                .fill(Theme.emerald.hexColor.opacity(0.1))
-                                .frame(width: 80, height: 80)
+                                .fill(Theme.emerald.hexColor.opacity(0.07))
+                                .frame(width: 100, height: 100)
+                                .blur(radius: 20)
+                            
+                            Circle()
+                                .fill(Theme.emerald.hexColor.opacity(0.05))
+                                .frame(width: 84, height: 84)
+                            
+                            Circle()
+                                .stroke(Theme.emerald.hexColor.opacity(0.25), lineWidth: 1)
+                                .frame(width: 84, height: 84)
                             
                             Image(systemName: "brain.filled.head.profile")
-                                .font(.system(size: 36, weight: .light))
+                                .font(.system(size: 38, weight: .light))
                                 .foregroundStyle(Theme.emerald.hexColor)
                         }
+                        .opacity(appeared ? 1 : 0)
+                        .scaleEffect(appeared ? 1 : 0.8)
                         
-                        Text("orchestrAI")
-                            .font(.custom(Theme.FontWeight.light, size: 42))
-                            .foregroundStyle(Theme.textPrimary.hexColor)
-                            .tracking(-1)
-                        
-                        Text("Supercharge your workforce with autonomous AI agents.")
-                            .font(.custom(Theme.FontWeight.bodyMedium, size: 16))
-                            .foregroundStyle(Theme.textSecondary.hexColor)
-                            .multilineTextAlignment(.center)
-                            .padding(.horizontal, 20)
+                        VStack(spacing: 8) {
+                            Text("orchestrAI")
+                                .font(.custom(Theme.FontWeight.light, size: 44))
+                                .foregroundStyle(.white)
+                                .tracking(-1.5)
+                            
+                            Text("Your AI-powered business operating system")
+                                .font(.custom(Theme.FontWeight.bodyRegular, size: 15))
+                                .foregroundStyle(Theme.textSecondary.hexColor)
+                                .multilineTextAlignment(.center)
+                                .padding(.horizontal, 8)
+                        }
+                        .opacity(appeared ? 1 : 0)
+                        .offset(y: appeared ? 0 : 10)
                     }
-                    .padding(.bottom, 24)
+                    .padding(.bottom, 40)
                     
                     // Auth Card
                     VStack(spacing: 20) {
-                        if !isLogin {
-                            CustomTextField(
-                                icon: "person.fill",
-                                placeholder: "Full Name",
-                                text: $name
+                        // Mode Toggle
+                        HStack(spacing: 0) {
+                            AuthModeTab(title: "Sign In", isSelected: isLogin) {
+                                withAnimation(Theme.Anim.snappy) { isLogin = true }
+                            }
+                            AuthModeTab(title: "Create Account", isSelected: !isLogin) {
+                                withAnimation(Theme.Anim.snappy) { isLogin = false }
+                            }
+                        }
+                        .padding(4)
+                        .background(.white.opacity(0.04))
+                        .clipShape(RoundedRectangle(cornerRadius: 14))
+                        
+                        // Fields
+                        VStack(spacing: 14) {
+                            if !isLogin {
+                                AuthTextField(
+                                    icon: "person",
+                                    placeholder: "Full Name",
+                                    text: $name
+                                )
+                                .transition(.asymmetric(
+                                    insertion: .move(edge: .top).combined(with: .opacity),
+                                    removal: .move(edge: .top).combined(with: .opacity)
+                                ))
+                            }
+                            
+                            AuthTextField(
+                                icon: "envelope",
+                                placeholder: "Email",
+                                text: $email,
+                                keyboardType: .emailAddress,
+                                autocapitalization: .never
                             )
-                            .matchedGeometryEffect(id: "nameField", in: animation)
+                            
+                            AuthTextField(
+                                icon: "lock",
+                                placeholder: "Password",
+                                text: $password,
+                                isSecure: !showPassword,
+                                trailing: {
+                                    Button {
+                                        showPassword.toggle()
+                                    } label: {
+                                        Image(systemName: showPassword ? "eye.slash" : "eye")
+                                            .font(.system(size: 16, weight: .medium))
+                                            .foregroundStyle(Theme.textTertiary.hexColor)
+                                    }
+                                    .sensoryFeedback(.selection, trigger: showPassword)
+                                }
+                            )
                         }
                         
-                        CustomTextField(
-                            icon: "envelope.fill",
-                            placeholder: "Email Address",
-                            text: $email,
-                            keyboardType: .emailAddress,
-                            autocapitalization: .never
-                        )
-                        
-                        CustomTextField(
-                            icon: "lock.fill",
-                            placeholder: "Password",
-                            text: $password,
-                            isSecure: true
-                        )
-                        
+                        // Submit
                         Button {
-                            Task {
-                                await handleSubmit()
-                            }
+                            Task { await handleSubmit() }
                         } label: {
-                            HStack(spacing: 8) {
+                            ZStack {
                                 if authService.isLoading {
                                     ProgressView()
-                                        .progressViewStyle(.circular)
                                         .tint(.white)
                                 } else {
-                                    Text(isLogin ? "Sign In" : "Create Account")
-                                        .font(.custom(Theme.FontWeight.bold, size: 18))
-                                    
-                                    Image(systemName: "arrow.right")
-                                        .font(.system(size: 16, weight: .bold))
+                                    HStack(spacing: 10) {
+                                        Text(isLogin ? "Sign In" : "Get Started")
+                                            .font(.custom(Theme.FontWeight.semiBold, size: 17))
+                                        
+                                        Image(systemName: "arrow.right")
+                                            .font(.system(size: 14, weight: .bold))
+                                    }
                                 }
                             }
                             .foregroundStyle(.white)
                             .frame(maxWidth: .infinity)
-                            .frame(height: 64)
-                            .background(Theme.emerald.hexColor)
+                            .frame(height: 56)
+                            .background(Theme.emeraldGradient)
                             .clipShape(RoundedRectangle(cornerRadius: 16))
+                            .shadow(color: Theme.emerald.hexColor.opacity(0.3), radius: 16, y: 8)
                         }
-                        .disabled(authService.isLoading)
+                        .disabled(authService.isLoading || !isFormValid)
+                        .opacity(isFormValid ? 1.0 : 0.5)
                         .sensoryFeedback(.impact(weight: .heavy), trigger: authService.isLoading)
                         
-                        HStack {
-                            Text(isLogin ? "Don't have an account? " : "Already have an account? ")
-                                .font(.custom(Theme.FontWeight.bodyMedium, size: 14))
-                                .foregroundStyle(Theme.textSecondary.hexColor)
-                            
-                            Button {
-                                withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
-                                    isLogin.toggle()
-                                }
-                            } label: {
-                                Text(isLogin ? "Sign up" : "Sign in")
-                                    .font(.custom(Theme.FontWeight.bodySemiBold, size: 14))
-                                    .foregroundStyle(Theme.emerald.hexColor)
-                            }
-                            .sensoryFeedback(.selection, trigger: isLogin)
+                        // Divider
+                        HStack(spacing: 16) {
+                            Rectangle().fill(.white.opacity(0.06)).frame(height: 1)
+                            Text("or")
+                                .font(.custom(Theme.FontWeight.bodyMedium, size: 13))
+                                .foregroundStyle(Theme.textTertiary.hexColor)
+                            Rectangle().fill(.white.opacity(0.06)).frame(height: 1)
+                        }
+                        
+                        // Social Auth
+                        HStack(spacing: 12) {
+                            SocialAuthButton(icon: "apple.logo", label: "Apple")
+                            SocialAuthButton(icon: "globe", label: "Google")
                         }
                     }
-                    .padding(32)
-                    .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 32))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 32)
-                            .stroke(.white.opacity(0.08), lineWidth: 1)
-                    )
-                    .padding(.horizontal, 24)
+                    .padding(28)
+                    .glassCard(cornerRadius: 28, borderOpacity: 0.06)
+                    .padding(.horizontal, 20)
+                    .opacity(appeared ? 1 : 0)
+                    .offset(y: appeared ? 0 : 30)
                     
-                    Spacer()
+                    // Terms
+                    Text("By continuing, you agree to our Terms of Service\nand Privacy Policy")
+                        .font(.custom(Theme.FontWeight.bodyRegular, size: 12))
+                        .foregroundStyle(Theme.textTertiary.hexColor)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 40)
+                        .padding(.top, 24)
+                        .opacity(appeared ? 0.7 : 0)
+                    
+                    Spacer().frame(height: 40)
                 }
             }
             .scrollIndicators(.hidden)
+            .scrollDismissesKeyboard(.interactively)
         }
-        .alert("Error", isPresented: $showError) {
-            Button("OK", role: .cancel) {}
+        .onAppear {
+            withAnimation(.spring(response: 0.8, dampingFraction: 0.7).delay(0.1)) {
+                appeared = true
+            }
+        }
+        .alert("Sign In Error", isPresented: $showError) {
+            Button("Try Again", role: .cancel) {}
         } message: {
             Text(errorMessage)
         }
+    }
+    
+    private var isFormValid: Bool {
+        let emailValid = email.contains("@") && email.contains(".")
+        let passwordValid = password.count >= 6
+        let nameValid = isLogin || name.count >= 2
+        return emailValid && passwordValid && nameValid
     }
     
     private func handleSubmit() async {
@@ -155,103 +214,115 @@ struct AuthView: View {
     }
 }
 
-// MARK: - Custom Text Field
+// MARK: - Auth Mode Tab
 
-struct CustomTextField: View {
+struct AuthModeTab: View {
+    let title: String
+    let isSelected: Bool
+    let action: () -> Void
+    
+    var body: some View {
+        Button(action: action) {
+            Text(title)
+                .font(.custom(Theme.FontWeight.semiBold, size: 15))
+                .foregroundStyle(isSelected ? .white : Theme.textTertiary.hexColor)
+                .frame(maxWidth: .infinity)
+                .frame(height: 44)
+                .background(isSelected ? .white.opacity(0.08) : .clear)
+                .clipShape(RoundedRectangle(cornerRadius: 11))
+        }
+        .sensoryFeedback(.selection, trigger: isSelected)
+    }
+}
+
+// MARK: - Auth Text Field
+
+struct AuthTextField<Trailing: View>: View {
     let icon: String
     let placeholder: String
     @Binding var text: String
     var isSecure: Bool = false
     var keyboardType: UIKeyboardType = .default
     var autocapitalization: TextInputAutocapitalization = .sentences
+    @ViewBuilder var trailing: () -> Trailing
+    
+    init(
+        icon: String,
+        placeholder: String,
+        text: Binding<String>,
+        isSecure: Bool = false,
+        keyboardType: UIKeyboardType = .default,
+        autocapitalization: TextInputAutocapitalization = .sentences,
+        @ViewBuilder trailing: @escaping () -> Trailing = { EmptyView() }
+    ) {
+        self.icon = icon
+        self.placeholder = placeholder
+        self._text = text
+        self.isSecure = isSecure
+        self.keyboardType = keyboardType
+        self.autocapitalization = autocapitalization
+        self.trailing = trailing
+    }
     
     var body: some View {
         HStack(spacing: 12) {
             Image(systemName: icon)
-                .font(.system(size: 20))
-                .foregroundStyle(Theme.textSecondary.hexColor)
+                .font(.system(size: 18, weight: .medium))
+                .foregroundStyle(Theme.textTertiary.hexColor)
+                .frame(width: 24)
             
             if isSecure {
                 SecureField(placeholder, text: $text)
                     .font(.custom(Theme.FontWeight.bodyMedium, size: 16))
-                    .foregroundStyle(Theme.textPrimary.hexColor)
+                    .foregroundStyle(.white)
             } else {
                 TextField(placeholder, text: $text)
                     .font(.custom(Theme.FontWeight.bodyMedium, size: 16))
-                    .foregroundStyle(Theme.textPrimary.hexColor)
+                    .foregroundStyle(.white)
                     .keyboardType(keyboardType)
                     .textInputAutocapitalization(autocapitalization)
             }
+            
+            trailing()
         }
         .padding(.horizontal, 16)
-        .frame(height: 64)
+        .frame(height: 56)
         .background(.white.opacity(0.04))
+        .clipShape(RoundedRectangle(cornerRadius: 14))
         .overlay(
-            RoundedRectangle(cornerRadius: 16)
-                .stroke(.white.opacity(0.05), lineWidth: 1)
+            RoundedRectangle(cornerRadius: 14)
+                .stroke(.white.opacity(0.06), lineWidth: 1)
         )
-        .clipShape(RoundedRectangle(cornerRadius: 16))
     }
 }
 
-// MARK: - Floating Orbs Background
+// MARK: - Social Auth Button
 
-struct FloatingOrbsView: View {
-    @State private var positions: [CGPoint] = []
-    
-    var body: some View {
-        ZStack {
-            ForEach(0..<8, id: \.self) { index in
-                FloatingOrb(
-                    icon: ["sparkles", "cylinder.fill", "brain", "globe", "cpu", "waveform"][index % 6],
-                    color: [Theme.emerald.hexColor, Theme.accent.hexColor, Theme.blue.hexColor, Theme.textSecondary.hexColor][index % 4],
-                    size: CGFloat.random(in: 60...100)
-                )
-                .offset(
-                    x: CGFloat.random(in: -100...100),
-                    y: CGFloat.random(in: -300...300)
-                )
-            }
-        }
-    }
-}
-
-struct FloatingOrb: View {
+struct SocialAuthButton: View {
     let icon: String
-    let color: Color
-    let size: CGFloat
-    
-    @State private var yOffset: CGFloat = 0
-    @State private var xOffset: CGFloat = 0
-    @State private var rotation: Double = 0
+    let label: String
     
     var body: some View {
-        ZStack {
-            Circle()
-                .fill(color.opacity(0.15))
-                .frame(width: size, height: size)
-                .blur(radius: 2)
-                .overlay(
-                    Circle()
-                        .stroke(color.opacity(0.3), lineWidth: 1)
-                )
-            
-            Image(systemName: icon)
-                .font(.system(size: size * 0.4, weight: .light))
-                .foregroundStyle(color.opacity(0.6))
-        }
-        .offset(x: xOffset, y: yOffset)
-        .rotationEffect(.degrees(rotation))
-        .onAppear {
-            withAnimation(.easeInOut(duration: Double.random(in: 4...6)).repeatForever(autoreverses: true)) {
-                yOffset = CGFloat.random(in: -40...40)
-                xOffset = CGFloat.random(in: -40...40)
+        Button {
+            // Social auth handler
+        } label: {
+            HStack(spacing: 8) {
+                Image(systemName: icon)
+                    .font(.system(size: 18, weight: .medium))
+                Text(label)
+                    .font(.custom(Theme.FontWeight.semiBold, size: 15))
             }
-            
-            withAnimation(.easeInOut(duration: Double.random(in: 5...8)).repeatForever(autoreverses: true)) {
-                rotation = Double.random(in: -15...15)
-            }
+            .foregroundStyle(.white)
+            .frame(maxWidth: .infinity)
+            .frame(height: 50)
+            .background(.white.opacity(0.05))
+            .clipShape(RoundedRectangle(cornerRadius: 14))
+            .overlay(
+                RoundedRectangle(cornerRadius: 14)
+                    .stroke(.white.opacity(0.08), lineWidth: 1)
+            )
         }
+        .buttonStyle(ScaleButtonStyle())
     }
 }
 
