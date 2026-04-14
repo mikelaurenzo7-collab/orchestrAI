@@ -475,14 +475,8 @@ Manage closet strategy, share listings during Posh Parties, create bundles, and 
 
 # ──────────────── Pricing & Plans ────────────────
 
-# Social posting access control
-# Store agents + Marketing EA can post to social. Other business agents cannot.
-SOCIAL_POSTING_ALLOWED = {
-    "shopify", "etsy", "ebay", "walmart", "faire", "mercari", "poshmark",  # all store agents
-    "twitter", "pinterest", "tiktok", "meta", "youtube", "whatsapp", "threads", "linkedin", "reddit", "discord",  # social agents themselves
-    "marketing_suite",  # marketing EA from business suite
-    "general",  # orchestrAI router can delegate
-}
+# Social posting: shared capability — ALL agents can post to social. User decides use case.
+SOCIAL_POSTING_ALLOWED_ALL = True  # No restrictions — any agent can request social posting
 
 PRICING_PLANS = {
     "free": {
