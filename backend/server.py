@@ -117,14 +117,22 @@ class StoreResponse(BaseModel):
     spending_cap: float = 50.0
 
 class StoreSafetyUpdate(BaseModel):
-    mode: Optional[str] = None  # "observe" | "copilot" | "autopilot"
+    mode: Optional[str] = None  # "autonomous" | "copilot" | "observe"
     spending_cap: Optional[float] = None
-    auto_create_products: Optional[bool] = None
-    auto_change_prices: Optional[bool] = None
-    auto_create_discounts: Optional[bool] = None
-    auto_manage_inventory: Optional[bool] = None
-    max_price_change_pct: Optional[float] = None  # max 20% price change without approval
-    max_discount_pct: Optional[float] = None  # max discount % agents can create
+    # Money-touching actions — locked by default, user can unlock
+    auto_change_prices: Optional[bool] = None      # default: False (needs approval)
+    auto_create_discounts: Optional[bool] = None    # default: False (needs approval)
+    auto_purchase_inventory: Optional[bool] = None  # default: False (needs approval)
+    auto_run_ads: Optional[bool] = None             # default: False (needs approval)
+    auto_issue_refunds: Optional[bool] = None       # default: False (needs approval)
+    # Non-money actions — autonomous by default, user can lock
+    auto_edit_products: Optional[bool] = None       # default: True (autonomous)
+    auto_manage_collections: Optional[bool] = None  # default: True (autonomous)
+    auto_post_social: Optional[bool] = None         # default: True (autonomous)
+    auto_respond_customers: Optional[bool] = None   # default: True (autonomous)
+    auto_update_seo: Optional[bool] = None          # default: True (autonomous)
+    max_price_change_pct: Optional[float] = None    # max price change before approval
+    max_discount_pct: Optional[float] = None        # max discount before approval
 
 class AgentConfig(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
@@ -1613,6 +1621,16 @@ async def get_dashboard(request: Request):
             "total_revenue": revenue, "total_orders": orders, "social_posts": social,
             "pending_actions": pending, "active_workflows": active_wf, "recent_activity": recent}
 
+STORE_DEFAULT_SAFETY = {
+    "auto_edit_products": True, "auto_manage_collections": True,
+    "auto_post_social": True, "auto_respond_customers": True,
+    "auto_update_seo": True,
+    "auto_change_prices": False, "auto_create_discounts": False,
+    "auto_purchase_inventory": False, "auto_run_ads": False,
+    "auto_issue_refunds": False,
+    "max_price_change_pct": 20, "max_discount_pct": 30,
+}
+
 @api_router.get("/stores/{store_id}/safety")
 async def get_store_safety(store_id: str, request: Request):
     """Get safety settings for a store"""
@@ -1621,13 +1639,9 @@ async def get_store_safety(store_id: str, request: Request):
     if not store:
         raise HTTPException(status_code=404, detail="Store not found")
     return {
-        "mode": store.get("mode", "copilot"),
-        "spending_cap": store.get("spending_cap", 50.0),
-        "safety": store.get("safety", {
-            "auto_create_products": False, "auto_change_prices": False,
-            "auto_create_discounts": False, "auto_manage_inventory": False,
-            "max_price_change_pct": 20, "max_discount_pct": 30,
-        }),
+        "mode": store.get("mode", "autonomous"),
+        "spending_cap": store.get("spending_cap", 0.0),
+        "safety": store.get("safety", STORE_DEFAULT_SAFETY),
     }
 
 @api_router.put("/stores/{store_id}/safety")
@@ -1700,10 +1714,8 @@ async def shopify_callback(code: str, state: str, shop: str):
                 "access_token": access_token, "shopify_scope": token_data.get("scope", ""),
                 "connected_at": datetime.now(timezone.utc).isoformat(),
                 "products_synced": 0, "orders_total": 0, "revenue": 0.0,
-                "mode": "copilot", "spending_cap": 50.0,
-                "safety": {"auto_create_products": False, "auto_change_prices": False,
-                           "auto_create_discounts": False, "auto_manage_inventory": False,
-                           "max_price_change_pct": 20, "max_discount_pct": 30},
+                "mode": "autonomous", "spending_cap": 0.0,
+                "safety": STORE_DEFAULT_SAFETY,
             }
             await db.stores.insert_one(store_doc)
             await db.oauth_states.delete_one({"state": state})
@@ -1789,21 +1801,40 @@ async def queue_store_action(action: StoreAction, request: Request):
     if not store:
         raise HTTPException(status_code=404, detail="Store not found")
 
-    mode = store.get("mode", "copilot")
-    safety = store.get("safety", {})
+    mode = store.get("mode", "autonomous")
+    safety = store.get("safety", STORE_DEFAULT_SAFETY)
 
-    # Determine if this action can auto-execute based on mode + safety settings
+    # Money-touching actions ALWAYS need approval unless user explicitly unlocked them
+    MONEY_ACTIONS = {
+        "update_price": "auto_change_prices",
+        "create_discount": "auto_create_discounts",
+        "purchase_inventory": "auto_purchase_inventory",
+        "run_ads": "auto_run_ads",
+        "issue_refund": "auto_issue_refunds",
+    }
+    # Non-money actions are autonomous by default, user can lock them
+    NON_MONEY_ACTIONS = {
+        "create_product": "auto_edit_products",
+        "edit_product": "auto_edit_products",
+        "create_collection": "auto_manage_collections",
+        "update_seo": "auto_update_seo",
+        "post_social": "auto_post_social",
+        "respond_customer": "auto_respond_customers",
+    }
+
     auto_execute = False
-    if mode == "autopilot":
-        safety_map = {
-            "create_product": safety.get("auto_create_products", False),
-            "update_price": safety.get("auto_change_prices", False),
-            "create_collection": safety.get("auto_create_products", False),
-            "create_discount": safety.get("auto_create_discounts", False),
-        }
-        auto_execute = safety_map.get(action.action_type, False)
-    elif mode == "observe":
-        raise HTTPException(status_code=403, detail="Store is in observe mode. Switch to copilot or autopilot to make changes.")
+    is_money_action = action.action_type in MONEY_ACTIONS
+
+    if mode == "observe":
+        raise HTTPException(status_code=403, detail="Store is in observe mode. Switch to autonomous to enable agent actions.")
+    elif is_money_action:
+        # Money actions: only auto-execute if user explicitly enabled
+        safety_key = MONEY_ACTIONS.get(action.action_type, "")
+        auto_execute = safety.get(safety_key, False)
+    else:
+        # Non-money actions: auto-execute by default unless user locked them
+        safety_key = NON_MONEY_ACTIONS.get(action.action_type, "auto_edit_products")
+        auto_execute = safety.get(safety_key, True)
 
     action_doc = {
         "id": str(uuid.uuid4()), "user_id": user["_id"], "store_id": action.store_id,
@@ -1994,10 +2025,8 @@ async def ebay_callback(code: str, state: str):
                 "status": "connected", "access_token": access_token, "refresh_token": refresh_token,
                 "connected_at": datetime.now(timezone.utc).isoformat(),
                 "products_synced": 0, "orders_total": 0, "revenue": 0.0,
-                "mode": "copilot", "spending_cap": 50.0,
-                "safety": {"auto_create_products": False, "auto_change_prices": False,
-                           "auto_create_discounts": False, "auto_manage_inventory": False,
-                           "max_price_change_pct": 20, "max_discount_pct": 30},
+                "mode": "autonomous", "spending_cap": 0.0,
+                "safety": STORE_DEFAULT_SAFETY,
             }
             await db.stores.insert_one(store_doc)
             await db.activity_log.insert_one({"user_id": user_id, "type": "store_connected",
