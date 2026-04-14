@@ -113,6 +113,18 @@ class StoreResponse(BaseModel):
     products_synced: int = 0
     orders_total: int = 0
     revenue: float = 0.0
+    mode: str = "copilot"
+    spending_cap: float = 50.0
+
+class StoreSafetyUpdate(BaseModel):
+    mode: Optional[str] = None  # "observe" | "copilot" | "autopilot"
+    spending_cap: Optional[float] = None
+    auto_create_products: Optional[bool] = None
+    auto_change_prices: Optional[bool] = None
+    auto_create_discounts: Optional[bool] = None
+    auto_manage_inventory: Optional[bool] = None
+    max_price_change_pct: Optional[float] = None  # max 20% price change without approval
+    max_discount_pct: Optional[float] = None  # max discount % agents can create
 
 class AgentConfig(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
@@ -723,6 +735,10 @@ async def connect_store(store: StoreCreate, request: Request):
         "store_url": store.store_url, "status": "connected",
         "connected_at": datetime.now(timezone.utc).isoformat(),
         "products_synced": 0, "orders_total": 0, "revenue": 0.0,
+        "mode": "copilot", "spending_cap": 50.0,
+        "safety": {"auto_create_products": False, "auto_change_prices": False,
+                   "auto_create_discounts": False, "auto_manage_inventory": False,
+                   "max_price_change_pct": 20, "max_discount_pct": 30},
     }
     if store.api_key:
         store_doc["api_key_hash"] = store.api_key[:8] + "..."
@@ -1530,6 +1546,47 @@ async def get_dashboard(request: Request):
             "total_revenue": revenue, "total_orders": orders, "social_posts": social,
             "pending_actions": pending, "active_workflows": active_wf, "recent_activity": recent}
 
+@api_router.get("/stores/{store_id}/safety")
+async def get_store_safety(store_id: str, request: Request):
+    """Get safety settings for a store"""
+    user = await get_current_user(request)
+    store = await db.stores.find_one({"id": store_id, "user_id": user["_id"]}, {"_id": 0})
+    if not store:
+        raise HTTPException(status_code=404, detail="Store not found")
+    return {
+        "mode": store.get("mode", "copilot"),
+        "spending_cap": store.get("spending_cap", 50.0),
+        "safety": store.get("safety", {
+            "auto_create_products": False, "auto_change_prices": False,
+            "auto_create_discounts": False, "auto_manage_inventory": False,
+            "max_price_change_pct": 20, "max_discount_pct": 30,
+        }),
+    }
+
+@api_router.put("/stores/{store_id}/safety")
+async def update_store_safety(store_id: str, request: Request):
+    """Update safety settings for a store"""
+    user = await get_current_user(request)
+    store = await db.stores.find_one({"id": store_id, "user_id": user["_id"]})
+    if not store:
+        raise HTTPException(status_code=404, detail="Store not found")
+    body = await request.json()
+    update = {}
+    if "mode" in body and body["mode"] in ("observe", "copilot", "autopilot"):
+        update["mode"] = body["mode"]
+    if "spending_cap" in body and isinstance(body["spending_cap"], (int, float)):
+        update["spending_cap"] = max(0, body["spending_cap"])
+    if "safety" in body and isinstance(body["safety"], dict):
+        current_safety = store.get("safety", {})
+        current_safety.update(body["safety"])
+        update["safety"] = current_safety
+    if update:
+        await db.stores.update_one({"id": store_id}, {"$set": update})
+        await db.activity_log.insert_one({"user_id": user["_id"], "type": "safety_updated",
+            "message": f"Updated safety settings for {store.get('name', store_id)}: mode={update.get('mode', store.get('mode'))}",
+            "timestamp": datetime.now(timezone.utc).isoformat()})
+    return {"status": "updated", **update}
+
 # ──────────────── Shopify OAuth ────────────────
 
 SHOPIFY_CLIENT_ID = os.environ.get('SHOPIFY_PARTNER_CLIENT_ID', '')
@@ -1576,11 +1633,16 @@ async def shopify_callback(code: str, state: str, shop: str):
                 "access_token": access_token, "shopify_scope": token_data.get("scope", ""),
                 "connected_at": datetime.now(timezone.utc).isoformat(),
                 "products_synced": 0, "orders_total": 0, "revenue": 0.0,
+                "mode": "copilot", "spending_cap": 50.0,
+                "safety": {"auto_create_products": False, "auto_change_prices": False,
+                           "auto_create_discounts": False, "auto_manage_inventory": False,
+                           "max_price_change_pct": 20, "max_discount_pct": 30},
             }
             await db.stores.insert_one(store_doc)
-            await db.activity_log.insert_one({"user_id": user_id, "type": "store_connected",
-                "message": f"Connected Shopify store: {shop}", "timestamp": datetime.now(timezone.utc).isoformat()})
             await db.oauth_states.delete_one({"state": state})
+            await db.activity_log.insert_one({"user_id": user_id, "type": "store_connected",
+                "message": f"Connected Shopify store: {shop}",
+                "timestamp": datetime.now(timezone.utc).isoformat()})
             # Redirect back to app stores page
             app_url = os.environ.get('EXPO_PUBLIC_BACKEND_URL', 'https://agent-marketplace-69.preview.emergentagent.com')
             return Response(
@@ -1709,6 +1771,10 @@ async def ebay_callback(code: str, state: str):
                 "status": "connected", "access_token": access_token, "refresh_token": refresh_token,
                 "connected_at": datetime.now(timezone.utc).isoformat(),
                 "products_synced": 0, "orders_total": 0, "revenue": 0.0,
+                "mode": "copilot", "spending_cap": 50.0,
+                "safety": {"auto_create_products": False, "auto_change_prices": False,
+                           "auto_create_discounts": False, "auto_manage_inventory": False,
+                           "max_price_change_pct": 20, "max_discount_pct": 30},
             }
             await db.stores.insert_one(store_doc)
             await db.activity_log.insert_one({"user_id": user_id, "type": "store_connected",
