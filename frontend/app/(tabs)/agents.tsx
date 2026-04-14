@@ -4,8 +4,28 @@ import {
   TouchableOpacity, ActivityIndicator, Switch,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { router } from 'expo-router';
 import { authFetch } from '../../utils/api';
 import { Colors, Spacing, BorderRadius, FontSizes, Shadows, AgentColors } from '../../constants/theme';
+
+const AGENT_ROUTINES: Record<string, { daily: string[]; weekly: string[] }> = {
+  store_manager: {
+    daily: ['Check inventory levels & flag low stock', 'Monitor new orders & fulfillment status', 'Optimize underperforming listing titles'],
+    weekly: ['Full product catalog audit', 'Competitive price analysis', 'Generate store health report'],
+  },
+  marketing: {
+    daily: ['Post to connected socials at peak engagement time', 'Monitor content performance & engagement', 'Respond to brand mentions'],
+    weekly: ['Generate 7-day content calendar', 'A/B test top-performing content angles', 'Cross-platform campaign performance review'],
+  },
+  analytics: {
+    daily: ['Monitor sales anomalies & flag drops', 'Track conversion rate changes', 'Surface trending products'],
+    weekly: ['Full performance report with insights', 'Customer behavior analysis', 'Revenue forecast & trend analysis'],
+  },
+  customer_service: {
+    daily: ['Draft responses to new customer queries', 'Update FAQ from common questions', 'Monitor review sentiment'],
+    weekly: ['Support quality audit', 'Identify recurring pain points', 'Generate customer satisfaction report'],
+  },
+};
 
 type Agent = {
   id: string; name: string; agent_type: string; description: string;
@@ -99,6 +119,35 @@ export default function AgentsScreen() {
                     <Switch value={agent.auto_execute} onValueChange={() => toggleField(agent.id, 'auto_execute', agent.auto_execute)}
                       trackColor={{ false: Colors.surfaceElevated, true: ac.primary + '50' }} thumbColor={agent.auto_execute ? ac.primary : Colors.textMuted} />
                   </View>
+                  {/* Autopilot Routines Preview */}
+                  {agent.auto_execute && AGENT_ROUTINES[agent.agent_type] && (
+                    <View style={s.routineSection}>
+                      <Text style={[s.routineTitle, { color: ac.primary }]}>Autopilot Routines</Text>
+                      <Text style={s.routineSubtitle}>Daily</Text>
+                      {AGENT_ROUTINES[agent.agent_type].daily.map((r, i) => (
+                        <View key={`d${i}`} style={s.routineRow}>
+                          <View style={[s.routineDot, { backgroundColor: ac.primary }]} />
+                          <Text style={s.routineText}>{r}</Text>
+                        </View>
+                      ))}
+                      <Text style={[s.routineSubtitle, { marginTop: 8 }]}>Weekly</Text>
+                      {AGENT_ROUTINES[agent.agent_type].weekly.map((r, i) => (
+                        <View key={`w${i}`} style={s.routineRow}>
+                          <View style={[s.routineDot, { backgroundColor: ac.primary + '60' }]} />
+                          <Text style={s.routineText}>{r}</Text>
+                        </View>
+                      ))}
+                    </View>
+                  )}
+                  {/* Chat Button */}
+                  <TouchableOpacity testID={`chat-agent-${agent.agent_type}`}
+                    style={[s.chatBtn, { backgroundColor: ac.primary }]}
+                    onPress={() => {
+                      const chatType = agent.agent_type === 'store_manager' ? 'store_manager' : agent.agent_type;
+                      router.push({ pathname: '/(tabs)/chat', params: { agent: chatType } });
+                    }}>
+                    <Text style={s.chatBtnText}>Chat with {agent.name.split(' ')[0]}</Text>
+                  </TouchableOpacity>
                 </View>
               )}
             </TouchableOpacity>
@@ -136,4 +185,12 @@ const s = StyleSheet.create({
   capText: { fontSize: FontSizes.xs, fontWeight: '700', textTransform: 'capitalize' },
   ctrlRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: Spacing.sm },
   ctrlLabel: { fontSize: FontSizes.md, color: Colors.textPrimary, fontWeight: '600' },
+  routineSection: { marginTop: Spacing.md, backgroundColor: Colors.surfaceElevated, borderRadius: BorderRadius.lg, padding: Spacing.md },
+  routineTitle: { fontSize: FontSizes.sm, fontWeight: '800', marginBottom: 8, letterSpacing: 0.5 },
+  routineSubtitle: { fontSize: FontSizes.xs, fontWeight: '700', color: Colors.textMuted, letterSpacing: 1, marginBottom: 4 },
+  routineRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 3 },
+  routineDot: { width: 5, height: 5, borderRadius: 2.5, marginRight: 8 },
+  routineText: { fontSize: FontSizes.xs, color: Colors.textSecondary, lineHeight: 18, flex: 1 },
+  chatBtn: { marginTop: Spacing.lg, borderRadius: BorderRadius.lg, paddingVertical: 14, alignItems: 'center' },
+  chatBtnText: { fontSize: FontSizes.md, fontWeight: '800', color: Colors.bg },
 });

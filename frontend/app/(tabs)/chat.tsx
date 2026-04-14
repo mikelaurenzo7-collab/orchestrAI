@@ -4,6 +4,7 @@ import {
   TextInput, KeyboardAvoidingView, Platform, ActivityIndicator, Keyboard,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useLocalSearchParams } from 'expo-router';
 import { authFetch } from '../../utils/api';
 import { Colors, Spacing, BorderRadius, FontSizes, AgentColors } from '../../constants/theme';
 
@@ -17,14 +18,22 @@ const AGENTS = [
 ];
 
 export default function ChatScreen() {
+  const params = useLocalSearchParams<{ agent?: string }>();
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [sending, setSending] = useState(false);
-  const [selectedAgent, setSelectedAgent] = useState('general');
+  const [selectedAgent, setSelectedAgent] = useState(params.agent || 'general');
   const [loadingHistory, setLoadingHistory] = useState(true);
   const [pendingActions, setPendingActions] = useState<any[]>([]);
   const [approvingAction, setApprovingAction] = useState<string | null>(null);
   const scrollRef = useRef<ScrollView>(null);
+
+  // Update agent when navigated from Agent Hub
+  useEffect(() => {
+    if (params.agent && params.agent !== selectedAgent) {
+      setSelectedAgent(params.agent);
+    }
+  }, [params.agent]);
 
   const loadHistory = useCallback(async () => {
     try {
