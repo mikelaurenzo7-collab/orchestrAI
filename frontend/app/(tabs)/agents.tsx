@@ -1,12 +1,23 @@
 import { useEffect, useState, useCallback } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, RefreshControl,
-  TouchableOpacity, ActivityIndicator, Switch,
+  TouchableOpacity, ActivityIndicator, Switch, Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { authFetch } from '../../utils/api';
 import { Colors, Spacing, BorderRadius, FontSizes, Shadows, AgentColors } from '../../constants/theme';
+
+const SOCIAL_AGENT_TYPES = new Set([
+  'twitter', 'pinterest', 'tiktok', 'meta', 'youtube',
+  'whatsapp', 'threads', 'linkedin', 'reddit', 'discord',
+]);
+
+const SCOPE_OPTIONS = [
+  { value: 'personal', label: 'Personal', icon: '👤', desc: 'Your personal brand' },
+  { value: 'store', label: 'Store', icon: '🛍️', desc: 'Promote products' },
+  { value: 'business', label: 'Business', icon: '🏢', desc: 'Marketing EA leads' },
+];
 
 const AGENT_ROUTINES: Record<string, { daily: string[]; weekly: string[] }> = {
   store_manager: {
@@ -31,6 +42,7 @@ type Agent = {
   id: string; name: string; agent_type: string; description: string;
   personality: string; tone: string; auto_execute: boolean; is_active: boolean;
   capabilities: string[]; tasks_completed: number; last_active: string | null;
+  social_scope?: string; category?: string;
 };
 
 export default function AgentsScreen() {
@@ -53,6 +65,17 @@ export default function AgentsScreen() {
     try {
       await authFetch(`/api/agents/${id}`, { method: 'PATCH', body: JSON.stringify({ [field]: !val }) });
       setAgents(p => p.map(a => a.id === id ? { ...a, [field]: !val } : a));
+    } catch (e) { console.error(e); }
+  };
+
+  const updateScope = async (agentId: string, newScope: string) => {
+    try {
+      const res = await authFetch(`/api/agents/${agentId}/scope`, {
+        method: 'PUT', body: JSON.stringify({ scope: newScope }),
+      });
+      if (res.ok) {
+        setAgents(p => p.map(a => a.id === agentId ? { ...a, social_scope: newScope } : a));
+      }
     } catch (e) { console.error(e); }
   };
 
@@ -93,6 +116,17 @@ export default function AgentsScreen() {
                 </View>
               </View>
               <Text style={s.desc}>{agent.description}</Text>
+              {/* Scope badge for social agents (visible when collapsed) */}
+              {SOCIAL_AGENT_TYPES.has(agent.agent_type) && !exp && (
+                <View style={[s.scopeBadge, { backgroundColor: ac.primary + '12', borderColor: ac.primary + '30' }]}>
+                  <Text style={{ fontSize: 12 }}>
+                    {(agent.social_scope || 'personal') === 'personal' ? '👤' : (agent.social_scope || 'personal') === 'store' ? '🛍️' : '🏢'}
+                  </Text>
+                  <Text style={[s.scopeBadgeText, { color: ac.primary }]}>
+                    {(agent.social_scope || 'personal').charAt(0).toUpperCase() + (agent.social_scope || 'personal').slice(1)} Scope
+                  </Text>
+                </View>
+              )}
               <View style={s.statsRow}>
                 <View style={{ flex: 1 }}><Text style={[s.statVal, { color: ac.primary }]}>{agent.tasks_completed}</Text><Text style={s.statLabel}>Tasks</Text></View>
                 <View style={{ flex: 1 }}><Text style={[s.statVal, { color: ac.primary }]}>{agent.capabilities.length}</Text><Text style={s.statLabel}>Skills</Text></View>
@@ -119,6 +153,27 @@ export default function AgentsScreen() {
                     <Switch value={agent.auto_execute} onValueChange={() => toggleField(agent.id, 'auto_execute', agent.auto_execute)}
                       trackColor={{ false: Colors.surfaceElevated, true: ac.primary + '50' }} thumbColor={agent.auto_execute ? ac.primary : Colors.textMuted} />
                   </View>
+                  {/* Social Scope Selector */}
+                  {SOCIAL_AGENT_TYPES.has(agent.agent_type) && (
+                    <View style={s.scopeSection}>
+                      <Text style={[s.scopeTitle, { color: ac.primary }]}>Social Scope</Text>
+                      <Text style={s.scopeDesc}>How this agent creates content</Text>
+                      <View style={s.scopeRow}>
+                        {SCOPE_OPTIONS.map((opt) => {
+                          const active = (agent.social_scope || 'personal') === opt.value;
+                          return (
+                            <TouchableOpacity key={opt.value}
+                              style={[s.scopeChip, active && { backgroundColor: ac.primary + '20', borderColor: ac.primary }]}
+                              onPress={() => updateScope(agent.id, opt.value)}>
+                              <Text style={{ fontSize: 18 }}>{opt.icon}</Text>
+                              <Text style={[s.scopeChipLabel, active && { color: ac.primary }]}>{opt.label}</Text>
+                              <Text style={[s.scopeChipDesc, active && { color: ac.primary + '90' }]}>{opt.desc}</Text>
+                            </TouchableOpacity>
+                          );
+                        })}
+                      </View>
+                    </View>
+                  )}
                   {/* Autopilot Routines Preview */}
                   {agent.auto_execute && AGENT_ROUTINES[agent.agent_type] && (
                     <View style={s.routineSection}>
@@ -193,4 +248,13 @@ const s = StyleSheet.create({
   routineText: { fontSize: FontSizes.xs, color: Colors.textSecondary, lineHeight: 18, flex: 1 },
   chatBtn: { marginTop: Spacing.lg, borderRadius: BorderRadius.lg, paddingVertical: 14, alignItems: 'center' },
   chatBtnText: { fontSize: FontSizes.md, fontWeight: '800', color: Colors.bg },
+  scopeBadge: { flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'flex-start', paddingHorizontal: 10, paddingVertical: 5, borderRadius: BorderRadius.full, borderWidth: 1, marginBottom: Spacing.sm },
+  scopeBadgeText: { fontSize: FontSizes.xs, fontWeight: '700' },
+  scopeSection: { marginTop: Spacing.md, backgroundColor: Colors.surfaceElevated, borderRadius: BorderRadius.lg, padding: Spacing.md },
+  scopeTitle: { fontSize: FontSizes.sm, fontWeight: '800', letterSpacing: 0.5 },
+  scopeDesc: { fontSize: FontSizes.xs, color: Colors.textMuted, marginBottom: Spacing.sm, marginTop: 2 },
+  scopeRow: { flexDirection: 'row', gap: Spacing.sm },
+  scopeChip: { flex: 1, alignItems: 'center', paddingVertical: Spacing.md, borderRadius: BorderRadius.lg, borderWidth: 1.5, borderColor: Colors.border, backgroundColor: Colors.surface },
+  scopeChipLabel: { fontSize: FontSizes.sm, fontWeight: '800', color: Colors.textSecondary, marginTop: 4 },
+  scopeChipDesc: { fontSize: 10, color: Colors.textMuted, marginTop: 2, textAlign: 'center' },
 });

@@ -101,3 +101,85 @@
 #====================================================================================================
 # Testing Data - Main Agent and testing sub agent both should log testing data below this section
 #====================================================================================================
+
+user_problem_statement: "Social Agent permission architecture - social agents available to all users with configurable scope (personal/store/business). Marketing EA manages business scope, Store EA manages store scope. Non-social agents cannot post to social media directly."
+
+backend:
+  - task: "Login endpoint"
+    implemented: true
+    working: true
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        - working: true
+          agent: "main"
+          comment: "Existing auth - mikelaurenzo7@gmail.com / chet1212!"
+
+  - task: "GET /api/agents - List all agents"
+    implemented: true
+    working: "NA"
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+        - working: "NA"
+          agent: "main"
+          comment: "Existing endpoint, returns all user agents including social ones"
+
+  - task: "GET /api/agents/social - Get social agents with scope"
+    implemented: true
+    working: "NA"
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+        - working: "NA"
+          agent: "main"
+          comment: "New endpoint - returns only social agents (twitter, pinterest, tiktok, meta, etc.) with their social_scope field (defaults to personal)"
+
+  - task: "PUT /api/agents/{agent_id}/scope - Update social agent scope"
+    implemented: true
+    working: "NA"
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+        - working: "NA"
+          agent: "main"
+          comment: "New endpoint - sets scope to personal/store/business. Validates only social agents can have scope."
+
+  - task: "POST /api/chat - Social scope enforcement in chat"
+    implemented: true
+    working: "NA"
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+        - working: "NA"
+          agent: "main"
+          comment: "Chat now injects scope context for social agents (BUSINESS/STORE/PERSONAL instructions). Non-social agents get blocked from direct social posting."
+
+metadata:
+  created_by: "main_agent"
+  version: "1.0"
+  test_sequence: 1
+  run_ui: false
+
+test_plan:
+  current_focus:
+    - "GET /api/agents/social - Get social agents with scope"
+    - "PUT /api/agents/{agent_id}/scope - Update social agent scope"
+    - "POST /api/chat - Social scope enforcement in chat"
+  stuck_tasks: []
+  test_all: false
+  test_priority: "high_first"
+
+agent_communication:
+    - agent: "main"
+      message: "Implemented social agent scope system. Test flow: 1) Login with mikelaurenzo7@gmail.com / chet1212!, 2) GET /api/agents to find a social agent (twitter/pinterest/tiktok/meta), 3) GET /api/agents/social to see social agents with default scope, 4) PUT /api/agents/{id}/scope with body {scope: 'business'} to change scope, 5) POST /api/chat with agent_type='twitter' to verify scope context is injected, 6) POST /api/chat with agent_type='finance' to verify non-social agents get the delegation message. Auth uses cookies from login."

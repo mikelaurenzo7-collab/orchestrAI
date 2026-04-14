@@ -153,6 +153,10 @@ class AgentUpdate(BaseModel):
     tone: Optional[str] = None
     auto_execute: Optional[bool] = None
     is_active: Optional[bool] = None
+    social_scope: Optional[str] = None  # "personal", "store", "business"
+
+class SocialScopeUpdate(BaseModel):
+    scope: str  # "personal", "store", "business"
 
 class ChatMessage(BaseModel):
     role: str
@@ -1031,12 +1035,56 @@ async def update_agent(agent_id: str, update: AgentUpdate, request: Request):
         raise HTTPException(status_code=404, detail="Agent not found")
     return AgentConfig(**agent)
 
+# ──────────────── Social Agent Scope Management ────────────────
+
+@api_router.put("/agents/{agent_id}/scope")
+async def update_social_scope(agent_id: str, body: SocialScopeUpdate, request: Request):
+    """Set the scope of a social agent: personal, store, or business"""
+    user = await get_current_user(request)
+    if body.scope not in ("personal", "store", "business"):
+        raise HTTPException(status_code=400, detail="Scope must be 'personal', 'store', or 'business'")
+    agent = await db.agents.find_one({"id": agent_id, "user_id": user["_id"]})
+    if not agent:
+        raise HTTPException(status_code=404, detail="Agent not found")
+    if agent.get("agent_type") not in SOCIAL_AGENT_TYPES:
+        raise HTTPException(status_code=400, detail="Only social agents can have a scope")
+    await db.agents.update_one({"id": agent_id, "user_id": user["_id"]}, {"$set": {"social_scope": body.scope}})
+    return {"status": "updated", "agent_id": agent_id, "scope": body.scope}
+
+@api_router.get("/agents/social")
+async def get_social_agents(request: Request):
+    """Get all social agents with their scopes for the current user"""
+    user = await get_current_user(request)
+    agents = await db.agents.find(
+        {"user_id": user["_id"], "agent_type": {"$in": list(SOCIAL_AGENT_TYPES)}},
+        {"_id": 0, "user_id": 0}
+    ).to_list(50)
+    for a in agents:
+        a["social_scope"] = a.get("social_scope", "personal")
+    return agents
+
 # ──────────────── Chat ────────────────
 
 @api_router.post("/chat")
 async def chat_with_agent(req: ChatRequest, request: Request):
     user = await get_current_user(request)
     user_id = user["_id"]
+
+    # ── Social Agent Scope Enforcement ──
+    scope_context = ""
+    if req.agent_type in SOCIAL_AGENT_TYPES:
+        social_agent = await db.agents.find_one({"user_id": user_id, "agent_type": req.agent_type})
+        scope = social_agent.get("social_scope", "personal") if social_agent else "personal"
+        if scope == "business":
+            scope_context = "\n\n[SCOPE: BUSINESS — You are operating under the Marketing EA's direction. All content must align with the business brand voice, marketing calendar, and campaign objectives. Coordinate with the Marketing EA for approval on campaign-level posts. Focus on ROI-driven content.]"
+        elif scope == "store":
+            scope_context = "\n\n[SCOPE: STORE — You are managing social media for the user's eCommerce store(s). All content should promote products, drive traffic, and support sales. Feature product launches, deals, reviews, and store updates. Coordinate with the Store EA for product data.]"
+        else:
+            scope_context = "\n\n[SCOPE: PERSONAL — You are managing the user's personal social media. Content should reflect their personal brand, interests, and voice. No direct product promotion unless the user asks.]"
+    elif req.agent_type not in SOCIAL_AGENT_TYPES and req.agent_type not in ("general", "marketing_suite"):
+        # Non-social, non-marketing agents cannot post to social — they delegate
+        scope_context = "\n\n[SYSTEM: You do NOT have permission to post to social media directly. If the user asks you to create social content or post on social media, tell them to use the Marketing EA or the specific platform's Social Agent instead. You may draft content suggestions but cannot execute social posting.]"
+
     chat = await get_or_create_chat_with_context(user_id, req.agent_type)
 
     await db.chat_messages.insert_one({"user_id": user_id, "session_id": user_id, "agent_type": req.agent_type,
@@ -1064,7 +1112,7 @@ ACTION:CREATE_COLLECTION|title=Collection Name|description=Collection descriptio
 
 You can include MULTIPLE action lines. The user will approve each one before it executes on their store. Always explain what you're about to create BEFORE the action lines. Be creative with product names, descriptions, and pricing based on the niche.]"""
 
-        enhanced_msg = req.message + store_context + action_instruction + "\n\n[SYSTEM: If the user reveals important facts about their business (product types, revenue goals, pain points, preferences), remember them by ending your response with a line starting with 'MEMORY:' followed by a key=value pair. Example: MEMORY: main_product=handmade jewelry. Only do this when genuinely new info is shared. Do NOT include MEMORY lines for casual chat.]"
+        enhanced_msg = req.message + store_context + action_instruction + scope_context + "\n\n[SYSTEM: If the user reveals important facts about their business (product types, revenue goals, pain points, preferences), remember them by ending your response with a line starting with 'MEMORY:' followed by a key=value pair. Example: MEMORY: main_product=handmade jewelry. Only do this when genuinely new info is shared. Do NOT include MEMORY lines for casual chat.]"
         response = await chat.send_message(UserMessage(text=enhanced_msg))
 
         # Extract and save memory if present
