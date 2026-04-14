@@ -185,44 +185,71 @@ export default function AuthScreen() {
 }
 
 const o = StyleSheet.create({
-  heroWrap: { alignItems: 'center', justifyContent: 'center', height: 200, marginBottom: 8 },
-  glowCircle: { position: 'absolute', width: 220, height: 220, borderRadius: 110, backgroundColor: Colors.emerald },
-  logoWrap: { width: 160, height: 160 },
-  heroLogo: { width: 160, height: 160 },
+  heroWrap: { alignItems: 'center', justifyContent: 'center', height: 180, marginBottom: 4 },
+  glowCircle: { position: 'absolute', width: 190, height: 190, borderRadius: 95, backgroundColor: Colors.emerald },
+  logoWrap: { width: 140, height: 140 },
+  heroLogo: { width: 140, height: 140 },
 });
 
 const s = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#050A18' },
+  root: { flex: 1, backgroundColor: '#030712' },
   safe: { flex: 1 },
-  scroll: { paddingHorizontal: 24, paddingTop: 16 },
-  topBrand: { flexDirection: 'row', alignItems: 'baseline', alignSelf: 'center', marginBottom: 12 },
-  brandLight: { fontSize: 22, fontWeight: '300', color: '#94A3B8', letterSpacing: -0.5 },
-  brandBold: { fontSize: 22, fontWeight: '900', color: Colors.emerald, letterSpacing: -0.5 },
-  tagWrap: { alignItems: 'center', marginBottom: 32 },
-  tagMain: { fontSize: 30, fontWeight: '900', color: '#F1F5F9', textAlign: 'center', letterSpacing: -0.8 },
-  tagAccent: { fontSize: 30, fontWeight: '900', color: Colors.emerald, textAlign: 'center', marginBottom: 14, letterSpacing: -0.8 },
-  tagSub: { fontSize: 15, color: '#64748B', textAlign: 'center', lineHeight: 23 },
-  inlineInput: { backgroundColor: '#0A0F1E', borderRadius: 16, paddingHorizontal: 20, paddingVertical: 17, color: '#F1F5F9', fontSize: 16, borderWidth: 1.5, borderColor: '#1E293B', marginBottom: 12 },
+  scroll: { paddingHorizontal: 28, paddingTop: 12 },
+  // Brand
+  topBrand: { flexDirection: 'row', alignItems: 'baseline', alignSelf: 'center', marginBottom: 10 },
+  brandLight: { fontSize: 20, fontWeight: '200', color: '#94A3B8', letterSpacing: 0.5 },
+  brandBold: { fontSize: 20, fontWeight: '800', color: Colors.emerald, letterSpacing: 0.5 },
+  // Hero tagline
+  tagWrap: { alignItems: 'center', marginBottom: 28 },
+  tagMain: { fontSize: 28, fontWeight: '800', color: '#F8FAFC', textAlign: 'center', letterSpacing: -0.6 },
+  tagAccent: { fontSize: 28, fontWeight: '800', color: Colors.emerald, textAlign: 'center', marginBottom: 12, letterSpacing: -0.6 },
+  tagSub: { fontSize: 15, color: '#64748B', textAlign: 'center', lineHeight: 23, fontWeight: '400' },
+  // Glass inputs (visionOS)
+  inlineInput: {
+    backgroundColor: 'rgba(15, 23, 42, 0.7)', borderRadius: 18, paddingHorizontal: 20, paddingVertical: 17,
+    color: '#F1F5F9', fontSize: 16, borderWidth: 1, borderColor: 'rgba(148, 163, 184, 0.1)', marginBottom: 12,
+    fontWeight: '400',
+  },
   inlineError: { color: '#FB7185', fontSize: 13, marginBottom: 10, fontWeight: '600', textAlign: 'center' },
   toggleWrap: { alignItems: 'center', marginTop: 18 },
-  toggleText: { fontSize: 14, color: '#475569' },
+  toggleText: { fontSize: 14, color: '#475569', fontWeight: '400' },
   toggleLink: { color: Colors.emerald, fontWeight: '700' },
-  ctaP: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: Colors.emerald, borderRadius: 20, paddingHorizontal: 24, paddingVertical: 20 },
-  ctaPT: { fontSize: 19, fontWeight: '900', color: '#050A18' },
-  ctaPS: { fontSize: 13, color: '#050A18', opacity: 0.5, marginTop: 2 },
-  ctaArr: { width: 44, height: 44, borderRadius: 14, backgroundColor: 'rgba(5,10,24,0.12)', justifyContent: 'center', alignItems: 'center' },
-  ctaArrT: { fontSize: 20, color: '#050A18', fontWeight: '700' },
-  ctaS: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#0A0F1E', borderRadius: 16, paddingHorizontal: 24, paddingVertical: 16, borderWidth: 1.5, borderColor: '#1E293B' },
-  ctaST: { fontSize: 16, fontWeight: '800', color: '#E2E8F0' },
-  ctaSS: { fontSize: 18, color: '#64748B' },
-  intLabels: { marginTop: 32 },
-  intTitle: { fontSize: 11, fontWeight: '800', color: '#475569', letterSpacing: 1.5, textAlign: 'center', marginBottom: 16, textTransform: 'uppercase' },
+  // Primary CTA (visionOS depth)
+  ctaP: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    backgroundColor: Colors.emerald, borderRadius: 22, paddingHorizontal: 24, paddingVertical: 20,
+    shadowColor: Colors.emerald, shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.3, shadowRadius: 24, elevation: 12,
+  },
+  ctaPT: { fontSize: 18, fontWeight: '800', color: '#030712' },
+  ctaPS: { fontSize: 12, color: '#030712', opacity: 0.45, marginTop: 2, fontWeight: '500' },
+  ctaArr: { width: 42, height: 42, borderRadius: 14, backgroundColor: 'rgba(3,7,18,0.1)', justifyContent: 'center', alignItems: 'center' },
+  ctaArrT: { fontSize: 18, color: '#030712', fontWeight: '600' },
+  // Secondary CTA (glass)
+  ctaS: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    backgroundColor: 'rgba(15, 23, 42, 0.6)', borderRadius: 18, paddingHorizontal: 24, paddingVertical: 16,
+    borderWidth: 1, borderColor: 'rgba(148, 163, 184, 0.08)',
+  },
+  ctaST: { fontSize: 16, fontWeight: '700', color: '#E2E8F0' },
+  ctaSS: { fontSize: 18, color: '#475569' },
+  // Integration chips (glass pills)
+  intLabels: { marginTop: 28 },
+  intTitle: { fontSize: 10, fontWeight: '700', color: '#475569', letterSpacing: 2, textAlign: 'center', marginBottom: 14, textTransform: 'uppercase' },
   intRow: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 8 },
-  intChip: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#080D1C', paddingHorizontal: 14, paddingVertical: 9, borderRadius: 24, borderWidth: 1 },
-  intChipText: { fontSize: 11, fontWeight: '700' },
-  statsBar: { flexDirection: 'row', justifyContent: 'space-around', marginTop: 28, marginBottom: 20, backgroundColor: '#080D1C', borderRadius: 20, paddingVertical: 20, borderWidth: 1, borderColor: '#1E293B' },
+  intChip: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    backgroundColor: 'rgba(15, 23, 42, 0.5)', paddingHorizontal: 14, paddingVertical: 9,
+    borderRadius: 24, borderWidth: 1,
+  },
+  intChipText: { fontSize: 11, fontWeight: '600' },
+  // Stats bar (visionOS glass card)
+  statsBar: {
+    flexDirection: 'row', justifyContent: 'space-around', marginTop: 24, marginBottom: 16,
+    backgroundColor: 'rgba(15, 23, 42, 0.5)', borderRadius: 22, paddingVertical: 20,
+    borderWidth: 1, borderColor: 'rgba(148, 163, 184, 0.06)',
+  },
   stat: { alignItems: 'center' },
-  statV: { fontSize: 30, fontWeight: '900' },
-  statL: { fontSize: 10, color: '#475569', fontWeight: '700', marginTop: 4, letterSpacing: 0.5, textTransform: 'uppercase' },
-  footer: { textAlign: 'center', color: '#1E293B', fontSize: 11, marginTop: 8 },
+  statV: { fontSize: 28, fontWeight: '900' },
+  statL: { fontSize: 9, color: '#475569', fontWeight: '600', marginTop: 4, letterSpacing: 1, textTransform: 'uppercase' },
+  footer: { textAlign: 'center', color: '#0F172A', fontSize: 11, marginTop: 8 },
 });
