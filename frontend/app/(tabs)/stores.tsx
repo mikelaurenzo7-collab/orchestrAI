@@ -131,20 +131,18 @@ export default function StoresScreen() {
           <View style={s.empty}>
             <Text style={{ fontSize: 48 }}>🏪</Text>
             <Text style={s.emptyTitle}>No stores connected</Text>
-            <Text style={s.emptyText}>Connect Shopify, Etsy, or WooCommerce to unleash your AI agents.</Text>
+            <Text style={s.emptyText}>Connect your store to unleash Maestro, Aria, Cadence & Harmony.</Text>
             <View style={s.oauthGrid}>
-              {STORE_PLATFORMS.filter(p => p.hasOAuth).map(p => (
+              {STORE_PLATFORMS.map(p => (
                 <TouchableOpacity key={p.id} testID={`quick-connect-${p.id}`}
                   style={[s.oauthBtn, { borderColor: p.color + '40' }]}
                   onPress={() => { setSelectedPlatform(p.id); setShowModal(true); }}>
                   <Text style={{ fontSize: 24 }}>{p.icon}</Text>
-                  <Text style={[s.oauthBtnText, { color: p.color }]}>Connect {p.name}</Text>
+                  <Text style={[s.oauthBtnText, { color: p.color }]}>{p.name}</Text>
+                  {p.hasOAuth && <View style={[s.oauthTag, { marginTop: 4 }]}><Text style={s.oauthTagText}>1-tap</Text></View>}
                 </TouchableOpacity>
               ))}
             </View>
-            <TouchableOpacity style={s.manualBtn} onPress={() => { setSelectedPlatform('woocommerce'); setShowModal(true); }}>
-              <Text style={s.manualBtnText}>Or connect via API key →</Text>
-            </TouchableOpacity>
           </View>
         ) : stores.map(store => {
           const plat = STORE_PLATFORMS.find(p => p.id === store.platform);

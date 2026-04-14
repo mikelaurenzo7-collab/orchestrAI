@@ -104,10 +104,10 @@ export default function OnboardingScreen() {
                 <Text style={s.welcomeText}>Your AI agents are warming up. Let's give them some context about your business so they can hit the ground running.</Text>
                 <View style={s.agentGrid}>
                   {[
-                    { name: 'Store Commander', emoji: '📦', color: Colors.emerald },
-                    { name: 'Growth Engine', emoji: '📣', color: Colors.amber },
-                    { name: 'Insight Oracle', emoji: '📊', color: Colors.cyan },
-                    { name: 'Support Shield', emoji: '🎧', color: Colors.rose },
+                    { name: 'Maestro', emoji: '📦', color: Colors.emerald },
+                    { name: 'Aria', emoji: '📣', color: Colors.amber },
+                    { name: 'Cadence', emoji: '📊', color: Colors.cyan },
+                    { name: 'Harmony', emoji: '🎧', color: Colors.rose },
                   ].map((a, i) => (
                     <View key={i} style={[s.agentMini, { borderColor: a.color + '30' }]}>
                       <Text style={{ fontSize: 20 }}>{a.emoji}</Text>
