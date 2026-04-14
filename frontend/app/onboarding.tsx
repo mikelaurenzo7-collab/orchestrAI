@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, TextInput,
   Dimensions, Animated, Easing, ScrollView, KeyboardAvoidingView, Platform, Keyboard,
@@ -7,22 +7,26 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useAuth } from '../contexts/AuthContext';
 import { authFetch } from '../utils/api';
-import { Colors, Spacing, BorderRadius, FontSizes } from '../constants/theme';
+import { Colors, BorderRadius } from '../constants/theme';
 
-const { width } = Dimensions.get('window');
+const { width: W } = Dimensions.get('window');
 
-const STEPS = [
-  { id: 'welcome', title: 'Welcome to orchestrAI', subtitle: 'Let\'s set up your AI-powered commerce empire in 60 seconds.', icon: '🎵' },
-  { id: 'brand', title: 'Tell Us About Your Brand', subtitle: 'This helps your AI agents give hyper-personalized advice.', icon: '🏷️' },
-  { id: 'goal', title: 'What\'s Your Main Goal?', subtitle: 'Your agents will prioritize actions around this.', icon: '🎯' },
-  { id: 'ready', title: 'You\'re All Set!', subtitle: 'Your 4 AI agents are online and ready to work.', icon: '🚀' },
+const PLATFORM_AGENTS = [
+  { name: 'Shopify', emoji: '🛍️', color: '#96BF48', type: 'store' },
+  { name: 'Etsy', emoji: '🧶', color: '#F1641E', type: 'store' },
+  { name: 'eBay', emoji: '🏷️', color: '#E53238', type: 'store' },
+  { name: 'Twitter', emoji: '🐦', color: '#1DA1F2', type: 'social' },
+  { name: 'Pinterest', emoji: '📌', color: '#E60023', type: 'social' },
+  { name: 'TikTok', emoji: '🎵', color: '#010101', type: 'social' },
+  { name: 'Meta', emoji: '📘', color: '#0866FF', type: 'social' },
+  { name: 'Analytics', emoji: '📊', color: '#22D3EE', type: 'intelligence' },
 ];
 
 const GOALS = [
-  { id: 'launch', label: 'Launch my first store', icon: '🏗️', desc: 'Build and launch from scratch' },
-  { id: 'grow', label: 'Grow existing revenue', icon: '📈', desc: 'Scale what\'s already working' },
-  { id: 'automate', label: 'Automate operations', icon: '⚡', desc: 'Save time on manual tasks' },
-  { id: 'market', label: 'Improve marketing', icon: '📣', desc: 'Get more traffic and sales' },
+  { id: 'launch', label: 'Launch my first store', icon: '🏗️' },
+  { id: 'grow', label: 'Grow existing revenue', icon: '📈' },
+  { id: 'automate', label: 'Automate everything', icon: '⚡' },
+  { id: 'market', label: 'Dominate social media', icon: '📣' },
 ];
 
 const VOICES = [
@@ -43,16 +47,18 @@ export default function OnboardingScreen() {
   const fadeAnim = useRef(new Animated.Value(1)).current;
   const slideAnim = useRef(new Animated.Value(0)).current;
 
+  const totalSteps = 4;
+
   const animateStep = (next: number) => {
     Animated.parallel([
-      Animated.timing(fadeAnim, { toValue: 0, duration: 200, useNativeDriver: true }),
-      Animated.timing(slideAnim, { toValue: -30, duration: 200, useNativeDriver: true }),
+      Animated.timing(fadeAnim, { toValue: 0, duration: 150, useNativeDriver: true }),
+      Animated.timing(slideAnim, { toValue: -20, duration: 150, useNativeDriver: true }),
     ]).start(() => {
       setStep(next);
-      slideAnim.setValue(30);
+      slideAnim.setValue(20);
       Animated.parallel([
-        Animated.timing(fadeAnim, { toValue: 1, duration: 300, useNativeDriver: true }),
-        Animated.timing(slideAnim, { toValue: 0, duration: 300, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
+        Animated.timing(fadeAnim, { toValue: 1, duration: 250, useNativeDriver: true }),
+        Animated.timing(slideAnim, { toValue: 0, duration: 250, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
       ]).start();
     });
   };
@@ -71,126 +77,152 @@ export default function OnboardingScreen() {
     router.replace('/(tabs)');
   };
 
-  const canNext = () => {
-    if (step === 1) return true; // brand is optional
-    if (step === 2) return !!goal;
-    return true;
-  };
-
-  const currentStep = STEPS[step];
-
   return (
-    <SafeAreaView style={s.container}>
+    <SafeAreaView style={s.safe}>
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         <ScrollView contentContainerStyle={s.scroll} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
 
-          {/* Progress dots */}
-          <View style={s.dots}>
-            {STEPS.map((_, i) => (
-              <View key={i} style={[s.dot, i === step && s.dotActive, i < step && s.dotDone]} />
-            ))}
+          {/* Progress bar */}
+          <View style={s.progressWrap}>
+            <View style={s.progressTrack}>
+              <Animated.View style={[s.progressFill, { width: `${((step + 1) / totalSteps) * 100}%` }]} />
+            </View>
+            <Text style={s.progressLabel}>{step + 1}/{totalSteps}</Text>
           </View>
 
-          {/* Step content */}
-          <Animated.View style={[s.content, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}>
-            <Text style={s.stepIcon}>{currentStep.icon}</Text>
-            <Text style={s.stepTitle}>{currentStep.title}</Text>
-            <Text style={s.stepSub}>{currentStep.subtitle}</Text>
+          <Animated.View style={[s.body, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}>
 
-            {/* Welcome */}
+            {/* STEP 0 — Welcome */}
             {step === 0 && (
-              <View style={s.welcomeCard}>
-                <Text style={s.welcomeName}>Hey {user?.name || 'there'}!</Text>
-                <Text style={s.welcomeText}>Your AI agents are warming up. Let's give them some context about your business so they can hit the ground running.</Text>
-                <View style={s.agentGrid}>
-                  {[
-                    { name: 'Shopify EA', emoji: '🛍️', color: '#96BF48' },
-                    { name: 'Twitter EA', emoji: '🐦', color: '#1DA1F2' },
-                    { name: 'Pinterest EA', emoji: '📌', color: '#E60023' },
-                    { name: 'Analytics', emoji: '📊', color: Colors.cyan },
-                  ].map((a, i) => (
-                    <View key={i} style={[s.agentMini, { borderColor: a.color + '30' }]}>
-                      <Text style={{ fontSize: 20 }}>{a.emoji}</Text>
-                      <Text style={[s.agentMiniName, { color: a.color }]}>{a.name}</Text>
-                      <Text style={s.agentMiniStatus}>READY</Text>
+              <View>
+                <Text style={s.heroEmoji}>🎵</Text>
+                <Text style={s.h1}>Welcome to{'\n'}orchestr<Text style={s.accent}>AI</Text></Text>
+                <Text style={s.sub}>8 AI Executive Assistants. One mission: grow your business on autopilot.</Text>
+
+                {/* Agent scroll */}
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.agentScroll}
+                  snapToInterval={78} decelerationRate="fast">
+                  {PLATFORM_AGENTS.map((a, i) => (
+                    <View key={i} style={[s.agentPill, { borderColor: a.color + '40' }]}>
+                      <Text style={{ fontSize: 22 }}>{a.emoji}</Text>
+                      <Text style={[s.agentPillName, { color: a.color }]}>{a.name}</Text>
+                      <Text style={s.agentPillType}>{a.type === 'store' ? 'STORE' : a.type === 'social' ? 'SOCIAL' : 'INTEL'}</Text>
                     </View>
                   ))}
+                </ScrollView>
+
+                <View style={s.welcomeCard}>
+                  <Text style={s.welcomeHi}>Hey {user?.name?.split(' ')[0] || 'there'} 👋</Text>
+                  <Text style={s.welcomeBody}>Each platform you connect gets its own dedicated AI assistant. They learn your brand, work 24/7, and get smarter every day.</Text>
                 </View>
               </View>
             )}
 
-            {/* Brand Profile */}
+            {/* STEP 1 — Brand */}
             {step === 1 && (
-              <View style={s.formWrap}>
-                <Text style={s.label}>Brand / Store Name</Text>
-                <TextInput testID="onboard-brand" style={s.input} value={brandName} onChangeText={setBrandName}
-                  placeholder="e.g., Luna Vintage, FitGear Co." placeholderTextColor="#475569" />
-                <Text style={s.label}>What do you sell?</Text>
-                <TextInput testID="onboard-niche" style={s.input} value={niche} onChangeText={setNiche}
-                  placeholder="e.g., handmade jewelry, fitness equipment" placeholderTextColor="#475569" />
-                <Text style={s.label}>Your brand voice</Text>
-                <View style={s.voiceGrid}>
-                  {VOICES.map(v => (
-                    <TouchableOpacity key={v.id} testID={`voice-${v.id}`}
-                      style={[s.voiceChip, voice === v.id && { borderColor: Colors.emerald, backgroundColor: Colors.emerald + '12' }]}
-                      onPress={() => setVoice(v.id)}>
-                      <Text style={{ fontSize: 18 }}>{v.emoji}</Text>
-                      <Text style={[s.voiceText, voice === v.id && { color: Colors.emerald }]}>{v.label}</Text>
+              <View>
+                <Text style={s.heroEmoji}>🏷️</Text>
+                <Text style={s.h1}>Your Brand</Text>
+                <Text style={s.sub}>Help your agents understand who you are.</Text>
+
+                <View style={s.field}>
+                  <Text style={s.label}>Brand name</Text>
+                  <TextInput testID="onboard-brand" style={s.input} value={brandName} onChangeText={setBrandName}
+                    placeholder="Luna Vintage, FitGear Co..." placeholderTextColor="#475569" />
+                </View>
+                <View style={s.field}>
+                  <Text style={s.label}>What do you sell?</Text>
+                  <TextInput testID="onboard-niche" style={s.input} value={niche} onChangeText={setNiche}
+                    placeholder="Handmade jewelry, fitness gear..." placeholderTextColor="#475569" />
+                </View>
+                <View style={s.field}>
+                  <Text style={s.label}>Brand voice</Text>
+                  <View style={s.voiceRow}>
+                    {VOICES.map(v => (
+                      <TouchableOpacity key={v.id} testID={`voice-${v.id}`}
+                        style={[s.voiceChip, voice === v.id && s.voiceActive]}
+                        onPress={() => setVoice(v.id)}>
+                        <Text style={{ fontSize: 16 }}>{v.emoji}</Text>
+                        <Text style={[s.voiceLabel, voice === v.id && { color: Colors.emerald }]}>{v.label}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                </View>
+                <Text style={s.skip}>All fields optional — update anytime</Text>
+              </View>
+            )}
+
+            {/* STEP 2 — Goal */}
+            {step === 2 && (
+              <View>
+                <Text style={s.heroEmoji}>🎯</Text>
+                <Text style={s.h1}>Your Priority</Text>
+                <Text style={s.sub}>Your agents will focus here first.</Text>
+
+                <View style={s.goalList}>
+                  {GOALS.map(g => (
+                    <TouchableOpacity key={g.id} testID={`goal-${g.id}`}
+                      style={[s.goalRow, goal === g.id && s.goalActive]}
+                      onPress={() => setGoal(g.id)} activeOpacity={0.7}>
+                      <Text style={{ fontSize: 24 }}>{g.icon}</Text>
+                      <Text style={[s.goalText, goal === g.id && { color: Colors.emerald }]}>{g.label}</Text>
+                      {goal === g.id && <View style={s.goalCheck}><Text style={{ fontSize: 12, color: '#050A18' }}>✓</Text></View>}
                     </TouchableOpacity>
                   ))}
                 </View>
-                <Text style={s.hint}>Skip any field — you can always update later.</Text>
               </View>
             )}
 
-            {/* Goal */}
-            {step === 2 && (
-              <View style={s.goalGrid}>
-                {GOALS.map(g => (
-                  <TouchableOpacity key={g.id} testID={`goal-${g.id}`}
-                    style={[s.goalCard, goal === g.id && { borderColor: Colors.emerald, backgroundColor: Colors.emerald + '08' }]}
-                    onPress={() => setGoal(g.id)} activeOpacity={0.8}>
-                    <Text style={s.goalIcon}>{g.icon}</Text>
-                    <Text style={[s.goalLabel, goal === g.id && { color: Colors.emerald }]}>{g.label}</Text>
-                    <Text style={s.goalDesc}>{g.desc}</Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-            )}
-
-            {/* Ready */}
+            {/* STEP 3 — Ready */}
             {step === 3 && (
               <View style={s.readyWrap}>
+                <Text style={{ fontSize: 56, textAlign: 'center' }}>🚀</Text>
+                <Text style={s.h1}>You're Ready</Text>
+                <Text style={s.sub}>Your AI team is online and waiting.</Text>
+
                 <View style={s.readyCard}>
                   {brandName ? <Text style={s.readyBrand}>{brandName}</Text> : null}
-                  {niche ? <Text style={s.readyNiche}>{niche}</Text> : null}
-                  <View style={s.readyRow}>
-                    <View style={s.readyStat}><Text style={[s.readyStatV, { color: Colors.emerald }]}>8</Text><Text style={s.readyStatL}>Agents Online</Text></View>
-                    <View style={s.readyStat}><Text style={[s.readyStatV, { color: Colors.amber }]}>24</Text><Text style={s.readyStatL}>Actions Ready</Text></View>
-                    <View style={s.readyStat}><Text style={[s.readyStatV, { color: Colors.cyan }]}>30</Text><Text style={s.readyStatL}>Days Free</Text></View>
+                  <View style={s.readyStats}>
+                    <View style={s.readyStat}>
+                      <Text style={[s.readyNum, { color: Colors.emerald }]}>8</Text>
+                      <Text style={s.readyLabel}>Agents</Text>
+                    </View>
+                    <View style={s.readyDivider} />
+                    <View style={s.readyStat}>
+                      <Text style={[s.readyNum, { color: '#FBBF24' }]}>24/7</Text>
+                      <Text style={s.readyLabel}>Uptime</Text>
+                    </View>
+                    <View style={s.readyDivider} />
+                    <View style={s.readyStat}>
+                      <Text style={[s.readyNum, { color: '#22D3EE' }]}>∞</Text>
+                      <Text style={s.readyLabel}>Potential</Text>
+                    </View>
                   </View>
                 </View>
-                <Text style={s.readyTip}>Your agents will learn more about your business with every interaction.</Text>
+
+                <Text style={s.readyTip}>Connect your first store or social account to activate your agents.</Text>
               </View>
             )}
           </Animated.View>
 
           {/* Navigation */}
           <View style={s.nav}>
-            {step > 0 && step < 3 && (
+            {step > 0 && step < 3 ? (
               <TouchableOpacity testID="onboard-back" style={s.backBtn} onPress={() => animateStep(step - 1)}>
-                <Text style={s.backText}>← Back</Text>
+                <Text style={s.backText}>Back</Text>
               </TouchableOpacity>
-            )}
+            ) : <View style={{ width: 60 }} />}
             <View style={{ flex: 1 }} />
             {step < 3 ? (
-              <TouchableOpacity testID="onboard-next" style={[s.nextBtn, !canNext() && { opacity: 0.4 }]}
-                onPress={() => { Keyboard.dismiss(); animateStep(step + 1); }} disabled={!canNext()}>
-                <Text style={s.nextText}>{step === 0 ? "Let's Go" : 'Next'} →</Text>
+              <TouchableOpacity testID="onboard-next"
+                style={[s.nextBtn, step === 2 && !goal && { opacity: 0.35 }]}
+                onPress={() => { Keyboard.dismiss(); animateStep(step + 1); }}
+                disabled={step === 2 && !goal}>
+                <Text style={s.nextText}>{step === 0 ? "Let's go" : 'Continue'}</Text>
               </TouchableOpacity>
             ) : (
               <TouchableOpacity testID="onboard-finish" style={s.launchBtn} onPress={finish}>
-                <Text style={s.launchText}>Launch Command Center →</Text>
+                <Text style={s.launchText}>Enter Command Center</Text>
               </TouchableOpacity>
             )}
           </View>
@@ -201,53 +233,58 @@ export default function OnboardingScreen() {
 }
 
 const s = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#050A18' },
-  scroll: { flexGrow: 1, padding: 24, justifyContent: 'space-between' },
-  dots: { flexDirection: 'row', justifyContent: 'center', gap: 8, marginBottom: 32, marginTop: 8 },
-  dot: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#1E293B' },
-  dotActive: { width: 24, backgroundColor: Colors.emerald },
-  dotDone: { backgroundColor: Colors.emerald + '60' },
-  content: { flex: 1 },
-  stepIcon: { fontSize: 48, textAlign: 'center', marginBottom: 16 },
-  stepTitle: { fontSize: 26, fontWeight: '900', color: '#F1F5F9', textAlign: 'center', marginBottom: 8 },
-  stepSub: { fontSize: 15, color: '#94A3B8', textAlign: 'center', lineHeight: 22, marginBottom: 28 },
-  // Welcome
-  welcomeCard: { backgroundColor: '#0A0F1E', borderRadius: 20, padding: 20, borderWidth: 1, borderColor: '#1E293B' },
-  welcomeName: { fontSize: 20, fontWeight: '800', color: Colors.emerald, marginBottom: 8 },
-  welcomeText: { fontSize: 14, color: '#94A3B8', lineHeight: 22, marginBottom: 20 },
-  agentGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
-  agentMini: { width: (width - 48 - 40 - 10) / 2, backgroundColor: '#0D1424', borderRadius: 14, padding: 14, borderWidth: 1, alignItems: 'center', gap: 6 },
-  agentMiniName: { fontSize: 12, fontWeight: '800' },
-  agentMiniStatus: { fontSize: 9, fontWeight: '800', color: Colors.emerald, letterSpacing: 1 },
-  // Form
-  formWrap: { gap: 4 },
-  label: { fontSize: 13, fontWeight: '700', color: '#94A3B8', marginBottom: 6, marginTop: 12 },
-  input: { backgroundColor: '#0D1424', borderRadius: 14, paddingHorizontal: 18, paddingVertical: 15, color: '#F1F5F9', fontSize: 16, borderWidth: 1, borderColor: '#1E293B' },
-  voiceGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginTop: 4 },
-  voiceChip: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 16, paddingVertical: 12, borderRadius: 14, backgroundColor: '#0D1424', borderWidth: 1, borderColor: '#1E293B' },
-  voiceText: { fontSize: 14, fontWeight: '700', color: '#94A3B8' },
-  hint: { fontSize: 12, color: '#475569', marginTop: 16, textAlign: 'center' },
+  safe: { flex: 1, backgroundColor: '#050A18' },
+  scroll: { flexGrow: 1, paddingHorizontal: 24, paddingBottom: 24, justifyContent: 'space-between' },
+  // Progress
+  progressWrap: { flexDirection: 'row', alignItems: 'center', marginTop: 12, marginBottom: 32, gap: 12 },
+  progressTrack: { flex: 1, height: 3, backgroundColor: '#1E293B', borderRadius: 2, overflow: 'hidden' },
+  progressFill: { height: '100%', backgroundColor: Colors.emerald, borderRadius: 2 },
+  progressLabel: { fontSize: 12, fontWeight: '700', color: '#475569', width: 28 },
+  // Typography
+  body: { flex: 1 },
+  heroEmoji: { fontSize: 44, textAlign: 'center', marginBottom: 16 },
+  h1: { fontSize: 32, fontWeight: '900', color: '#F1F5F9', textAlign: 'center', letterSpacing: -0.5, lineHeight: 38 },
+  accent: { color: Colors.emerald },
+  sub: { fontSize: 16, color: '#94A3B8', textAlign: 'center', lineHeight: 24, marginTop: 8, marginBottom: 28 },
+  // Agents horizontal scroll
+  agentScroll: { paddingVertical: 4, gap: 10, paddingRight: 24 },
+  agentPill: { width: 72, alignItems: 'center', paddingVertical: 14, paddingHorizontal: 6, backgroundColor: '#0A0F1E', borderRadius: 16, borderWidth: 1.5, gap: 4 },
+  agentPillName: { fontSize: 10, fontWeight: '800' },
+  agentPillType: { fontSize: 7, fontWeight: '800', color: '#475569', letterSpacing: 1 },
+  // Welcome card
+  welcomeCard: { marginTop: 24, backgroundColor: '#0A0F1E', borderRadius: 20, padding: 20, borderWidth: 1, borderColor: '#1E293B' },
+  welcomeHi: { fontSize: 18, fontWeight: '800', color: Colors.emerald, marginBottom: 8 },
+  welcomeBody: { fontSize: 14, color: '#94A3B8', lineHeight: 22 },
+  // Fields
+  field: { marginBottom: 16 },
+  label: { fontSize: 13, fontWeight: '700', color: '#64748B', marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.5 },
+  input: { backgroundColor: '#0A0F1E', borderRadius: 14, paddingHorizontal: 18, paddingVertical: 16, color: '#F1F5F9', fontSize: 16, borderWidth: 1, borderColor: '#1E293B' },
+  voiceRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
+  voiceChip: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 16, paddingVertical: 12, borderRadius: 14, backgroundColor: '#0A0F1E', borderWidth: 1.5, borderColor: '#1E293B' },
+  voiceActive: { borderColor: Colors.emerald, backgroundColor: Colors.emerald + '08' },
+  voiceLabel: { fontSize: 14, fontWeight: '700', color: '#64748B' },
+  skip: { fontSize: 12, color: '#334155', textAlign: 'center', marginTop: 20 },
   // Goals
-  goalGrid: { gap: 12 },
-  goalCard: { flexDirection: 'row', alignItems: 'center', gap: 14, backgroundColor: '#0A0F1E', borderRadius: 16, padding: 18, borderWidth: 1.5, borderColor: '#1E293B' },
-  goalIcon: { fontSize: 28 },
-  goalLabel: { fontSize: 16, fontWeight: '800', color: '#E2E8F0' },
-  goalDesc: { fontSize: 12, color: '#64748B', position: 'absolute', right: 18, bottom: 8 },
+  goalList: { gap: 12 },
+  goalRow: { flexDirection: 'row', alignItems: 'center', gap: 16, paddingVertical: 18, paddingHorizontal: 20, backgroundColor: '#0A0F1E', borderRadius: 16, borderWidth: 1.5, borderColor: '#1E293B' },
+  goalActive: { borderColor: Colors.emerald, backgroundColor: Colors.emerald + '06' },
+  goalText: { fontSize: 17, fontWeight: '700', color: '#CBD5E1', flex: 1 },
+  goalCheck: { width: 24, height: 24, borderRadius: 12, backgroundColor: Colors.emerald, justifyContent: 'center', alignItems: 'center' },
   // Ready
   readyWrap: { alignItems: 'center' },
-  readyCard: { backgroundColor: '#0A0F1E', borderRadius: 20, padding: 24, borderWidth: 1, borderColor: Colors.emerald + '25', width: '100%', alignItems: 'center', gap: 8 },
-  readyBrand: { fontSize: 22, fontWeight: '900', color: Colors.emerald },
-  readyNiche: { fontSize: 14, color: '#94A3B8' },
-  readyRow: { flexDirection: 'row', gap: 20, marginTop: 16 },
-  readyStat: { alignItems: 'center' },
-  readyStatV: { fontSize: 28, fontWeight: '900' },
-  readyStatL: { fontSize: 10, color: '#64748B', fontWeight: '700', marginTop: 4 },
-  readyTip: { fontSize: 13, color: '#475569', textAlign: 'center', marginTop: 20, lineHeight: 20 },
+  readyCard: { backgroundColor: '#0A0F1E', borderRadius: 24, padding: 28, borderWidth: 1, borderColor: Colors.emerald + '20', width: '100%', alignItems: 'center', marginTop: 8 },
+  readyBrand: { fontSize: 24, fontWeight: '900', color: Colors.emerald, marginBottom: 20 },
+  readyStats: { flexDirection: 'row', alignItems: 'center', gap: 0, width: '100%', justifyContent: 'space-around' },
+  readyStat: { alignItems: 'center', flex: 1 },
+  readyNum: { fontSize: 32, fontWeight: '900' },
+  readyLabel: { fontSize: 11, color: '#475569', fontWeight: '700', marginTop: 4, textTransform: 'uppercase', letterSpacing: 0.5 },
+  readyDivider: { width: 1, height: 40, backgroundColor: '#1E293B' },
+  readyTip: { fontSize: 14, color: '#475569', textAlign: 'center', marginTop: 24, lineHeight: 22 },
   // Nav
-  nav: { flexDirection: 'row', alignItems: 'center', paddingTop: 20 },
-  backBtn: { paddingVertical: 14, paddingHorizontal: 20 },
-  backText: { fontSize: 15, color: '#64748B', fontWeight: '600' },
-  nextBtn: { backgroundColor: Colors.emerald, borderRadius: 16, paddingVertical: 16, paddingHorizontal: 28 },
+  nav: { flexDirection: 'row', alignItems: 'center', paddingTop: 24 },
+  backBtn: { paddingVertical: 16, paddingHorizontal: 8 },
+  backText: { fontSize: 16, color: '#475569', fontWeight: '600' },
+  nextBtn: { backgroundColor: Colors.emerald, borderRadius: 16, paddingVertical: 16, paddingHorizontal: 32 },
   nextText: { fontSize: 16, fontWeight: '800', color: '#050A18' },
   launchBtn: { flex: 1, backgroundColor: Colors.emerald, borderRadius: 16, paddingVertical: 18, alignItems: 'center' },
   launchText: { fontSize: 17, fontWeight: '900', color: '#050A18' },
