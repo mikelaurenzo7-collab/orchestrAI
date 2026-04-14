@@ -475,8 +475,17 @@ Manage closet strategy, share listings during Posh Parties, create bundles, and 
 
 # ──────────────── Pricing & Plans ────────────────
 
-# Social posting: shared capability — ALL agents can post to social. User decides use case.
-SOCIAL_POSTING_ALLOWED_ALL = True  # No restrictions — any agent can request social posting
+# Social posting: ONLY social agents post. User chooses the purpose.
+# - Personal: user's own social content
+# - Store: promoting their ecommerce products
+# - Business: Marketing EA delegates to social agents
+# Other agents (Email, CRM, Finance, HR, Sales, Ops, Legal, Analytics) NEVER post directly.
+# They can REQUEST the Marketing EA to coordinate social posting on their behalf.
+SOCIAL_AGENT_TYPES = {
+    "twitter", "pinterest", "tiktok", "meta", "youtube",
+    "whatsapp", "threads", "linkedin", "reddit", "discord",
+}
+SOCIAL_DELEGATOR = "marketing_suite"  # Business agents route through Marketing EA
 
 PRICING_PLANS = {
     "free": {
