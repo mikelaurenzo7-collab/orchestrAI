@@ -544,41 +544,242 @@ SOCIAL_CONNECTOR_PLATFORMS = {
 PRICING_PLANS = {
     "free": {
         "name": "Free", "price": 0, "interval": "forever",
-        "agents": 2, "actions_per_month": 100, "connectors": 1,
-        "features": ["2 AI agents", "100 actions/mo", "1 connector", "Basic chat"],
-        "categories": ["commerce"],
+        "max_agents": 1, "actions_per_month": 100, "max_stores": 0, "max_social_connectors": 0,
+        "features": ["1 General AI assistant", "100 actions/mo", "Basic chat", "Knowledge base access"],
+        "included_agents": ["general"],  # Only general assistant
     },
     "starter": {
         "name": "Starter", "price": 29, "interval": "month",
-        "agents": 5, "actions_per_month": 1000, "connectors": 3,
-        "features": ["5 AI agents", "1,000 actions/mo", "3 connectors", "Campaign launcher", "Safety controls"],
-        "categories": ["commerce", "social"],
+        "max_agents": 3, "actions_per_month": 1000, "max_stores": 1, "max_social_connectors": 2,
+        "features": ["1 store platform", "Marketing + Analytics agents", "2 social media connectors", "1,000 actions/mo", "Campaign launcher", "Safety controls"],
+        "included_agents": ["general", "marketing_suite", "analytics"],
+        "store_platforms": 1,  # User chooses 1 store platform
     },
     "growth": {
         "name": "Growth", "price": 79, "interval": "month",
-        "agents": 10, "actions_per_month": 5000, "connectors": 8,
-        "features": ["All commerce & social agents", "5,000 actions/mo", "8 connectors", "Autopilot mode", "Custom training", "Priority support"],
-        "categories": ["commerce", "social"],
+        "max_agents": 8, "actions_per_month": 5000, "max_stores": 3, "max_social_connectors": 6,
+        "features": ["3 store platforms", "Marketing, Analytics, Email, CRM, Finance agents", "6 social connectors", "5,000 actions/mo", "Autopilot mode", "Custom training", "Priority support"],
+        "included_agents": ["general", "marketing_suite", "analytics", "email", "crm", "finance"],
+        "store_platforms": 3,  # User chooses 3 store platforms
         "popular": True,
     },
     "business": {
         "name": "Business", "price": 199, "interval": "month",
-        "agents": 16, "actions_per_month": 25000, "connectors": "unlimited",
-        "features": ["All 16 agents (commerce + business)", "25,000 actions/mo", "Unlimited connectors", "Email, CRM, Finance, HR, Sales, Ops, Legal agents", "White-glove onboarding"],
-        "categories": ["commerce", "social", "business"],
+        "max_agents": 16, "actions_per_month": 25000, "max_stores": 7, "max_social_connectors": "unlimited",
+        "features": ["All 7 store platforms", "All 9 employee agents", "Unlimited social connectors", "25,000 actions/mo", "White-glove onboarding", "Dedicated support"],
+        "included_agents": ["general", "marketing_suite", "analytics", "email", "crm", "finance", "sales", "operations", "hr", "legal"],
+        "store_platforms": "all",  # All 7 store platforms
     },
     "enterprise": {
         "name": "Enterprise", "price": 499, "interval": "month",
-        "agents": "unlimited", "actions_per_month": "unlimited", "connectors": "unlimited",
-        "features": ["Unlimited everything", "Custom agents", "API access", "White-label option", "Dedicated success manager", "SLA guarantee"],
-        "categories": ["commerce", "social", "business", "custom"],
+        "max_agents": "unlimited", "actions_per_month": "unlimited", "max_stores": "unlimited", "max_social_connectors": "unlimited",
+        "features": ["Unlimited everything", "Custom agents", "API access", "White-label option", "Dedicated success manager", "SLA guarantee", "Custom integrations"],
+        "included_agents": "*",  # All + custom
+        "store_platforms": "all",
     },
 }
+
+# Agent to plan mapping — which agents unlock at which tier
+AGENT_TIERS = {
+    # Always available
+    "general": "free",
+    # Starter tier
+    "marketing_suite": "starter",
+    "analytics": "starter",
+    # Growth tier
+    "email": "growth",
+    "crm": "growth",
+    "finance": "growth",
+    # Business tier
+    "sales": "business",
+    "operations": "business",
+    "hr": "business",
+    "legal": "business",
+    # Store agents are dynamic based on user's connected stores and plan limits
+}
+
+# ──────────────── Connector Permissions (Phase 1: Centralized) ────────────────
+# Default permissions for social media connectors
+DEFAULT_CONNECTOR_PERMISSIONS = {
+    "social": {  # Twitter, Instagram, Pinterest, TikTok, LinkedIn, YouTube
+        "marketing_suite": {
+            "access_level": "write",
+            "can_post": True,
+            "can_delete": True,
+            "can_read_analytics": True,
+        },
+        "analytics": {
+            "access_level": "read",
+            "can_post": False,
+            "can_delete": False,
+            "can_read_analytics": True,
+        },
+        "crm": {
+            "access_level": "read",  # Social listening
+            "can_post": False,
+            "can_delete": False,
+            "can_read_analytics": True,
+        },
+        "sales": {
+            "access_level": "none",  # LinkedIn exception handled separately
+            "can_post": False,
+            "can_delete": False,
+            "can_read_analytics": False,
+        },
+        "hr": {
+            "access_level": "none",  # LinkedIn exception handled separately
+            "can_post": False,
+            "can_delete": False,
+            "can_read_analytics": False,
+        },
+        # Store agents get read-only for analytics
+        "shopify_ea": {"access_level": "read", "can_post": False, "can_delete": False, "can_read_analytics": True},
+        "etsy_ea": {"access_level": "read", "can_post": False, "can_delete": False, "can_read_analytics": True},
+        "ebay_ea": {"access_level": "read", "can_post": False, "can_delete": False, "can_read_analytics": True},
+        "walmart_ea": {"access_level": "read", "can_post": False, "can_delete": False, "can_read_analytics": True},
+        "faire_ea": {"access_level": "read", "can_post": False, "can_delete": False, "can_read_analytics": True},
+        "mercari_ea": {"access_level": "read", "can_post": False, "can_delete": False, "can_read_analytics": True},
+        "poshmark_ea": {"access_level": "read", "can_post": False, "can_delete": False, "can_read_analytics": True},
+        # All other agents: none
+        "default": {"access_level": "none", "can_post": False, "can_delete": False, "can_read_analytics": False},
+    },
+    "linkedin": {  # LinkedIn exception: Sales + HR get write access
+        "marketing_suite": {"access_level": "write", "can_post": True, "can_delete": True, "can_read_analytics": True},
+        "sales": {"access_level": "write", "can_post": True, "can_delete": False, "can_read_analytics": True},
+        "hr": {"access_level": "write", "can_post": True, "can_delete": False, "can_read_analytics": True},
+        "analytics": {"access_level": "read", "can_post": False, "can_delete": False, "can_read_analytics": True},
+        "crm": {"access_level": "read", "can_post": False, "can_delete": False, "can_read_analytics": True},
+        "default": {"access_level": "none", "can_post": False, "can_delete": False, "can_read_analytics": False},
+    },
+}
+
+def get_connector_permissions(platform: str, agent_type: str) -> dict:
+    """Get permissions for an agent on a specific connector platform."""
+    # LinkedIn has special permissions (Sales + HR can post)
+    if platform == "linkedin":
+        perms = DEFAULT_CONNECTOR_PERMISSIONS["linkedin"]
+    else:
+        perms = DEFAULT_CONNECTOR_PERMISSIONS["social"]
+    
+    return perms.get(agent_type, perms["default"])
+
+async def check_agent_can_post(user_id: str, agent_type: str, platform: str) -> bool:
+    """Check if an agent has permission to post to a connector."""
+    # Get connector
+    connector = await db.connectors.find_one({
+        "user_id": ObjectId(user_id),
+        "platform": platform,
+        "status": "connected"
+    })
+    
+    if not connector:
+        return False
+    
+    # Check custom permissions if they exist
+    if "permissions" in connector and agent_type in connector["permissions"]:
+        return connector["permissions"][agent_type].get("can_post", False)
+    
+    # Fall back to default permissions
+    perms = get_connector_permissions(platform, agent_type)
+    return perms.get("can_post", False)
 
 @api_router.get("/pricing")
 async def get_pricing():
     """Get pricing plans"""
     return PRICING_PLANS
+
+@api_router.get("/plan/limits")
+async def get_plan_limits(request: Request):
+    """Get current user's plan limits and usage"""
+    user = await get_current_user(request)
+    plan = user.get("plan",  "free")
+    plan_config = PRICING_PLANS.get(plan, PRICING_PLANS["free"])
+    
+    # Count current usage
+    agents_count = await db.agents.count_documents({"user_id": user["_id"]})
+    stores_count = await db.stores.count_documents({"user_id": user["_id"]})
+    
+    # Get actions count this month
+    from datetime import datetime, timezone
+    month_start = datetime.now(timezone.utc).replace(day=1, hour=0, minute=0, second=0, microsecond=0).isoformat()
+    actions_count = await db.actions.count_documents({
+        "user_id": user["_id"],
+        "created_at": {"$gte": month_start}
+    })
+    
+    return {
+        "plan": plan,
+        "limits": {
+            "max_agents": plan_config.get("max_agents", 1),
+            "max_stores": plan_config.get("max_stores", 0),
+            "max_social_connectors": plan_config.get("max_social_connectors", 0),
+            "actions_per_month": plan_config.get("actions_per_month", 100),
+        },
+        "usage": {
+            "agents": agents_count,
+            "stores": stores_count,
+            "actions_this_month": actions_count,
+        },
+        "can_add_store": stores_count < plan_config.get("max_stores", 0) or plan_config.get("max_stores") == "unlimited",
+        "can_add_agent": agents_count < plan_config.get("max_agents", 1) or plan_config.get("max_agents") == "unlimited",
+    }
+
+class PlanUpgradeRequest(BaseModel):
+    plan: str  # "starter", "growth", "business", "enterprise"
+
+@api_router.post("/plan/upgrade")
+async def upgrade_plan(req: PlanUpgradeRequest, request: Request):
+    """Upgrade user's plan and provision appropriate agents"""
+    user = await get_current_user(request)
+    user_id = user["_id"]
+    current_plan = user.get("plan", "free")
+    new_plan = req.plan
+    
+    if new_plan not in PRICING_PLANS:
+        raise HTTPException(status_code=400, detail="Invalid plan")
+    
+    if new_plan == current_plan:
+        raise HTTPException(status_code=400, detail="Already on this plan")
+    
+    # Update user plan
+    await db.users.update_one(
+        {"_id": ObjectId(user_id)},
+        {"$set": {
+            "plan": new_plan,
+            "plan_updated_at": datetime.now(timezone.utc).isoformat()
+        }}
+    )
+    
+    # Get current agents
+    current_agents = await db.agents.find({"user_id": user_id}).to_list(100)
+    current_agent_types = {a["agent_type"] for a in current_agents}
+    
+    # Provision new agents based on upgraded plan
+    new_plan_config = PRICING_PLANS[new_plan]
+    included_agents = new_plan_config.get("included_agents", [])
+    
+    if included_agents != "*":
+        # Create missing agents
+        for agent_type in included_agents:
+            if agent_type not in current_agent_types:
+                # Create this agent
+                await seed_user_agents(user_id, new_plan)
+                break  # seed_user_agents creates all appropriate agents
+    
+    # Log activity
+    await db.activity_log.insert_one({
+        "user_id": user_id,
+        "type": "plan_upgraded",
+        "message": f"Upgraded from {current_plan} to {new_plan}",
+        "timestamp": datetime.now(timezone.utc).isoformat()
+    })
+    
+    return {
+        "status": "upgraded",
+        "plan": new_plan,
+        "message": f"Successfully upgraded to {new_plan_config['name']} plan",
+        "new_agent_count": await db.agents.count_documents({"user_id": user_id})
+    }
 
 @api_router.get("/connectors")
 async def get_available_connectors():
@@ -890,8 +1091,8 @@ async def register(req: RegisterRequest, response: Response):
     result = await db.users.insert_one(user_doc)
     user_id = str(result.inserted_id)
 
-    # Create default agents for this user
-    await seed_user_agents(user_id)
+    # Create agents based on trial plan (trial acts like free for now)
+    await seed_user_agents(user_id, plan="free")
 
     access = create_access_token(user_id, email)
     refresh = create_refresh_token(user_id)
@@ -957,108 +1158,230 @@ async def refresh_token(request: Request, response: Response):
 
 # ──────────────── Seed Functions ────────────────
 
-async def seed_user_agents(user_id: str):
-    default_agents = [
-        # ── Store EAs (7) ──
-        {"id": str(uuid.uuid4()), "user_id": user_id, "name": "Shopify Executive Assistant", "agent_type": "shopify",
-         "category": "store", "platform": "shopify",
-         "description": "Manages your Shopify store — products, inventory, orders, and optimization.",
-         "personality": "strategic", "tone": "executive", "auto_execute": True, "is_active": True,
-         "capabilities": ["product_management", "inventory_optimization", "order_processing", "store_setup", "catalog_audit", "social_promo"],
-         "tasks_completed": 0, "last_active": None, "training": {}},
-        {"id": str(uuid.uuid4()), "user_id": user_id, "name": "Etsy Executive Assistant", "agent_type": "etsy",
-         "category": "store", "platform": "etsy",
-         "description": "Manages your Etsy shop — listings, SEO, reviews, and marketplace strategy.",
-         "personality": "creative", "tone": "artisan", "auto_execute": True, "is_active": True,
-         "capabilities": ["listing_optimization", "etsy_seo", "review_management", "shop_policies", "seasonal_strategy", "social_promo"],
-         "tasks_completed": 0, "last_active": None, "training": {}},
-        {"id": str(uuid.uuid4()), "user_id": user_id, "name": "eBay Executive Assistant", "agent_type": "ebay",
-         "category": "store", "platform": "ebay",
-         "description": "Manages your eBay presence — listings, auctions, pricing, and seller metrics.",
-         "personality": "analytical", "tone": "competitive", "auto_execute": True, "is_active": True,
-         "capabilities": ["auction_strategy", "listing_optimization", "pricing_intelligence", "seller_metrics", "bulk_listing", "social_promo"],
-         "tasks_completed": 0, "last_active": None, "training": {}},
-        {"id": str(uuid.uuid4()), "user_id": user_id, "name": "Walmart Executive Assistant", "agent_type": "walmart",
-         "category": "store", "platform": "walmart",
-         "description": "Manages your Walmart Marketplace — listings, Buy Box strategy, and seller scorecard.",
-         "personality": "analytical", "tone": "precise", "auto_execute": True, "is_active": True,
-         "capabilities": ["listing_optimization", "buy_box_strategy", "pricing_intelligence", "seller_scorecard", "fulfillment_tracking", "social_promo"],
-         "tasks_completed": 0, "last_active": None, "training": {}},
-        {"id": str(uuid.uuid4()), "user_id": user_id, "name": "Faire Executive Assistant", "agent_type": "faire",
-         "category": "store", "platform": "faire",
-         "description": "Manages your Faire wholesale — pricing tiers, retailer outreach, and B2B orders.",
-         "personality": "professional", "tone": "wholesale", "auto_execute": True, "is_active": True,
-         "capabilities": ["wholesale_pricing", "retailer_outreach", "b2b_orders", "faire_search_optimization", "catalog_management", "social_promo"],
-         "tasks_completed": 0, "last_active": None, "training": {}},
-        {"id": str(uuid.uuid4()), "user_id": user_id, "name": "Mercari Executive Assistant", "agent_type": "mercari",
-         "category": "store", "platform": "mercari",
-         "description": "Manages your Mercari listings — photos, pricing, shipping, and seller ratings.",
-         "personality": "efficient", "tone": "friendly", "auto_execute": True, "is_active": True,
-         "capabilities": ["listing_optimization", "competitive_pricing", "shipping_strategy", "rating_management", "resale_trends"],
-         "tasks_completed": 0, "last_active": None, "training": {}},
-        {"id": str(uuid.uuid4()), "user_id": user_id, "name": "Poshmark Executive Assistant", "agent_type": "poshmark",
-         "category": "store", "platform": "poshmark",
-         "description": "Manages your Poshmark closet — sharing, Posh Parties, bundles, and community.",
-         "personality": "social", "tone": "trendy", "auto_execute": True, "is_active": True,
-         "capabilities": ["closet_sharing", "posh_parties", "bundle_strategy", "community_engagement", "pricing_strategy"],
-         "tasks_completed": 0, "last_active": None, "training": {}},
-        # ── Employee EAs (9) ──
-        {"id": str(uuid.uuid4()), "user_id": user_id, "name": "Marketing Executive Assistant", "agent_type": "marketing_suite",
-         "category": "employee", "platform": "all",
-         "description": "Your CMO — campaigns, social media strategy, ad optimization, and content across all connected platforms.",
-         "personality": "bold", "tone": "creative", "auto_execute": True, "is_active": True,
-         "capabilities": ["social_media_management", "campaign_creation", "ad_optimization", "content_calendar", "email_marketing", "influencer_outreach"],
-         "tasks_completed": 0, "last_active": None, "training": {}},
-        {"id": str(uuid.uuid4()), "user_id": user_id, "name": "Analytics Command Center", "agent_type": "analytics",
-         "category": "intelligence", "platform": "all",
-         "description": "Cross-platform intelligence — analyzes all stores and channels for patterns and opportunities.",
-         "personality": "analytical", "tone": "precise", "auto_execute": True, "is_active": True,
-         "capabilities": ["cross_platform_analytics", "trend_prediction", "revenue_forecasting", "competitor_tracking", "customer_intelligence"],
-         "tasks_completed": 0, "last_active": None, "training": {}},
-        {"id": str(uuid.uuid4()), "user_id": user_id, "name": "Email Executive Assistant", "agent_type": "email",
-         "category": "employee", "platform": "all",
-         "description": "Manages professional communications — drafts, sequences, inbox management.",
-         "personality": "professional", "tone": "polished", "auto_execute": False, "is_active": True,
-         "capabilities": ["email_drafting", "follow_up_sequences", "inbox_management", "campaign_copy", "professional_correspondence"],
-         "tasks_completed": 0, "last_active": None, "training": {}},
-        {"id": str(uuid.uuid4()), "user_id": user_id, "name": "CRM Executive Assistant", "agent_type": "crm",
-         "category": "employee", "platform": "all",
-         "description": "Manages customer relationships — pipeline, lead scoring, follow-ups.",
-         "personality": "strategic", "tone": "results-driven", "auto_execute": True, "is_active": True,
-         "capabilities": ["pipeline_management", "lead_scoring", "follow_up_strategy", "deal_forecasting", "contact_management"],
-         "tasks_completed": 0, "last_active": None, "training": {}},
-        {"id": str(uuid.uuid4()), "user_id": user_id, "name": "Finance Executive Assistant", "agent_type": "finance",
-         "category": "employee", "platform": "all",
-         "description": "Your CFO — expense tracking, forecasting, invoices, and profit analysis.",
-         "personality": "meticulous", "tone": "precise", "auto_execute": False, "is_active": True,
-         "capabilities": ["expense_tracking", "revenue_forecasting", "invoice_management", "profit_analysis", "cash_flow"],
-         "tasks_completed": 0, "last_active": None, "training": {}},
-        {"id": str(uuid.uuid4()), "user_id": user_id, "name": "Sales Executive Assistant", "agent_type": "sales",
-         "category": "employee", "platform": "all",
-         "description": "Your closer — outreach, proposals, objection handling, and deal flow.",
-         "personality": "persuasive", "tone": "confident", "auto_execute": True, "is_active": True,
-         "capabilities": ["cold_outreach", "proposal_writing", "lead_qualification", "objection_handling", "deal_closing"],
-         "tasks_completed": 0, "last_active": None, "training": {}},
-        {"id": str(uuid.uuid4()), "user_id": user_id, "name": "Operations Executive Assistant", "agent_type": "operations",
-         "category": "employee", "platform": "all",
-         "description": "Your COO — workflows, project management, process optimization.",
-         "personality": "organized", "tone": "efficient", "auto_execute": True, "is_active": True,
-         "capabilities": ["project_management", "workflow_optimization", "milestone_tracking", "team_coordination", "process_automation"],
-         "tasks_completed": 0, "last_active": None, "training": {}},
-        {"id": str(uuid.uuid4()), "user_id": user_id, "name": "HR Executive Assistant", "agent_type": "hr",
-         "category": "employee", "platform": "all",
-         "description": "People ops — hiring, onboarding, policies, and team culture.",
-         "personality": "empathetic", "tone": "supportive", "auto_execute": True, "is_active": True,
-         "capabilities": ["job_descriptions", "onboarding_checklists", "policy_drafting", "hiring_pipeline", "team_culture"],
-         "tasks_completed": 0, "last_active": None, "training": {}},
-        {"id": str(uuid.uuid4()), "user_id": user_id, "name": "Legal Executive Assistant", "agent_type": "legal",
-         "category": "employee", "platform": "all",
-         "description": "Protects your business — contracts, NDAs, compliance, and risk assessment.",
-         "personality": "careful", "tone": "authoritative", "auto_execute": False, "is_active": True,
-         "capabilities": ["contract_drafting", "nda_templates", "terms_of_service", "compliance_checks", "risk_assessment"],
-         "tasks_completed": 0, "last_active": None, "training": {}},
-    ]
-    await db.agents.insert_many(default_agents)
+async def seed_user_agents(user_id: str, plan: str = "free"):
+    """
+    Seed agents based on user's subscription plan.
+    Only gives users the agents they've paid for.
+    Store agents are created dynamically when user connects a store.
+    """
+    plan_config = PRICING_PLANS.get(plan, PRICING_PLANS["free"])
+    included_agents = plan_config.get("included_agents", ["general"])
+    
+    if included_agents == "*":  # Enterprise gets everything
+        included_agents = ["general", "marketing_suite", "analytics", "email", "crm", "finance", "sales", "operations", "hr", "legal"]
+    
+    agents_to_create = []
+    
+    # Always create general assistant
+    if "general" in included_agents:
+        agents_to_create.append({
+            "id": str(uuid.uuid4()), "user_id": user_id, 
+            "name": "orchestrAI Assistant", "agent_type": "general",
+            "category": "core", "platform": "all",
+            "description": "Your central AI assistant — orchestrates work across all your agents and platforms.",
+            "personality": "strategic", "tone": "executive", "auto_execute": False, "is_active": True,
+            "capabilities": ["general_assistance", "agent_coordination", "task_delegation", "knowledge_base"],
+            "tasks_completed": 0, "last_active": None, "training": {}
+        })
+    
+    # Marketing Suite EA
+    if "marketing_suite" in included_agents:
+        agents_to_create.append({
+            "id": str(uuid.uuid4()), "user_id": user_id,
+            "name": "Marketing Executive Assistant", "agent_type": "marketing_suite",
+            "category": "employee", "platform": "all",
+            "description": "Your CMO — campaigns, social media strategy, ad optimization, and content across all connected platforms.",
+            "personality": "bold", "tone": "creative", "auto_execute": True, "is_active": True,
+            "capabilities": ["social_media_management", "campaign_creation", "ad_optimization", "content_calendar", "email_marketing", "influencer_outreach"],
+            "tasks_completed": 0, "last_active": None, "training": {}
+        })
+    
+    # Analytics EA
+    if "analytics" in included_agents:
+        agents_to_create.append({
+            "id": str(uuid.uuid4()), "user_id": user_id,
+            "name": "Analytics Command Center", "agent_type": "analytics",
+            "category": "intelligence", "platform": "all",
+            "description": "Cross-platform intelligence — analyzes all stores and channels for patterns and opportunities.",
+            "personality": "analytical", "tone": "precise", "auto_execute": True, "is_active": True,
+            "capabilities": ["cross_platform_analytics", "trend_prediction", "revenue_forecasting", "competitor_tracking", "customer_intelligence"],
+            "tasks_completed": 0, "last_active": None, "training": {}
+        })
+    
+    # Email EA
+    if "email" in included_agents:
+        agents_to_create.append({
+            "id": str(uuid.uuid4()), "user_id": user_id,
+            "name": "Email Executive Assistant", "agent_type": "email",
+            "category": "employee", "platform": "all",
+            "description": "Manages professional communications — drafts, sequences, inbox management.",
+            "personality": "professional", "tone": "polished", "auto_execute": False, "is_active": True,
+            "capabilities": ["email_drafting", "follow_up_sequences", "inbox_management", "campaign_copy", "professional_correspondence"],
+            "tasks_completed": 0, "last_active": None, "training": {}
+        })
+    
+    # CRM EA
+    if "crm" in included_agents:
+        agents_to_create.append({
+            "id": str(uuid.uuid4()), "user_id": user_id,
+            "name": "CRM Executive Assistant", "agent_type": "crm",
+            "category": "employee", "platform": "all",
+            "description": "Manages customer relationships — pipeline, lead scoring, follow-ups.",
+            "personality": "strategic", "tone": "results-driven", "auto_execute": True, "is_active": True,
+            "capabilities": ["pipeline_management", "lead_scoring", "follow_up_strategy", "deal_forecasting", "contact_management"],
+            "tasks_completed": 0, "last_active": None, "training": {}
+        })
+    
+    # Finance EA
+    if "finance" in included_agents:
+        agents_to_create.append({
+            "id": str(uuid.uuid4()), "user_id": user_id,
+            "name": "Finance Executive Assistant", "agent_type": "finance",
+            "category": "employee", "platform": "all",
+            "description": "Your CFO — expense tracking, forecasting, invoices, and profit analysis.",
+            "personality": "meticulous", "tone": "precise", "auto_execute": False, "is_active": True,
+            "capabilities": ["expense_tracking", "revenue_forecasting", "invoice_management", "profit_analysis", "cash_flow"],
+            "tasks_completed": 0, "last_active": None, "training": {}
+        })
+    
+    # Sales EA
+    if "sales" in included_agents:
+        agents_to_create.append({
+            "id": str(uuid.uuid4()), "user_id": user_id,
+            "name": "Sales Executive Assistant", "agent_type": "sales",
+            "category": "employee", "platform": "all",
+            "description": "Your closer — outreach, proposals, objection handling, and deal flow.",
+            "personality": "persuasive", "tone": "confident", "auto_execute": True, "is_active": True,
+            "capabilities": ["cold_outreach", "proposal_writing", "lead_qualification", "objection_handling", "deal_closing"],
+            "tasks_completed": 0, "last_active": None, "training": {}
+        })
+    
+    # Operations EA
+    if "operations" in included_agents:
+        agents_to_create.append({
+            "id": str(uuid.uuid4()), "user_id": user_id,
+            "name": "Operations Executive Assistant", "agent_type": "operations",
+            "category": "employee", "platform": "all",
+            "description": "Your COO — workflows, project management, process optimization.",
+            "personality": "organized", "tone": "efficient", "auto_execute": True, "is_active": True,
+            "capabilities": ["project_management", "workflow_optimization", "milestone_tracking", "team_coordination", "process_automation"],
+            "tasks_completed": 0, "last_active": None, "training": {}
+        })
+    
+    # HR EA
+    if "hr" in included_agents:
+        agents_to_create.append({
+            "id": str(uuid.uuid4()), "user_id": user_id,
+            "name": "HR Executive Assistant", "agent_type": "hr",
+            "category": "employee", "platform": "all",
+            "description": "People ops — hiring, onboarding, policies, and team culture.",
+            "personality": "empathetic", "tone": "supportive", "auto_execute": True, "is_active": True,
+            "capabilities": ["job_descriptions", "onboarding_checklists", "policy_drafting", "hiring_pipeline", "team_culture"],
+            "tasks_completed": 0, "last_active": None, "training": {}
+        })
+    
+    # Legal EA
+    if "legal" in included_agents:
+        agents_to_create.append({
+            "id": str(uuid.uuid4()), "user_id": user_id,
+            "name": "Legal Executive Assistant", "agent_type": "legal",
+            "category": "employee", "platform": "all",
+            "description": "Protects your business — contracts, NDAs, compliance, and risk assessment.",
+            "personality": "careful", "tone": "authoritative", "auto_execute": False, "is_active": True,
+            "capabilities": ["contract_drafting", "nda_templates", "terms_of_service", "compliance_checks", "risk_assessment"],
+            "tasks_completed": 0, "last_active": None, "training": {}
+        })
+    
+    if agents_to_create:
+        await db.agents.insert_many(agents_to_create)
+        logger.info(f"Seeded {len(agents_to_create)} agents for user {user_id} on {plan} plan")
+
+
+async def create_store_agent(user_id: str, platform: str, store_name: str) -> str:
+    """
+    Create a store-specific agent when user connects a store.
+    Returns the agent ID.
+    """
+    # Check if user's plan allows this store
+    user = await db.users.find_one({"_id": ObjectId(user_id)})
+    plan = user.get("plan", "free") if user else "free"
+    plan_config = PRICING_PLANS.get(plan, PRICING_PLANS["free"])
+    max_stores = plan_config.get("max_stores", 0)
+    
+    if max_stores == 0:
+        raise HTTPException(status_code=403, detail="Your plan doesn't include store integrations. Upgrade to connect stores.")
+    
+    # Count existing stores
+    if max_stores != "unlimited":
+        store_count = await db.stores.count_documents({"user_id": user_id})
+        if store_count >= max_stores:
+            raise HTTPException(status_code=403, detail=f"Your plan allows {max_stores} stores. Upgrade to connect more.")
+    
+    # Platform-specific agent definitions
+    store_agent_configs = {
+        "shopify": {
+            "name": "Shopify Executive Assistant",
+            "description": "Manages your Shopify store — products, inventory, orders, and optimization.",
+            "personality": "strategic", "tone": "executive",
+            "capabilities": ["product_management", "inventory_optimization", "order_processing", "store_setup", "catalog_audit", "social_promo"],
+        },
+        "etsy": {
+            "name": "Etsy Executive Assistant",
+            "description": "Manages your Etsy shop — listings, SEO, reviews, and marketplace strategy.",
+            "personality": "creative", "tone": "artisan",
+            "capabilities": ["listing_optimization", "etsy_seo", "review_management", "shop_policies", "seasonal_strategy", "social_promo"],
+        },
+        "ebay": {
+            "name": "eBay Executive Assistant",
+            "description": "Manages your eBay presence — listings, auctions, pricing, and seller metrics.",
+            "personality": "analytical", "tone": "competitive",
+            "capabilities": ["auction_strategy", "listing_optimization", "pricing_intelligence", "seller_metrics", "bulk_listing", "social_promo"],
+        },
+        "walmart": {
+            "name": "Walmart Executive Assistant",
+            "description": "Manages your Walmart Marketplace — listings, Buy Box strategy, and seller scorecard.",
+            "personality": "analytical", "tone": "precise",
+            "capabilities": ["listing_optimization", "buy_box_strategy", "pricing_intelligence", "seller_scorecard", "fulfillment_tracking", "social_promo"],
+        },
+        "faire": {
+            "name": "Faire Executive Assistant",
+            "description": "Manages your Faire wholesale — pricing tiers, retailer outreach, and B2B orders.",
+            "personality": "professional", "tone": "wholesale",
+            "capabilities": ["wholesale_pricing", "retailer_outreach", "b2b_orders", "faire_search_optimization", "catalog_management", "social_promo"],
+        },
+        "mercari": {
+            "name": "Mercari Executive Assistant",
+            "description": "Manages your Mercari listings — photos, pricing, shipping, and seller ratings.",
+            "personality": "efficient", "tone": "friendly",
+            "capabilities": ["listing_optimization", "competitive_pricing", "shipping_strategy", "rating_management", "resale_trends"],
+        },
+        "poshmark": {
+            "name": "Poshmark Executive Assistant",
+            "description": "Manages your Poshmark closet — sharing, Posh Parties, bundles, and community.",
+            "personality": "social", "tone": "trendy",
+            "capabilities": ["closet_sharing", "posh_parties", "bundle_strategy", "community_engagement", "pricing_strategy"],
+        },
+    }
+    
+    config = store_agent_configs.get(platform)
+    if not config:
+        raise HTTPException(status_code=400, detail=f"Unknown platform: {platform}")
+    
+    agent_id = str(uuid.uuid4())
+    agent_doc = {
+        "id": agent_id, "user_id": user_id,
+        "name": config["name"], "agent_type": platform,
+        "category": "store", "platform": platform,
+        "description": config["description"],
+        "personality": config["personality"], "tone": config["tone"],
+        "auto_execute": True, "is_active": True,
+        "capabilities": config["capabilities"],
+        "tasks_completed": 0, "last_active": None, "training": {}
+    }
+    
+    await db.agents.insert_one(agent_doc)
+    logger.info(f"Created {platform} EA for user {user_id}: {store_name}")
+    return agent_id
 
 async def seed_admin():
     admin_email = os.environ.get("ADMIN_EMAIL")
@@ -1070,9 +1393,10 @@ async def seed_admin():
     if not existing:
         result = await db.users.insert_one({
             "email": admin_email, "password_hash": hash_password(admin_password),
-            "name": "Admin", "role": "admin", "created_at": datetime.now(timezone.utc).isoformat()
+            "name": "Admin", "role": "admin", "plan": "enterprise",
+            "created_at": datetime.now(timezone.utc).isoformat()
         })
-        await seed_user_agents(str(result.inserted_id))
+        await seed_user_agents(str(result.inserted_id), plan="enterprise")
         logger.info("Admin seeded")
     elif not verify_password(admin_password, existing["password_hash"]):
         await db.users.update_one({"email": admin_email}, {"$set": {"password_hash": hash_password(admin_password)}})
@@ -1107,6 +1431,16 @@ async def shutdown():
 @api_router.post("/stores", response_model=StoreResponse)
 async def connect_store(store: StoreCreate, request: Request):
     user = await get_current_user(request)
+    user_id = user["_id"]
+    
+    # Create store-specific agent if it doesn't exist
+    existing_agent = await db.agents.find_one({"user_id": user_id, "agent_type": store.platform})
+    if not existing_agent:
+        try:
+            await create_store_agent(user_id, store.platform, store.name)
+        except HTTPException:
+            # Re-raise plan limit errors
+            raise
     store_doc = {
         "id": str(uuid.uuid4()), "user_id": user["_id"], "name": store.name, "platform": store.platform,
         "store_url": store.store_url, "status": "connected",
@@ -1137,6 +1471,131 @@ async def disconnect_store(store_id: str, request: Request):
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Store not found")
     return {"status": "disconnected"}
+
+# ──────────────── Connectors (Social Media, Business Tools) ────────────────
+
+class ConnectorResponse(BaseModel):
+    id: str
+    platform: str  # twitter, instagram, pinterest, tiktok, linkedin, youtube
+    type: str  # social, business_tool
+    status: str  # connected, disconnected, error
+    connected_at: str
+    last_used_at: Optional[str] = None
+    permissions: Optional[Dict[str, Any]] = None
+
+@api_router.get("/connectors")
+async def get_connectors(request: Request):
+    """List all connected social/business platforms (connectors)."""
+    user = await get_current_user(request)
+    
+    # Find all connectors (social media, business tools)
+    connectors = await db.connectors.find({"user_id": ObjectId(user["_id"])}).to_list(100)
+    
+    result = []
+    for conn in connectors:
+        result.append({
+            "id": str(conn["_id"]),
+            "platform": conn["platform"],
+            "type": conn.get("type", "social"),
+            "status": conn.get("status", "connected"),
+            "connected_at": conn.get("connected_at", datetime.now(timezone.utc)).isoformat(),
+            "last_used_at": conn.get("last_used_at", "").isoformat() if conn.get("last_used_at") else None,
+            "permissions": conn.get("permissions", {}),
+        })
+    
+    return result
+
+@api_router.get("/connectors/{platform}/permissions")
+async def get_connector_permissions_for_platform(platform: str, request: Request):
+    """Get agent permissions for a specific connector platform."""
+    user = await get_current_user(request)
+    
+    # Get connector
+    connector = await db.connectors.find_one({
+        "user_id": ObjectId(user["_id"]),
+        "platform": platform
+    })
+    
+    if not connector:
+        raise HTTPException(status_code=404, detail=f"Connector '{platform}' not found")
+    
+    # Get all user's agents
+    agents = await db.agents.find({"user_id": ObjectId(user["_id"])}).to_list(100)
+    
+    # Build permission matrix
+    permissions_matrix = {}
+    for agent in agents:
+        agent_type = agent["type"]
+        
+        # Check for custom permissions
+        if "permissions" in connector and agent_type in connector["permissions"]:
+            permissions_matrix[agent_type] = connector["permissions"][agent_type]
+        else:
+            # Use default permissions
+            permissions_matrix[agent_type] = get_connector_permissions(platform, agent_type)
+    
+    return {
+        "platform": platform,
+        "permissions": permissions_matrix,
+    }
+
+@api_router.put("/connectors/{platform}/permissions")
+async def update_connector_permissions(platform: str, request: Request, permissions: Dict[str, Any]):
+    """Update agent permissions for a connector (Business+ plan only)."""
+    user = await get_current_user(request)
+    
+    # Check plan (only Business+ can customize permissions)
+    plan = user.get("plan", "free")
+    if plan not in ["business", "enterprise"]:
+        raise HTTPException(
+            status_code=403,
+            detail="Permission customization requires Business or Enterprise plan"
+        )
+    
+    # Update connector permissions
+    result = await db.connectors.update_one(
+        {"user_id": ObjectId(user["_id"]), "platform": platform},
+        {"$set": {"permissions": permissions, "updated_at": datetime.now(timezone.utc)}}
+    )
+    
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail=f"Connector '{platform}' not found")
+    
+    return {"status": "updated", "platform": platform}
+
+async def create_or_update_connector(user_id: str, platform: str, connector_type: str = "social", credentials: dict = None) -> str:
+    """Create or update a social/business connector in the database."""
+    connector_doc = {
+        "user_id": ObjectId(user_id),
+        "platform": platform,
+        "type": connector_type,
+        "status": "connected",
+        "connected_at": datetime.now(timezone.utc),
+        "last_used_at": None,
+    }
+    
+    if credentials:
+        connector_doc["credentials"] = credentials
+    
+    # Initialize with default permissions
+    if platform == "linkedin":
+        connector_doc["permissions"] = DEFAULT_CONNECTOR_PERMISSIONS["linkedin"].copy()
+    else:
+        connector_doc["permissions"] = DEFAULT_CONNECTOR_PERMISSIONS["social"].copy()
+    
+    # Upsert connector
+    result = await db.connectors.update_one(
+        {"user_id": ObjectId(user_id), "platform": platform},
+        {"$set": connector_doc},
+        upsert=True
+    )
+    
+    if result.upserted_id:
+        return str(result.upserted_id)
+    else:
+        # Find existing connector
+        existing = await db.connectors.find_one({"user_id": ObjectId(user_id), "platform": platform})
+        return str(existing["_id"]) if existing else ""
 
 # ──────────────── Agents ────────────────
 
@@ -2291,6 +2750,23 @@ async def shopify_callback(code: str, state: str, shop: str):
                 raise HTTPException(status_code=400, detail="Failed to get access token")
             token_data = resp.json()
             access_token = token_data.get("access_token")
+            
+            # Create Shopify agent if it doesn't exist yet
+            existing_agent = await db.agents.find_one({"user_id": user_id, "agent_type": "shopify"})
+            if not existing_agent:
+                try:
+                    await create_store_agent(user_id, "shopify", shop.replace(".myshopify.com", ""))
+                except HTTPException as plan_error:
+                    # User hit plan limits - show error page
+                    return Response(
+                        content=f"""<html><head></head>
+                        <body style="background:#030712;color:#F87171;font-family:system-ui;display:flex;align-items:center;justify-content:center;height:100vh;flex-direction:column">
+                        <h1 style="font-size:48px">⚠️</h1><h2>Plan Upgrade Required</h2>
+                        <p style="color:#94A3B8;max-width:400px;text-align:center">{plan_error.detail}</p>
+                        <p><a href="/pricing" style="color:#34D399">Upgrade Plan</a></p>
+                        </body></html>""", media_type="text/html"
+                    )
+            
             # Save store with access token
             store_doc = {
                 "id": str(uuid.uuid4()), "user_id": user_id, "name": shop.replace(".myshopify.com", ""),
@@ -2989,9 +3465,31 @@ async def post_to_twitter(req: TwitterPostRequest, request: Request):
     """Post a tweet using OAuth 1.0a user context"""
     import tweepy
     user = await get_current_user(request)
+    user_id = user["_id"]
+    
     if not TWITTER_API_KEY or not TWITTER_ACCESS_TOKEN:
         raise HTTPException(status_code=503, detail="Twitter integration not configured. Add API keys.")
+    
+    # PERMISSION CHECK: Determine which agent is posting
+    agent_type = "marketing_suite"  # Default to Marketing EA
+    
+    # Check if agent has permission to post to Twitter
+    can_post = await check_agent_can_post(user_id, agent_type, "twitter")
+    if not can_post:
+        raise HTTPException(
+            status_code=403,
+            detail=f"Agent '{agent_type}' does not have permission to post to Twitter. Only Marketing EA can post to social media by default."
+        )
+    
     try:
+        # Create/update Twitter connector if not exists
+        await create_or_update_connector(
+            user_id=user_id,
+            platform="twitter",
+            connector_type="social",
+            credentials={"has_token": True}
+        )
+        
         client_tw = tweepy.Client(
             consumer_key=TWITTER_API_KEY,
             consumer_secret=TWITTER_API_SECRET,
@@ -3057,10 +3555,33 @@ async def create_pinterest_pin(req: PinterestPinRequest, request: Request):
     """Create a pin on Pinterest"""
     import httpx
     user = await get_current_user(request)
+    user_id = user["_id"]
+    
     if not PINTEREST_ACCESS_TOKEN:
         raise HTTPException(status_code=503, detail="Pinterest not configured. Add access token.")
+    
+    # PERMISSION CHECK: Determine which agent is posting
+    # For now, assume Marketing EA (in future, pass agent_id in request)
+    agent_type = "marketing_suite"  # Default to Marketing EA
+    
+    # Check if agent has permission to post to Pinterest
+    can_post = await check_agent_can_post(user_id, agent_type, "pinterest")
+    if not can_post:
+        raise HTTPException(
+            status_code=403,
+            detail=f"Agent '{agent_type}' does not have permission to post to Pinterest. Only Marketing EA can post to social media by default."
+        )
+    
     try:
         headers = {"Authorization": f"Bearer {PINTEREST_ACCESS_TOKEN}", "Content-Type": "application/json"}
+
+        # Create/update Pinterest connector if not exists
+        await create_or_update_connector(
+            user_id=user_id,
+            platform="pinterest",
+            connector_type="social",
+            credentials={"has_token": True}  # Don't store actual token in connector
+        )
 
         # If no board specified, get the first board
         board_id = req.board_id
