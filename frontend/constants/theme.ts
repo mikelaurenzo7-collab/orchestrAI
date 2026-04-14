@@ -1,10 +1,11 @@
-// THEONE Design System — Jewel & Luxury Dark Theme
+// orchestrAI Design System — Glassmorphic Dark Theme (Dribbble/visionOS inspired)
 export const Colors = {
   // Backgrounds
   bg: '#030712',
   surface: '#0B101F',
   surfaceElevated: '#141A29',
-  surfaceGlass: 'rgba(3,7,18,0.7)',
+  surfaceGlass: 'rgba(11, 16, 31, 0.65)',
+  surfaceGlassLight: 'rgba(20, 26, 41, 0.5)',
 
   // Brand
   emerald: '#34D399',
@@ -19,13 +20,14 @@ export const Colors = {
   cyanGlow: 'rgba(34,211,238,0.15)',
 
   // Text
-  textPrimary: '#FFFFFF',
+  textPrimary: '#F1F5F9',
   textSecondary: '#94A3B8',
-  textMuted: '#64748B',
+  textMuted: '#475569',
 
   // Borders
-  border: '#1E293B',
+  border: 'rgba(30, 41, 59, 0.6)',
   borderHighlight: 'rgba(52,211,153,0.3)',
+  borderGlass: 'rgba(148, 163, 184, 0.08)',
 };
 
 export const Spacing = {
@@ -60,18 +62,39 @@ export const FontSizes = {
 
 export const Shadows = {
   card: {
-    boxShadow: '0px 4px 12px rgba(0, 0, 0, 0.3)',
+    boxShadow: '0px 4px 12px rgba(0, 0, 0, 0.25)',
   },
   glow: (color: string) => ({
     boxShadow: `0px 0px 16px ${color}66`,
   }),
+  glass: {
+    boxShadow: '0px 2px 8px rgba(0, 0, 0, 0.15)',
+  },
+  depth: {
+    boxShadow: '0px 8px 24px rgba(0, 0, 0, 0.3)',
+  },
 };
 
-// Agent type colors
+// Glass card utility
+export const GlassCard = {
+  backgroundColor: Colors.surfaceGlass,
+  borderWidth: 1,
+  borderColor: Colors.borderGlass,
+  borderRadius: BorderRadius.xxl,
+};
+
+// Agent type colors (platform-specific)
 export const AgentColors: Record<string, { primary: string; glow: string; icon: string }> = {
+  shopify: { primary: '#96BF48', glow: 'rgba(150,191,72,0.15)', icon: 'package' },
+  etsy: { primary: '#F1641E', glow: 'rgba(241,100,30,0.15)', icon: 'package' },
+  ebay: { primary: '#E53238', glow: 'rgba(229,50,56,0.15)', icon: 'package' },
+  twitter: { primary: '#1DA1F2', glow: 'rgba(29,161,242,0.15)', icon: 'megaphone' },
+  pinterest: { primary: '#E60023', glow: 'rgba(230,0,35,0.15)', icon: 'megaphone' },
+  tiktok: { primary: '#FE2C55', glow: 'rgba(254,44,85,0.15)', icon: 'megaphone' },
+  meta: { primary: '#0866FF', glow: 'rgba(8,102,255,0.15)', icon: 'megaphone' },
+  analytics: { primary: Colors.cyan, glow: Colors.cyanGlow, icon: 'bar-chart-3' },
   store_manager: { primary: Colors.emerald, glow: Colors.emeraldGlow, icon: 'package' },
   marketing: { primary: Colors.amber, glow: Colors.amberGlow, icon: 'megaphone' },
-  analytics: { primary: Colors.cyan, glow: Colors.cyanGlow, icon: 'bar-chart-3' },
   customer_service: { primary: Colors.rose, glow: Colors.roseGlow, icon: 'headphones' },
   general: { primary: Colors.emerald, glow: Colors.emeraldGlow, icon: 'bot' },
 };
@@ -91,4 +114,6 @@ export const PlatformColors: Record<string, string> = {
   twitter: '#1DA1F2',
   facebook: '#1877F2',
   tiktok: '#FE2C55',
+  pinterest: '#E60023',
+  meta: '#0866FF',
 };
