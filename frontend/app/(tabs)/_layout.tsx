@@ -1,19 +1,40 @@
 import { Tabs } from 'expo-router';
 import { View, Text, StyleSheet, Platform } from 'react-native';
 import { Colors } from '../../constants/theme';
+import { BlurView } from 'expo-blur';
+import { Home, Bot, MessageSquareText, Zap, Link } from 'lucide-react-native';
+import Animated, { useAnimatedStyle, withSpring } from 'react-native-reanimated';
+import * as Haptics from 'expo-haptics';
 
 type TabIconProps = {
   label: string;
-  emoji: string;
+  Icon: any;
   focused: boolean;
   color: string;
 };
 
-function TabIcon({ label, emoji, focused, color }: TabIconProps) {
+function TabIcon({ label, Icon, focused, color }: TabIconProps) {
+  const animatedIconStyle = useAnimatedStyle(() => {
+    return {
+      transform: [{ scale: withSpring(focused ? 1.15 : 1, { mass: 1, damping: 15, stiffness: 200 }) }],
+    };
+  });
+
+  const animatedLabelStyle = useAnimatedStyle(() => {
+    return {
+      opacity: withSpring(focused ? 1 : 0.6),
+      transform: [{ translateY: withSpring(focused ? 0 : 2) }],
+    };
+  });
+
   return (
     <View style={styles.tabIconWrap}>
-      <Text style={[styles.tabEmoji, focused && styles.tabEmojiActive]}>{emoji}</Text>
-      <Text style={[styles.tabLabel, { color }]}>{label}</Text>
+      <Animated.View style={[styles.iconContainer, animatedIconStyle]}>
+        <Icon size={24} color={color} strokeWidth={focused ? 2.5 : 2} />
+      </Animated.View>
+      <Animated.Text style={[styles.tabLabel, { color }, animatedLabelStyle]}>
+        {label}
+      </Animated.Text>
       {focused && <View style={styles.activeDot} />}
     </View>
   );
@@ -25,8 +46,11 @@ export default function TabLayout() {
       screenOptions={{
         headerShown: false,
         tabBarStyle: styles.tabBar,
+        tabBarBackground: () => (
+          <BlurView intensity={70} tint="dark" style={StyleSheet.absoluteFill} />
+        ),
         tabBarActiveTintColor: Colors.emerald,
-        tabBarInactiveTintColor: Colors.textMuted,
+        tabBarInactiveTintColor: Colors.textSecondary,
         tabBarShowLabel: false,
       }}
     >
@@ -34,41 +58,46 @@ export default function TabLayout() {
         name="index"
         options={{
           tabBarIcon: ({ focused, color }) => (
-            <TabIcon label="HQ" emoji="🏠" focused={focused} color={color} />
+            <TabIcon label="HQ" Icon={Home} focused={focused} color={color} />
           ),
         }}
+        listeners={{ tabPress: () => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light) }}
       />
       <Tabs.Screen
         name="agents"
         options={{
           tabBarIcon: ({ focused, color }) => (
-            <TabIcon label="Agents" emoji="🤖" focused={focused} color={color} />
+            <TabIcon label="Agents" Icon={Bot} focused={focused} color={color} />
           ),
         }}
+        listeners={{ tabPress: () => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light) }}
       />
       <Tabs.Screen
         name="chat"
         options={{
           tabBarIcon: ({ focused, color }) => (
-            <TabIcon label="Chat" emoji="💬" focused={focused} color={color} />
+            <TabIcon label="Chat" Icon={MessageSquareText} focused={focused} color={color} />
           ),
         }}
+        listeners={{ tabPress: () => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light) }}
       />
       <Tabs.Screen
         name="social"
         options={{
           tabBarIcon: ({ focused, color }) => (
-            <TabIcon label="Execute" emoji="⚡" focused={focused} color={color} />
+            <TabIcon label="Execute" Icon={Zap} focused={focused} color={color} />
           ),
         }}
+        listeners={{ tabPress: () => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light) }}
       />
       <Tabs.Screen
         name="stores"
         options={{
           tabBarIcon: ({ focused, color }) => (
-            <TabIcon label="Connect" emoji="🔌" focused={focused} color={color} />
+            <TabIcon label="Connect" Icon={Link} focused={focused} color={color} />
           ),
         }}
+        listeners={{ tabPress: () => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light) }}
       />
     </Tabs>
   );
@@ -76,35 +105,35 @@ export default function TabLayout() {
 
 const styles = StyleSheet.create({
   tabBar: {
-    backgroundColor: 'rgba(3,7,18,0.95)',
-    borderTopColor: Colors.border,
-    borderTopWidth: 1,
-    height: Platform.OS === 'ios' ? 88 : 68,
-    paddingTop: 8,
-    paddingBottom: Platform.OS === 'ios' ? 24 : 8,
+    position: 'absolute',
+    borderTopWidth: 0,
+    elevation: 0,
+    height: Platform.OS === 'ios' ? 88 : 70,
+    backgroundColor: 'transparent', // The BlurView handles the background
   },
   tabIconWrap: {
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 2,
+    paddingTop: 12,
+    width: 60,
   },
-  tabEmoji: {
-    fontSize: 22,
-    opacity: 0.5,
-  },
-  tabEmojiActive: {
-    opacity: 1,
+  iconContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    height: 28,
   },
   tabLabel: {
     fontSize: 10,
-    fontWeight: '700',
-    letterSpacing: 0.5,
+    fontFamily: 'Manrope_600SemiBold',
+    marginTop: 4,
+    marginBottom: 2,
   },
   activeDot: {
     width: 4,
     height: 4,
     borderRadius: 2,
     backgroundColor: Colors.emerald,
-    marginTop: 2,
+    position: 'absolute',
+    bottom: -10,
   },
 });

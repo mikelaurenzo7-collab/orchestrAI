@@ -28,6 +28,17 @@ mongo_url = os.environ['MONGO_URL']
 client = AsyncIOMotorClient(mongo_url)
 db = client[os.environ['DB_NAME']]
 
+# ──────────────── Platform Adapters & Task Runner ────────────────
+from platforms import get_platform, get_platform_prompt, get_all_platforms, get_platform_capabilities
+# Import all platform adapters to trigger registration
+import platforms.shopify  # noqa: F401
+import platforms.etsy     # noqa: F401
+import platforms.browser_platforms  # noqa: F401
+
+from tasks import TaskRunner, TaskType, Task, browser_task_handler
+
+task_runner = TaskRunner(db, max_concurrent=3)
+
 # JWT Config
 JWT_ALGORITHM = "HS256"
 EMERGENT_LLM_KEY = os.environ.get('EMERGENT_LLM_KEY', '')
@@ -76,6 +87,37 @@ async def get_current_user(request: Request) -> dict:
 # FastAPI App
 app = FastAPI(title="orchestrAI API", version="3.0.0")
 api_router = APIRouter(prefix="/api")
+
+# ──────────────── Rate Limiting ────────────────
+import time as _time
+from collections import defaultdict
+
+class _RateLimiter:
+    """In-memory sliding-window rate limiter per user-ID."""
+    def __init__(self):
+        self._hits: Dict[str, list] = defaultdict(list)
+
+    def check(self, key: str, max_requests: int, window_seconds: int) -> bool:
+        now = _time.monotonic()
+        hits = self._hits[key]
+        # Prune expired entries
+        cutoff = now - window_seconds
+        self._hits[key] = hits = [t for t in hits if t > cutoff]
+        if len(hits) >= max_requests:
+            return False
+        hits.append(now)
+        return True
+
+_rate_limiter = _RateLimiter()
+
+# LLM endpoints: 30 requests per minute per user
+_LLM_RATE_LIMIT = int(os.environ.get("LLM_RATE_LIMIT", "30"))
+_LLM_RATE_WINDOW = 60  # seconds
+
+async def enforce_llm_rate_limit(user_id: str):
+    """Raise 429 if user exceeds LLM call limits."""
+    if not _rate_limiter.check(f"llm:{user_id}", _LLM_RATE_LIMIT, _LLM_RATE_WINDOW):
+        raise HTTPException(status_code=429, detail="Rate limit exceeded. Please wait before sending more messages.")
 
 # ──────────────── Auth Models ────────────────
 
@@ -773,6 +815,13 @@ async def get_or_create_chat_with_context(user_id: str, agent_type: str = "gener
     # Build fresh context every time to keep data current
     context = await build_agent_context(user_id, agent_type)
     base_prompt = AGENT_BASE_PROMPTS.get(agent_type, AGENT_BASE_PROMPTS["general"])
+
+    # For platform store agents, enrich with adapter knowledge
+    platform_adapter = get_platform(agent_type)
+    if platform_adapter:
+        platform_prompt = get_platform_prompt(agent_type, context)
+        base_prompt = f"{base_prompt}\n\n{platform_prompt}"
+
     full_prompt = f"""{base_prompt}
 
 ═══════════════════════════════════
@@ -846,8 +895,9 @@ async def register(req: RegisterRequest, response: Response):
 
     access = create_access_token(user_id, email)
     refresh = create_refresh_token(user_id)
-    response.set_cookie(key="access_token", value=access, httponly=True, secure=False, samesite="lax", max_age=86400, path="/")
-    response.set_cookie(key="refresh_token", value=refresh, httponly=True, secure=False, samesite="lax", max_age=604800, path="/")
+    _is_prod = os.environ.get("ENV", "development") == "production"
+    response.set_cookie(key="access_token", value=access, httponly=True, secure=_is_prod, samesite="lax", max_age=86400, path="/")
+    response.set_cookie(key="refresh_token", value=refresh, httponly=True, secure=_is_prod, samesite="lax", max_age=604800, path="/")
 
     return {"id": user_id, "email": email, "name": req.name.strip(), "role": "user", "token": access}
 
@@ -869,8 +919,9 @@ async def login(req: LoginRequest, request: Request, response: Response):
 
     access = create_access_token(user_id, email)
     refresh = create_refresh_token(user_id)
-    response.set_cookie(key="access_token", value=access, httponly=True, secure=False, samesite="lax", max_age=86400, path="/")
-    response.set_cookie(key="refresh_token", value=refresh, httponly=True, secure=False, samesite="lax", max_age=604800, path="/")
+    _is_prod = os.environ.get("ENV", "development") == "production"
+    response.set_cookie(key="access_token", value=access, httponly=True, secure=_is_prod, samesite="lax", max_age=86400, path="/")
+    response.set_cookie(key="refresh_token", value=refresh, httponly=True, secure=_is_prod, samesite="lax", max_age=604800, path="/")
 
     return {"id": user_id, "email": email, "name": user.get("name", ""), "role": user.get("role", "user"), "token": access}
 
@@ -898,7 +949,8 @@ async def refresh_token(request: Request, response: Response):
         if not user:
             raise HTTPException(status_code=401, detail="User not found")
         access = create_access_token(str(user["_id"]), user["email"])
-        response.set_cookie(key="access_token", value=access, httponly=True, secure=False, samesite="lax", max_age=86400, path="/")
+        _is_prod = os.environ.get("ENV", "development") == "production"
+        response.set_cookie(key="access_token", value=access, httponly=True, secure=_is_prod, samesite="lax", max_age=86400, path="/")
         return {"status": "refreshed"}
     except jwt.InvalidTokenError:
         raise HTTPException(status_code=401, detail="Invalid refresh token")
@@ -1009,8 +1061,11 @@ async def seed_user_agents(user_id: str):
     await db.agents.insert_many(default_agents)
 
 async def seed_admin():
-    admin_email = os.environ.get("ADMIN_EMAIL", "admin@orchestrai.app")
-    admin_password = os.environ.get("ADMIN_PASSWORD", "Orchestr2026!")
+    admin_email = os.environ.get("ADMIN_EMAIL")
+    admin_password = os.environ.get("ADMIN_PASSWORD")
+    if not admin_email or not admin_password:
+        logger.warning("ADMIN_EMAIL and ADMIN_PASSWORD env vars not set — skipping admin seed")
+        return
     existing = await db.users.find_one({"email": admin_email})
     if not existing:
         result = await db.users.insert_one({
@@ -1032,10 +1087,20 @@ async def startup():
     await db.actions.create_index([("user_id", 1), ("status", 1)])
     await db.social_content.create_index("user_id")
     await db.tasks.create_index("user_id")
+    await db.tasks.create_index([("user_id", 1), ("status", 1)])
     await db.activity_log.create_index([("user_id", 1), ("timestamp", -1)])
     await db.agent_memory.create_index([("user_id", 1), ("agent_type", 1)])
     await db.user_profiles.create_index("user_id")
     await seed_admin()
+    # Start background task runner for browser automation
+    task_runner.register_handler(TaskType.BROWSER_ACTION, browser_task_handler)
+    await task_runner.start()
+    logger.info("Background task runner started")
+
+@app.on_event("shutdown")
+async def shutdown():
+    await task_runner.stop()
+    logger.info("Background task runner stopped")
 
 # ──────────────── Stores ────────────────
 
@@ -1112,6 +1177,9 @@ async def chat_with_agent(req: ChatRequest, request: Request):
     user = await get_current_user(request)
     user_id = user["_id"]
 
+    # Rate limit LLM calls
+    await enforce_llm_rate_limit(str(user_id))
+
     # ── Social posting is handled by Marketing EA and Store EAs ──
     # Non-marketing, non-store agents cannot post to social directly
     social_context = ""
@@ -1133,6 +1201,10 @@ async def chat_with_agent(req: ChatRequest, request: Request):
         social_context = "\n\n[SOCIAL POSTING: You do not post to social media directly. If the user asks for social content, recommend they use the Marketing EA which orchestrates all social platforms.]"
 
     chat = await get_or_create_chat_with_context(user_id, req.agent_type)
+
+    # ── PROMPT INJECTION GUARD: strip control prefixes from user input ──
+    import re
+    sanitized_message = re.sub(r'(?mi)^(ACTION|MEMORY)\s*:', '[FILTERED]:', req.message)
 
     await db.chat_messages.insert_one({"user_id": user_id, "session_id": user_id, "agent_type": req.agent_type,
         "role": "user", "content": req.message, "timestamp": datetime.now(timezone.utc).isoformat()})
@@ -1159,7 +1231,7 @@ ACTION:CREATE_COLLECTION|title=Collection Name|description=Collection descriptio
 
 You can include MULTIPLE action lines. The user will approve each one before it executes on their store. Always explain what you're about to create BEFORE the action lines. Be creative with product names, descriptions, and pricing based on the niche.]"""
 
-        enhanced_msg = req.message + store_context + action_instruction + social_context + "\n\n[SYSTEM: If the user reveals important facts about their business (product types, revenue goals, pain points, preferences), remember them by ending your response with a line starting with 'MEMORY:' followed by a key=value pair. Example: MEMORY: main_product=handmade jewelry. Only do this when genuinely new info is shared. Do NOT include MEMORY lines for casual chat.]"
+        enhanced_msg = sanitized_message + store_context + action_instruction + social_context + "\n\n[SYSTEM: If the user reveals important facts about their business (product types, revenue goals, pain points, preferences), remember them by ending your response with a line starting with 'MEMORY:' followed by a key=value pair. Example: MEMORY: main_product=handmade jewelry. Only do this when genuinely new info is shared. Do NOT include MEMORY lines for casual chat.]"
         response = await chat.send_message(UserMessage(text=enhanced_msg))
 
         # Extract and save memory if present
@@ -1381,6 +1453,9 @@ async def execute_action(req: ActionRequest, request: Request):
     """Execute a single agent action — AI generates the deliverable"""
     user = await get_current_user(request)
     user_id = user["_id"]
+
+    # Rate limit LLM calls
+    await enforce_llm_rate_limit(str(user_id))
 
     # Find the action definition
     agent_actions = AGENT_ACTIONS.get(req.agent_type, [])
@@ -1975,6 +2050,79 @@ async def get_browser_task(task_id: str, request: Request):
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
     return task
+
+# ──────────────── Background Task Runner ────────────────
+
+class BackgroundTaskSubmit(BaseModel):
+    platform: str
+    action: str
+    payload: dict = {}
+    store_id: Optional[str] = None
+
+@api_router.post("/background-tasks/submit")
+async def submit_background_task(req: BackgroundTaskSubmit, request: Request):
+    """Submit a browser automation task to the background queue."""
+    user = await get_current_user(request)
+    adapter = get_platform(req.platform)
+    if not adapter:
+        raise HTTPException(status_code=400, detail=f"Unknown platform: {req.platform}")
+    caps = adapter.capabilities()
+    cap = next((c for c in caps if c.id == req.action), None)
+    if not cap:
+        raise HTTPException(status_code=400, detail=f"Unknown action: {req.action} for {req.platform}")
+    task = Task(
+        id=str(uuid.uuid4()),
+        user_id=str(user["_id"]),
+        task_type=TaskType.BROWSER_ACTION,
+        platform=req.platform,
+        action=req.action,
+        payload=req.payload,
+    )
+    await task_runner.submit(task)
+    await db.activity_log.insert_one({
+        "user_id": user["_id"], "type": "task_submitted",
+        "message": f"Queued {req.action} on {req.platform}",
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    })
+    return {"task_id": task.id, "status": "queued", "platform": req.platform, "action": req.action}
+
+@api_router.get("/background-tasks/{task_id}")
+async def get_background_task_status(task_id: str, request: Request):
+    """Poll the status of a background task."""
+    user = await get_current_user(request)
+    doc = await db.background_tasks.find_one(
+        {"id": task_id, "user_id": str(user["_id"])},
+        {"_id": 0, "user_id": 0}
+    )
+    if not doc:
+        raise HTTPException(status_code=404, detail="Task not found")
+    return doc
+
+@api_router.get("/background-tasks")
+async def list_background_tasks(request: Request, status: Optional[str] = None, limit: int = 20):
+    """List background tasks for the current user."""
+    user = await get_current_user(request)
+    query: dict = {"user_id": str(user["_id"])}
+    if status:
+        query["status"] = status
+    tasks = await db.background_tasks.find(query, {"_id": 0, "user_id": 0}).sort("created_at", -1).to_list(limit)
+    return tasks
+
+@api_router.get("/platforms")
+async def list_platforms():
+    """List all available platform adapters and their capabilities."""
+    result = {}
+    for pid, adapter in get_all_platforms().items():
+        caps = adapter.capabilities()
+        result[pid] = {
+            "name": adapter.platform_name,
+            "has_api": adapter.has_api,
+            "capabilities": [
+                {"id": c.id, "name": c.name, "method": c.method.value}
+                for c in caps
+            ],
+        }
+    return result
 
 # ──────────────── Dashboard ────────────────
 
@@ -3084,12 +3232,13 @@ async def health():
 
 app.include_router(api_router)
 
+ALLOWED_ORIGINS = os.environ.get("ALLOWED_ORIGINS", "http://localhost:8081,http://localhost:19006").split(",")
 app.add_middleware(
     CORSMiddleware,
     allow_credentials=True,
-    allow_origins=["*"],
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_origins=ALLOWED_ORIGINS,
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type"],
 )
 
 @app.on_event("shutdown")

@@ -1,51 +1,39 @@
-import { useEffect, useState, useCallback } from 'react';
-import {
-  View, Text, StyleSheet, ScrollView, RefreshControl,
-  TouchableOpacity, ActivityIndicator, Switch,
-} from 'react-native';
+import { useState, useCallback, useEffect } from 'react';
+import { View, Text, StyleSheet, ScrollView, RefreshControl, Image, Dimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { router } from 'expo-router';
+import { useRouter } from 'expo-router';
 import { authFetch } from '../../utils/api';
-import { Colors, Spacing, BorderRadius, FontSizes, Shadows, AgentColors } from '../../constants/theme';
+import { Colors, Fonts } from '../../constants/theme';
+import { BlurView } from 'expo-blur';
+import { Bot, ShieldCheck, Activity, TerminalSquare, AlertCircle, ShoppingBag, Zap, Mail, Briefcase, FileText, Smartphone, Megaphone } from 'lucide-react-native';
+import Animated, { FadeIn, FadeInDown, SlideInUp } from 'react-native-reanimated';
+import * as Haptics from 'expo-haptics';
+import { AnimatedPressable } from '../../components/AnimatedPressable';
 
-const AGENT_ROUTINES: Record<string, { daily: string[]; weekly: string[] }> = {
-  store_manager: {
-    daily: ['Check inventory & flag low stock', 'Monitor new orders & fulfillment', 'Optimize underperforming listings'],
-    weekly: ['Full product catalog audit', 'Competitive price analysis', 'Store health report'],
-  },
-  marketing_suite: {
-    daily: ['Post to connected socials at peak time', 'Monitor & reply to comments/mentions', 'Track content performance'],
-    weekly: ['Generate 7-day content calendar', 'A/B test top content angles', 'Cross-platform campaign review'],
-  },
-  analytics: {
-    daily: ['Monitor sales anomalies', 'Track conversion rate shifts', 'Surface trending products'],
-    weekly: ['Full performance report', 'Customer behavior analysis', 'Revenue forecast & trends'],
-  },
-  customer_service: {
-    daily: ['Draft customer responses', 'Update FAQ from common questions', 'Monitor review sentiment'],
-    weekly: ['Support quality audit', 'Recurring pain point analysis', 'Satisfaction report'],
-  },
+const { width } = Dimensions.get('window');
+
+const AGENT_MAPPINGS: Record<string, { icon: any, color: string, badge: string }> = {
+  general: { icon: TerminalSquare, color: Colors.emerald, badge: 'CORE' },
+  shopify: { icon: ShoppingBag, color: '#96BF48', badge: 'COMMERCE' },
+  etsy: { icon: StoreIcon, color: '#F1641E', badge: 'COMMERCE' },
+  ebay: { icon: ShoppingBag, color: '#E53238', badge: 'COMMERCE' },
+  marketing_suite: { icon: Megaphone, color: '#FE2C55', badge: 'MARKETING' },
+  analytics: { icon: Activity, color: '#0866FF', badge: 'INTELLIGENCE' },
+  email: { icon: Mail, color: '#EA4335', badge: 'COMMUNICATION' },
+  crm: { icon: ShieldCheck, color: '#FF7A59', badge: 'SALES' },
+  finance: { icon: Zap, color: '#2CA01C', badge: 'FINANCE' },
+  hr: { icon: Briefcase, color: '#FF9900', badge: 'PEOPLE' },
+  legal: { icon: FileText, color: '#7B51AD', badge: 'COMPLIANCE' },
+  default: { icon: Bot, color: Colors.emerald, badge: 'AGENT' },
 };
 
-const CATEGORY_ORDER = ['store', 'employee', 'intelligence'];
-const CATEGORY_LABELS: Record<string, string> = {
-  store: 'STORE EAs',
-  employee: 'EMPLOYEE EAs',
-  intelligence: 'INTELLIGENCE',
-};
+function StoreIcon(props: any) { return <ShoppingBag {...props} />; }
 
-type Agent = {
-  id: string; name: string; agent_type: string; description: string;
-  personality: string; tone: string; auto_execute: boolean; is_active: boolean;
-  capabilities: string[]; tasks_completed: number; last_active: string | null;
-  category?: string;
-};
-
-export default function AgentsScreen() {
-  const [agents, setAgents] = useState<Agent[]>([]);
+export default function AgentsHubScreen() {
+  const router = useRouter();
+  const [agents, setAgents] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [expandedId, setExpandedId] = useState<string | null>(null);
 
   const fetchAgents = useCallback(async () => {
     try {
@@ -57,131 +45,83 @@ export default function AgentsScreen() {
 
   useEffect(() => { fetchAgents(); }, [fetchAgents]);
 
-  const toggleField = async (id: string, field: string, val: boolean) => {
-    try {
-      await authFetch(`/api/agents/${id}`, { method: 'PATCH', body: JSON.stringify({ [field]: !val }) });
-      setAgents(p => p.map(a => a.id === id ? { ...a, [field]: !val } : a));
-    } catch (e) { console.error(e); }
+  const navigateToChat = (agentType: string) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    router.push({ pathname: '/chat', params: { agent: agentType } });
   };
-
-  const getAgentEmoji = (type: string) => {
-    const map: Record<string, string> = {
-      shopify: '🛍️', etsy: '🧶', ebay: '🏷️', walmart: '🏬', faire: '🏪', mercari: '🔴', poshmark: '👗',
-      marketing_suite: '📣', analytics: '📊', email: '📧', crm: '🤝', finance: '💰',
-      sales: '🎯', operations: '⚙️', hr: '👥', legal: '📋',
-    };
-    return map[type] || '🤖';
-  };
-
-  // Group agents by category
-  const grouped = CATEGORY_ORDER.map(cat => ({
-    category: cat,
-    label: CATEGORY_LABELS[cat] || cat.toUpperCase(),
-    agents: agents.filter(a => (a.category || 'employee') === cat),
-  })).filter(g => g.agents.length > 0);
-
-  if (loading) return (
-    <SafeAreaView style={s.container}><View style={s.center}>
-      <ActivityIndicator size="large" color={Colors.emerald} />
-    </View></SafeAreaView>
-  );
 
   return (
-    <SafeAreaView style={s.container}>
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={s.scroll}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); fetchAgents(); }} tintColor={Colors.emerald} />}>
-        <Text style={s.overline}>THE SYMPHONY</Text>
-        <Text style={s.title}>Agent Hub</Text>
-        <Text style={s.subtitle}>{agents.length} executive assistants running your empire</Text>
-
-        {grouped.map((group) => (
-          <View key={group.category}>
-            <Text style={s.sectionLabel}>{group.label}</Text>
-            {group.agents.map((agent) => {
-              const ac = AgentColors[agent.agent_type] || AgentColors.general;
-              const exp = expandedId === agent.id;
-              const emoji = getAgentEmoji(agent.agent_type);
-
-              return (
-                <TouchableOpacity key={agent.id} testID={`agent-card-${agent.agent_type}`}
-                  style={[s.card, { borderColor: agent.is_active ? ac.primary + '30' : Colors.border }]}
-                  activeOpacity={0.85} onPress={() => setExpandedId(exp ? null : agent.id)}>
-                  <View style={s.row}>
-                    <View style={[s.avatar, { backgroundColor: ac.glow }]}><Text style={{ fontSize: 24 }}>{emoji}</Text></View>
-                    <View style={{ flex: 1, marginLeft: Spacing.md }}>
-                      <Text style={s.agentName}>{agent.name}</Text>
-                      <Text style={s.agentType}>{agent.agent_type.replace(/_/g, ' ').toUpperCase()}</Text>
-                    </View>
-                    <View style={[s.pill, { backgroundColor: agent.is_active ? ac.glow : Colors.surfaceElevated }]}>
-                      <View style={[s.pillDot, { backgroundColor: agent.is_active ? ac.primary : Colors.textMuted }]} />
-                      <Text style={[s.pillText, { color: agent.is_active ? ac.primary : Colors.textMuted }]}>
-                        {agent.is_active ? 'ACTIVE' : 'OFF'}
-                      </Text>
-                    </View>
-                  </View>
-                  <Text style={s.desc}>{agent.description}</Text>
-                  <View style={s.statsRow}>
-                    <View style={{ flex: 1 }}><Text style={[s.statVal, { color: ac.primary }]}>{agent.tasks_completed}</Text><Text style={s.statLabel}>Tasks</Text></View>
-                    <View style={{ flex: 1 }}><Text style={[s.statVal, { color: ac.primary }]}>{agent.capabilities.length}</Text><Text style={s.statLabel}>Skills</Text></View>
-                    <View style={{ flex: 1 }}><Text style={[s.statVal, { color: ac.primary }]}>{agent.personality}</Text><Text style={s.statLabel}>Persona</Text></View>
-                  </View>
-                  {exp && (
-                    <View style={{ marginTop: Spacing.md }}>
-                      <View style={s.divider} />
-                      <Text style={s.capTitle}>Capabilities</Text>
-                      <View style={s.caps}>
-                        {agent.capabilities.map((c, i) => (
-                          <View key={i} style={[s.capPill, { borderColor: ac.primary + '30' }]}>
-                            <Text style={[s.capText, { color: ac.primary }]}>{c.replace(/_/g, ' ')}</Text>
-                          </View>
-                        ))}
-                      </View>
-                      <View style={s.ctrlRow}>
-                        <Text style={s.ctrlLabel}>Active</Text>
-                        <Switch value={agent.is_active} onValueChange={() => toggleField(agent.id, 'is_active', agent.is_active)}
-                          trackColor={{ false: Colors.surfaceElevated, true: ac.primary + '50' }} thumbColor={agent.is_active ? ac.primary : Colors.textMuted} />
-                      </View>
-                      <View style={s.ctrlRow}>
-                        <Text style={s.ctrlLabel}>Auto-Execute</Text>
-                        <Switch value={agent.auto_execute} onValueChange={() => toggleField(agent.id, 'auto_execute', agent.auto_execute)}
-                          trackColor={{ false: Colors.surfaceElevated, true: ac.primary + '50' }} thumbColor={agent.auto_execute ? ac.primary : Colors.textMuted} />
-                      </View>
-                      {/* Autopilot Routines Preview */}
-                      {agent.auto_execute && AGENT_ROUTINES[agent.agent_type] && (
-                        <View style={s.routineSection}>
-                          <Text style={[s.routineTitle, { color: ac.primary }]}>Autopilot Routines</Text>
-                          <Text style={s.routineSubtitle}>Daily</Text>
-                          {AGENT_ROUTINES[agent.agent_type].daily.map((r, i) => (
-                            <View key={`d${i}`} style={s.routineRow}>
-                              <View style={[s.routineDot, { backgroundColor: ac.primary }]} />
-                              <Text style={s.routineText}>{r}</Text>
-                            </View>
-                          ))}
-                          <Text style={[s.routineSubtitle, { marginTop: 8 }]}>Weekly</Text>
-                          {AGENT_ROUTINES[agent.agent_type].weekly.map((r, i) => (
-                            <View key={`w${i}`} style={s.routineRow}>
-                              <View style={[s.routineDot, { backgroundColor: ac.primary + '60' }]} />
-                              <Text style={s.routineText}>{r}</Text>
-                            </View>
-                          ))}
-                        </View>
-                      )}
-                      {/* Chat Button */}
-                      <TouchableOpacity testID={`chat-agent-${agent.agent_type}`}
-                        style={[s.chatBtn, { backgroundColor: ac.primary }]}
-                        onPress={() => {
-                          router.push({ pathname: '/(tabs)/chat', params: { agent: agent.agent_type } });
-                        }}>
-                        <Text style={s.chatBtnText}>Chat with {agent.name.split(' ')[0]}</Text>
-                      </TouchableOpacity>
-                    </View>
-                  )}
-                </TouchableOpacity>
-              );
-            })}
+    <SafeAreaView style={s.container} edges={['top']}>
+      <Animated.View entering={FadeIn.duration(600)} style={s.header}>
+        <View style={s.headerInner}>
+          <View style={s.iconBg}><Bot size={24} color={Colors.emerald} /></View>
+          <View>
+            <Text style={s.title}>Agent Hub</Text>
+            <Text style={s.sub}>Your autonomous AI workforce.</Text>
           </View>
-        ))}
-        <View style={{ height: 32 }} />
+        </View>
+      </Animated.View>
+
+      <ScrollView
+        style={s.scroll}
+        showsVerticalScrollIndicator={false}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); fetchAgents(); Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); }} tintColor={Colors.emerald} />}
+      >
+        <Animated.View entering={FadeInDown.duration(600).delay(100)} style={s.grid}>
+          {agents.map((agent, i) => {
+            const meta = AGENT_MAPPINGS[agent.agent_type] || AGENT_MAPPINGS.default;
+            return (
+              <AnimatedPressable
+                key={agent.agent_type}
+                haptic="light"
+                scaleDown={0.92}
+                onPress={() => navigateToChat(agent.agent_type)}
+                style={[s.card, { borderColor: `${meta.color}20` }]}
+              >
+                <BlurView intensity={30} tint="dark" style={s.cardInner}>
+                  <View style={s.cardHead}>
+                    <View style={[s.badgeWrap, { backgroundColor: `${meta.color}20` }]}>
+                      <Text style={[s.badgeTxt, { color: meta.color }]}>{meta.badge}</Text>
+                    </View>
+                    {agent.is_active ? <View style={s.activeDot} /> : null}
+                  </View>
+                  
+                  <View style={[s.iconBox, { backgroundColor: `${meta.color}15` }]}>
+                    <meta.icon size={32} color={meta.color} />
+                  </View>
+                  
+                  <Text style={s.agentName}>{agent.name}</Text>
+                  
+                  <View style={s.statsWrap}>
+                    <View style={s.statBox}>
+                      <Text style={s.statVal}>{agent.tasks_completed}</Text>
+                      <Text style={s.statLabel}>Tasks</Text>
+                    </View>
+                    <View style={s.statDiv} />
+                    <View style={s.statBox}>
+                      <Text style={s.statVal}>Lvl {agent.level}</Text>
+                      <Text style={s.statLabel}>Skill</Text>
+                    </View>
+                  </View>
+                  
+                </BlurView>
+              </AnimatedPressable>
+            );
+          })}
+          
+          {/* Add New Agent Placeholder */}
+          <AnimatedPressable haptic="light" style={[s.card, s.cardDashed]} onPress={() => Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning)}>
+             <BlurView intensity={10} tint="dark" style={[s.cardInner, s.center]}>
+                <View style={[s.iconBox, { backgroundColor: `${Colors.textMuted}20` }]}>
+                  <ShieldCheck size={32} color={Colors.textMuted} />
+                </View>
+                <Text style={s.agentName}>Hire Agent</Text>
+                <Text style={s.statLabel}>Unlock next tier</Text>
+             </BlurView>
+          </AnimatedPressable>
+
+        </Animated.View>
+        <View style={{ height: 100 }} />
       </ScrollView>
     </SafeAreaView>
   );
@@ -189,37 +129,26 @@ export default function AgentsScreen() {
 
 const s = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.bg },
-  center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  scroll: { padding: Spacing.lg },
-  overline: { fontSize: FontSizes.xs, fontWeight: '800', letterSpacing: 3, color: Colors.emerald, marginBottom: 4 },
-  title: { fontSize: FontSizes.xxxl, fontWeight: '900', color: Colors.textPrimary, letterSpacing: -0.5 },
-  subtitle: { fontSize: FontSizes.md, color: Colors.textSecondary, marginBottom: Spacing.xl },
-  sectionLabel: { fontSize: FontSizes.xs, fontWeight: '800', letterSpacing: 2, color: Colors.textMuted, marginTop: Spacing.lg, marginBottom: Spacing.md },
-  card: { backgroundColor: Colors.surface, borderRadius: BorderRadius.xl, padding: Spacing.xl, borderWidth: 1, marginBottom: Spacing.lg, ...Shadows.card },
-  row: { flexDirection: 'row', alignItems: 'center', marginBottom: Spacing.md },
-  avatar: { width: 48, height: 48, borderRadius: BorderRadius.lg, justifyContent: 'center', alignItems: 'center' },
-  agentName: { fontSize: FontSizes.lg, fontWeight: '800', color: Colors.textPrimary },
-  agentType: { fontSize: FontSizes.xs, fontWeight: '700', color: Colors.textMuted, letterSpacing: 1.5, marginTop: 2 },
-  pill: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 4, borderRadius: BorderRadius.full },
-  pillDot: { width: 6, height: 6, borderRadius: 3 },
-  pillText: { fontSize: FontSizes.xs, fontWeight: '800', letterSpacing: 0.5 },
-  desc: { fontSize: FontSizes.sm, color: Colors.textSecondary, lineHeight: 20, marginBottom: Spacing.md },
-  statsRow: { flexDirection: 'row', gap: Spacing.lg },
-  statVal: { fontSize: FontSizes.lg, fontWeight: '800' },
-  statLabel: { fontSize: FontSizes.xs, color: Colors.textMuted, marginTop: 2 },
-  divider: { height: 1, backgroundColor: Colors.border, marginBottom: Spacing.lg },
-  capTitle: { fontSize: FontSizes.sm, fontWeight: '700', color: Colors.textSecondary, marginBottom: Spacing.sm },
-  caps: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.sm, marginBottom: Spacing.lg },
-  capPill: { borderWidth: 1, borderRadius: BorderRadius.full, paddingHorizontal: 12, paddingVertical: 6 },
-  capText: { fontSize: FontSizes.xs, fontWeight: '700', textTransform: 'capitalize' },
-  ctrlRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: Spacing.sm },
-  ctrlLabel: { fontSize: FontSizes.md, color: Colors.textPrimary, fontWeight: '600' },
-  routineSection: { marginTop: Spacing.md, backgroundColor: Colors.surfaceElevated, borderRadius: BorderRadius.lg, padding: Spacing.md },
-  routineTitle: { fontSize: FontSizes.sm, fontWeight: '800', marginBottom: 8, letterSpacing: 0.5 },
-  routineSubtitle: { fontSize: FontSizes.xs, fontWeight: '700', color: Colors.textMuted, letterSpacing: 1, marginBottom: 4 },
-  routineRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 3 },
-  routineDot: { width: 5, height: 5, borderRadius: 2.5, marginRight: 8 },
-  routineText: { fontSize: FontSizes.xs, color: Colors.textSecondary, lineHeight: 18, flex: 1 },
-  chatBtn: { marginTop: Spacing.lg, borderRadius: BorderRadius.lg, paddingVertical: 14, alignItems: 'center' },
-  chatBtnText: { fontSize: FontSizes.md, fontWeight: '800', color: Colors.bg },
+  header: { padding: 20, paddingTop: 16, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.05)' },
+  headerInner: { flexDirection: 'row', alignItems: 'center', gap: 16 },
+  iconBg: { width: 48, height: 48, borderRadius: 24, backgroundColor: `${Colors.emerald}15`, justifyContent: 'center', alignItems: 'center' },
+  title: { color: Colors.textPrimary, fontSize: 32, fontFamily: Fonts.bold, letterSpacing: -0.5 },
+  sub: { color: Colors.textSecondary, fontSize: 15, fontFamily: Fonts.bodyMedium, marginTop: 4 },
+  scroll: { padding: 16 },
+  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 16 },
+  card: { width: (width - 48) / 2, backgroundColor: `${Colors.surface}60`, borderRadius: 24, overflow: 'hidden', borderWidth: 1, shadowColor: '#000', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.3, shadowRadius: 20, elevation: 8 },
+  cardInner: { padding: 16, alignItems: 'center', minHeight: 220 },
+  cardDashed: { borderColor: `${Colors.textMuted}40`, borderStyle: 'dashed' },
+  center: { justifyContent: 'center' },
+  cardHead: { flexDirection: 'row', justifyContent: 'space-between', width: '100%', alignItems: 'center', marginBottom: 16 },
+  badgeWrap: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12 },
+  badgeTxt: { fontSize: 10, fontFamily: Fonts.bold, letterSpacing: 0.5 },
+  activeDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: Colors.emerald, shadowColor: Colors.emerald, shadowOpacity: 0.8, shadowRadius: 4, shadowOffset: { width: 0, height: 0 } },
+  iconBox: { width: 64, height: 64, borderRadius: 20, justifyContent: 'center', alignItems: 'center', marginBottom: 16 },
+  agentName: { color: Colors.textPrimary, fontSize: 18, fontFamily: Fonts.bold, letterSpacing: -0.3, textAlign: 'center' },
+  statsWrap: { flexDirection: 'row', marginTop: 'auto', paddingTop: 16, width: '100%', alignItems: 'center', borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.05)' },
+  statBox: { flex: 1, alignItems: 'center' },
+  statDiv: { width: 1, height: 20, backgroundColor: 'rgba(255,255,255,0.1)' },
+  statVal: { color: Colors.textPrimary, fontSize: 16, fontFamily: Fonts.bold },
+  statLabel: { color: Colors.textMuted, fontSize: 11, fontFamily: Fonts.bodyMedium, marginTop: 2 },
 });

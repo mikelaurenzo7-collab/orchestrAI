@@ -1,279 +1,303 @@
-import { useState, useRef, useEffect, useCallback } from 'react';
-import {
-  View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  TextInput, KeyboardAvoidingView, Platform, ActivityIndicator, Keyboard, Image,
-} from 'react-native';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
+import { View, Text, StyleSheet, FlatList, TextInput, KeyboardAvoidingView, Platform, Keyboard, Dimensions, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams } from 'expo-router';
+import { BlurView } from 'expo-blur';
+import Animated, { FadeInDown, FadeIn, LinearTransition, Easing, withRepeat, withTiming, useSharedValue, useAnimatedStyle } from 'react-native-reanimated';
+import { Colors, Typography } from '../../constants/theme';
+import { Send, Bot, User, ShoppingCart, TrendingUp, Mail, Users, Calculator, BrainCircuit, BarChart2, Shield, Settings } from 'lucide-react-native';
+import AnimatedPressable from '../../components/AnimatedPressable';
+import * as Haptics from 'expo-haptics';
 import { authFetch } from '../../utils/api';
-import { Colors, Spacing, BorderRadius, FontSizes, AgentColors } from '../../constants/theme';
 
-type Message = { role: string; content: string; timestamp: string; agent_type?: string };
-const AGENTS = [
-  { type: 'general', name: 'orchestrAI', icon: '🎵', cat: 'core' },
-  // Store EAs
-  { type: 'shopify', name: 'Shopify', icon: '🛍️', cat: 'store' },
-  { type: 'etsy', name: 'Etsy', icon: '🧶', cat: 'store' },
-  { type: 'ebay', name: 'eBay', icon: '🏷️', cat: 'store' },
-  { type: 'walmart', name: 'Walmart', icon: '🏬', cat: 'store' },
-  { type: 'faire', name: 'Faire', icon: '🏪', cat: 'store' },
-  { type: 'mercari', name: 'Mercari', icon: '🔴', cat: 'store' },
-  { type: 'poshmark', name: 'Poshmark', icon: '👗', cat: 'store' },
-  // Employee EAs
-  { type: 'marketing_suite', name: 'Marketing', icon: '📣', cat: 'employee' },
-  { type: 'analytics', name: 'Analytics', icon: '📊', cat: 'employee' },
-  { type: 'email', name: 'Email', icon: '📧', cat: 'employee' },
-  { type: 'crm', name: 'CRM', icon: '🤝', cat: 'employee' },
-  { type: 'finance', name: 'Finance', icon: '💰', cat: 'employee' },
-  { type: 'sales', name: 'Sales', icon: '🎯', cat: 'employee' },
-  { type: 'operations', name: 'Ops', icon: '⚙️', cat: 'employee' },
-  { type: 'hr', name: 'HR', icon: '👥', cat: 'employee' },
-  { type: 'legal', name: 'Legal', icon: '📋', cat: 'employee' },
-];
+const { width: W } = Dimensions.get('window');
+
+type Message = { id: string; role: string; content: string; timestamp: string; agent_type?: string };
+
+const AGENTS: Record<string, { name: string; icon: any; color: string }> = {
+  general: { name: 'orchestrAI', icon: BrainCircuit, color: Colors.emerald },
+  shopify: { name: 'Shopify EA', icon: ShoppingCart, color: '#95BF47' },
+  marketing_suite: { name: 'Marketing Exec', icon: TrendingUp, color: Colors.blue },
+  analytics: { name: 'Data Analyst', icon: BarChart2, color: Colors.accent },
+  email: { name: 'Comms Exec', icon: Mail, color: '#fff' },
+  crm: { name: 'CRM Specialist', icon: Users, color: '#F59E0B' },
+  finance: { name: 'CFO AI', icon: Calculator, color: '#10B981' },
+  operations: { name: 'Ops Manager', icon: Settings, color: '#8B5CF6' },
+  legal: { name: 'Compliance AI', icon: Shield, color: '#EF4444' },
+};
+
+function TypingIndicator() {
+  const dot1 = useSharedValue(0.3);
+  const dot2 = useSharedValue(0.3);
+  const dot3 = useSharedValue(0.3);
+
+  useEffect(() => {
+    dot1.value = withRepeat(withTiming(1, { duration: 600, easing: Easing.inOut(Easing.ease) }), -1, true);
+    setTimeout(() => { dot2.value = withRepeat(withTiming(1, { duration: 600, easing: Easing.inOut(Easing.ease) }), -1, true); }, 200);
+    setTimeout(() => { dot3.value = withRepeat(withTiming(1, { duration: 600, easing: Easing.inOut(Easing.ease) }), -1, true); }, 400);
+  }, []);
+
+  const d1 = useAnimatedStyle(() => ({ opacity: dot1.value }));
+  const d2 = useAnimatedStyle(() => ({ opacity: dot2.value }));
+  const d3 = useAnimatedStyle(() => ({ opacity: dot3.value }));
+
+  return (
+    <View style={styles.typingBox}>
+      <Animated.View style={[styles.dot, d1]} />
+      <Animated.View style={[styles.dot, d2]} />
+      <Animated.View style={[styles.dot, d3]} />
+    </View>
+  );
+}
 
 export default function ChatScreen() {
   const params = useLocalSearchParams<{ agent?: string }>();
-  const [messages, setMessages] = useState<Message[]>([]);
+  const [messages, setMessages] = useState<Message[]>([
+    { id: 'system_1', role: 'assistant', content: 'How can I assist you with your workspace operations today?', timestamp: new Date().toISOString(), agent_type: params.agent || 'general' }
+  ]);
   const [input, setInput] = useState('');
   const [sending, setSending] = useState(false);
-  const [selectedAgent, setSelectedAgent] = useState(params.agent || 'general');
-  const [loadingHistory, setLoadingHistory] = useState(true);
-  const [pendingActions, setPendingActions] = useState<any[]>([]);
-  const [approvingAction, setApprovingAction] = useState<string | null>(null);
-  const scrollRef = useRef<ScrollView>(null);
-
-  // Update agent when navigated from Agent Hub
-  useEffect(() => {
-    if (params.agent && params.agent !== selectedAgent) {
-      setSelectedAgent(params.agent);
-    }
-  }, [params.agent]);
-
-  const loadHistory = useCallback(async () => {
-    try {
-      const [histRes, actionsRes] = await Promise.all([
-        authFetch(`/api/chat/history/${selectedAgent}`),
-        authFetch('/api/stores/actions/pending'),
-      ]);
-      if (histRes.ok) setMessages(await histRes.json());
-      if (actionsRes.ok) setPendingActions(await actionsRes.json());
-    } catch (e) { console.error(e); }
-    finally { setLoadingHistory(false); }
-  }, [selectedAgent]);
-
-  useEffect(() => { setLoadingHistory(true); loadHistory(); }, [loadHistory]);
-  useEffect(() => { setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 100); }, [messages]);
+  const listRef = useRef<FlatList>(null);
+  
+  const currentAgent = params.agent ? (AGENTS[params.agent] || AGENTS.general) : AGENTS.general;
+  const ActiveIcon = currentAgent.icon;
 
   const sendMessage = async () => {
     if (!input.trim() || sending) return;
-    const text = input.trim();
-    setInput(''); Keyboard.dismiss();
-    setMessages(p => [...p, { role: 'user', content: text, timestamp: new Date().toISOString(), agent_type: selectedAgent }]);
+    const userMessage: Message = { id: Date.now().toString(), role: 'user', content: input.trim(), timestamp: new Date().toISOString() };
+    
+    setMessages(prev => [...prev, userMessage]);
+    setInput('');
     setSending(true);
-    try {
-      const res = await authFetch('/api/chat', { method: 'POST', body: JSON.stringify({ message: text, agent_type: selectedAgent }) });
-      const data = await res.json();
-      if (data.content) {
-        setMessages(p => [...p, { role: 'assistant', content: data.content, timestamp: new Date().toISOString(), agent_type: selectedAgent }]);
-        if (data.queued_actions?.length) {
-          setPendingActions(prev => [...data.queued_actions.map((a: any) => ({
-            ...a, id: a.id, action_type: a.type, status: 'pending',
-            payload: { title: a.title, price: a.price },
-          })), ...prev]);
-        }
-      }
-    } catch (e) {
-      setMessages(p => [...p, { role: 'assistant', content: 'Connection error. Try again.', timestamp: new Date().toISOString() }]);
-    } finally { setSending(false); }
-  };
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    Keyboard.dismiss();
 
-  const approveAction = async (actionId: string) => {
-    setApprovingAction(actionId);
     try {
-      const res = await authFetch(`/api/stores/actions/${actionId}/approve`, { method: 'POST' });
+      const res = await authFetch('/api/chat', {
+        method: 'POST',
+        body: JSON.stringify({ message: userMessage.content, agent_type: params.agent || 'general' })
+      });
       if (res.ok) {
-        setPendingActions(prev => prev.filter(a => a.id !== actionId));
-        setMessages(p => [...p, { role: 'assistant', content: '✅ Action approved and executed on your store!', timestamp: new Date().toISOString(), agent_type: selectedAgent }]);
+        const data = await res.json();
+        setMessages(prev => [...prev, { id: Date.now().toString() + 'r', role: 'assistant', content: data.reply || data.response, timestamp: new Date().toISOString(), agent_type: params.agent || 'general' }]);
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       }
-    } catch (e) { console.error(e); }
-    finally { setApprovingAction(null); }
+    } catch {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+    } finally {
+      setSending(false);
+    }
   };
 
-  const rejectAction = async (actionId: string) => {
-    try {
-      await authFetch(`/api/stores/actions/${actionId}/reject`, { method: 'POST' });
-      setPendingActions(prev => prev.filter(a => a.id !== actionId));
-    } catch (e) { console.error(e); }
-  };
+  const renderMessage = ({ item, index }: { item: Message, index: number }) => {
+    const isUser = item.role === 'user';
+    const AgentIcon = (item.agent_type && AGENTS[item.agent_type]) ? AGENTS[item.agent_type].icon : Bot;
+    const agColor = (item.agent_type && AGENTS[item.agent_type]) ? AGENTS[item.agent_type].color : Colors.emerald;
 
-  const clearChat = async () => {
-    try { await authFetch(`/api/chat/history/${selectedAgent}`, { method: 'DELETE' }); setMessages([]); } catch (e) { console.error(e); }
-  };
-
-  const agentColor = AgentColors[selectedAgent]?.primary || Colors.emerald;
-  const suggestions: Record<string, string[]> = {
-    general: ['Give me a full business health check', 'What should I focus on this week?', 'How do I 10x my revenue?'],
-    shopify: ['Audit my Shopify catalog for quick wins', 'Create 5 new products for my store', 'Optimize my bestselling listings'],
-    etsy: ['Improve my Etsy listing SEO', 'What keywords should I target?', 'Review my shop policies'],
-    ebay: ['Optimize my eBay listing titles', 'Analyze my seller metrics', 'What auction strategy works best?'],
-    walmart: ['Optimize my Walmart listings', 'Win the Buy Box strategy', 'Analyze my seller scorecard'],
-    faire: ['Set up my wholesale pricing tiers', 'Optimize for Faire search', 'Plan retailer outreach'],
-    mercari: ['Optimize my Mercari listings', 'Best pricing strategy for resale', 'Improve my seller rating'],
-    poshmark: ['Plan my daily sharing strategy', 'Optimize for Posh Parties', 'Create bundle offers'],
-    marketing_suite: ['Create a 7-day social media calendar for all my platforms', 'Write viral tweets + Instagram captions for my brand', 'Plan a product launch campaign across all channels'],
-    analytics: ['Break down my cross-platform performance', 'Which channel is most profitable?', 'What does my data tell you?'],
-    email: ['Draft a follow-up email sequence', 'Write a product launch email', 'Organize my inbox priorities'],
-    crm: ['Set up my sales pipeline stages', 'Score my top 10 leads', 'Create a follow-up strategy'],
-    finance: ['Generate a monthly expense report', 'Forecast next quarter revenue', 'Track my profit margins'],
-    sales: ['Write a cold outreach template', 'Build a prospect list strategy', 'Qualify my current leads'],
-    operations: ['Create a weekly team standup template', 'Map out my business workflows', 'Set up project milestones'],
-    hr: ['Write a job description for my next hire', 'Create an onboarding checklist', 'Draft a remote work policy'],
-    legal: ['Draft a basic NDA template', 'Review my terms of service', 'Create a privacy policy outline'],
+    return (
+      <Animated.View entering={FadeInDown.delay(index > 0 ? 0 : 300).duration(400).springify()} layout={LinearTransition} style={[styles.bubbleWrapper, isUser ? styles.bubbleWrapperRight : styles.bubbleWrapperLeft]}>
+        {!isUser && (
+          <View style={[styles.avatar, { borderColor: `${agColor}30`, backgroundColor: `${agColor}10` }]}>
+            <AgentIcon size={16} color={agColor} />
+          </View>
+        )}
+        <View style={[styles.bubble, isUser ? styles.bubbleUser : styles.bubbleAI]}>
+          <Text style={[styles.bubbleText, isUser ? styles.bubbleTextUser : styles.bubbleTextAI]}>
+            {item.content}
+          </Text>
+        </View>
+      </Animated.View>
+    );
   };
 
   return (
-    <SafeAreaView style={s.container} edges={['top']}>
-      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
-        <View style={s.agentBar}>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.agentBarScroll}>
-            {AGENTS.map((a) => {
-              const sel = selectedAgent === a.type;
-              const c = AgentColors[a.type]?.primary || Colors.emerald;
-              return (
-                <TouchableOpacity key={a.type} testID={`agent-select-${a.type}`}
-                  style={[s.chip, sel && { backgroundColor: c + '20', borderColor: c + '50' }]}
-                  onPress={() => setSelectedAgent(a.type)}>
-                  {a.type === 'general' ? (
-                    <Image source={require('../../assets/images/orchestrai-logo-icon.png')} style={{ width: 20, height: 20 }} resizeMode="contain" />
-                  ) : (
-                    <Text style={{ fontSize: 16 }}>{a.icon}</Text>
-                  )}
-                  <Text style={[s.chipText, sel && { color: c }]}>{a.name}</Text>
-                </TouchableOpacity>
-              );
-            })}
-          </ScrollView>
-          <TouchableOpacity testID="clear-chat-btn" onPress={clearChat} style={s.clearBtn}>
-            <Text style={s.clearText}>Clear</Text>
-          </TouchableOpacity>
+    <SafeAreaView edges={['top']} style={styles.container}>
+      <BlurView intensity={20} tint="dark" style={styles.header}>
+        <View style={styles.headerInfo}>
+          <View style={[styles.headerAvatar, { backgroundColor: `${currentAgent.color}15`, borderColor: `${currentAgent.color}40` }]}>
+            <ActiveIcon size={24} color={currentAgent.color} />
+          </View>
+          <View>
+            <Text style={styles.headerTitle}>{currentAgent.name}</Text>
+            <Text style={styles.headerStatus}>● Active and ready</Text>
+          </View>
         </View>
+      </BlurView>
 
-        <ScrollView ref={scrollRef} style={{ flex: 1 }} contentContainerStyle={s.msgContent} showsVerticalScrollIndicator={false}
-          onContentSizeChange={() => scrollRef.current?.scrollToEnd({ animated: true })}>
-          {/* Pending Actions Banner */}
-          {pendingActions.length > 0 && (
-            <View style={s.pendingBanner}>
-              <Text style={s.pendingTitle}>📋 {pendingActions.length} Pending Action{pendingActions.length > 1 ? 's' : ''}</Text>
-              {pendingActions.slice(0, 5).map((action) => (
-                <View key={action.id} style={s.pendingCard}>
-                  <View style={{ flex: 1 }}>
-                    <Text style={s.pendingType}>{(action.action_type || '').replace('_', ' ').toUpperCase()}</Text>
-                    <Text style={s.pendingDetail} numberOfLines={1}>{action.payload?.title || action.title || 'Action'}{action.payload?.price || action.price ? ` — $${action.payload?.price || action.price}` : ''}</Text>
-                  </View>
-                  <View style={s.pendingBtns}>
-                    <TouchableOpacity style={s.approveBtn} onPress={() => approveAction(action.id)}
-                      disabled={approvingAction === action.id}>
-                      {approvingAction === action.id ? <ActivityIndicator size="small" color="#fff" /> :
-                        <Text style={s.approveBtnText}>✓</Text>}
-                    </TouchableOpacity>
-                    <TouchableOpacity style={s.rejectBtn} onPress={() => rejectAction(action.id)}>
-                      <Text style={s.rejectBtnText}>✗</Text>
-                    </TouchableOpacity>
-                  </View>
-                </View>
-              ))}
-            </View>
-          )}
-          {loadingHistory ? <View style={s.center}><ActivityIndicator size="small" color={agentColor} /></View>
-          : messages.length === 0 ? (
-            <View style={s.empty}>
-              <Text style={{ fontSize: 48 }}>{AGENTS.find(a => a.type === selectedAgent)?.icon || '⚡'}</Text>
-              <Text style={s.emptyTitle}>Talk to {AGENTS.find(a => a.type === selectedAgent)?.name || 'THEONE'}</Text>
-              <Text style={s.emptySub}>Your AI agent is ready to help.</Text>
-              <View style={s.sugWrap}>
-                {(suggestions[selectedAgent] || suggestions.general).map((sug, i) => (
-                  <TouchableOpacity key={i} testID={`suggestion-${i}`} style={[s.sugPill, { borderColor: agentColor + '30' }]}
-                    onPress={() => setInput(sug)}>
-                    <Text style={[s.sugText, { color: agentColor }]}>{sug}</Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-            </View>
-          ) : messages.map((msg, i) => (
-            <View key={i} style={[s.msgRow, msg.role === 'user' ? s.msgUser : s.msgAi]}>
-              {msg.role === 'assistant' && (
-                <View style={[s.msgAvatar, { backgroundColor: agentColor + '20' }]}>
-                  <Text style={{ fontSize: 16 }}>{AGENTS.find(a => a.type === selectedAgent)?.icon || '⚡'}</Text>
-                </View>
-              )}
-              <View style={[s.bubble, msg.role === 'user' ? s.userBubble : [s.aiBubble, { borderColor: agentColor + '15' }]]}>
-                <Text style={[s.msgText, msg.role === 'user' && { color: Colors.emerald }]}>{msg.content}</Text>
-              </View>
-            </View>
-          ))}
-          {sending && (
-            <View style={[s.msgRow, s.msgAi]}>
-              <View style={[s.msgAvatar, { backgroundColor: agentColor + '20' }]}>
-                <Text style={{ fontSize: 16 }}>{AGENTS.find(a => a.type === selectedAgent)?.icon || '⚡'}</Text>
-              </View>
-              <View style={[s.bubble, s.aiBubble, { borderColor: agentColor + '15' }]}>
-                <ActivityIndicator size="small" color={agentColor} />
-              </View>
-            </View>
-          )}
-        </ScrollView>
+      <FlatList
+        ref={listRef}
+        data={messages}
+        keyExtractor={item => item.id}
+        renderItem={renderMessage}
+        contentContainerStyle={styles.listContent}
+        showsVerticalScrollIndicator={false}
+        onContentSizeChange={() => listRef.current?.scrollToEnd({ animated: true })}
+        ListFooterComponent={sending ? <TypingIndicator /> : null}
+      />
 
-        <View style={s.inputBar}>
-          <TextInput testID="chat-input" style={s.textInput} value={input} onChangeText={setInput}
-            placeholder={`Message ${AGENTS.find(a => a.type === selectedAgent)?.name || 'THEONE'}...`}
-            placeholderTextColor={Colors.textMuted} multiline maxLength={2000} />
-          <TouchableOpacity testID="send-message-btn"
-            style={[s.sendBtn, { backgroundColor: input.trim() ? agentColor : Colors.surfaceElevated }]}
-            onPress={sendMessage} disabled={!input.trim() || sending}>
-            <Text style={[s.sendText, { color: input.trim() ? Colors.bg : Colors.textMuted }]}>↑</Text>
-          </TouchableOpacity>
-        </View>
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+        <BlurView intensity={30} tint="dark" style={styles.inputArea}>
+          <View style={styles.inputBox}>
+            <TextInput
+              style={styles.input}
+              placeholder="Ask your agents..."
+              placeholderTextColor={Colors.textDisabled}
+              value={input}
+              onChangeText={setInput}
+              multiline
+              maxLength={2000}
+            />
+            <AnimatedPressable scaleDown={0.8} style={[styles.sendBtn, !input.trim() && { opacity: 0.5 }]} onPress={sendMessage}>
+              {sending ? <ActivityIndicator color={Colors.bg} size="small" /> : <Send size={20} color={Colors.bg} />}
+            </AnimatedPressable>
+          </View>
+        </BlurView>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
 
-const s = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.bg },
-  center: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 40 },
-  agentBar: { flexDirection: 'row', alignItems: 'center', borderBottomWidth: 1, borderBottomColor: Colors.border, backgroundColor: Colors.surface },
-  agentBarScroll: { paddingHorizontal: Spacing.md, paddingVertical: Spacing.sm, gap: Spacing.sm },
-  chip: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 14, paddingVertical: 8, borderRadius: BorderRadius.full, borderWidth: 1, borderColor: Colors.border, backgroundColor: Colors.surfaceElevated },
-  chipText: { fontSize: FontSizes.sm, fontWeight: '700', color: Colors.textSecondary },
-  clearBtn: { paddingHorizontal: Spacing.md, paddingVertical: Spacing.sm },
-  clearText: { fontSize: FontSizes.sm, fontWeight: '600', color: Colors.rose },
-  msgContent: { padding: Spacing.lg, paddingBottom: Spacing.xxl },
-  empty: { alignItems: 'center', paddingTop: 60, paddingHorizontal: 24 },
-  emptyTitle: { fontSize: FontSizes.xl, fontWeight: '800', color: Colors.textPrimary, marginTop: 16 },
-  emptySub: { fontSize: FontSizes.md, color: Colors.textSecondary, textAlign: 'center', marginTop: 8 },
-  sugWrap: { marginTop: 24, gap: 10, width: '100%' },
-  sugPill: { borderWidth: 1, borderRadius: BorderRadius.lg, paddingHorizontal: 16, paddingVertical: 12 },
-  sugText: { fontSize: FontSizes.md, fontWeight: '600' },
-  pendingBanner: { backgroundColor: '#FBBF24' + '10', borderRadius: 16, padding: 16, marginBottom: 16, borderWidth: 1, borderColor: '#FBBF24' + '25' },
-  pendingTitle: { fontSize: 15, fontWeight: '800', color: '#FBBF24', marginBottom: 10 },
-  pendingCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: Colors.surface, borderRadius: 12, padding: 12, marginBottom: 8, borderWidth: 1, borderColor: Colors.border },
-  pendingType: { fontSize: 10, fontWeight: '800', color: '#FBBF24', letterSpacing: 0.5 },
-  pendingDetail: { fontSize: 14, color: Colors.textPrimary, fontWeight: '600', marginTop: 2 },
-  pendingBtns: { flexDirection: 'row', gap: 8, marginLeft: 12 },
-  approveBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: Colors.emerald, justifyContent: 'center', alignItems: 'center' },
-  approveBtnText: { fontSize: 16, fontWeight: '800', color: '#fff' },
-  rejectBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: Colors.surfaceElevated, justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: Colors.border },
-  rejectBtnText: { fontSize: 16, fontWeight: '600', color: Colors.textMuted },
-  msgRow: { flexDirection: 'row', marginBottom: Spacing.md, maxWidth: '90%' },
-  msgUser: { alignSelf: 'flex-end' },
-  msgAi: { alignSelf: 'flex-start' },
-  msgAvatar: { width: 32, height: 32, borderRadius: BorderRadius.md, justifyContent: 'center', alignItems: 'center', marginRight: 8, marginTop: 4 },
-  bubble: { borderRadius: BorderRadius.lg, padding: Spacing.md, maxWidth: '100%' },
-  userBubble: { backgroundColor: Colors.emerald + '15', borderWidth: 1, borderColor: Colors.emerald + '25' },
-  aiBubble: { backgroundColor: Colors.surfaceElevated, borderWidth: 1 },
-  msgText: { fontSize: FontSizes.md, color: Colors.textPrimary, lineHeight: 22 },
-  inputBar: { flexDirection: 'row', alignItems: 'flex-end', gap: Spacing.sm, padding: Spacing.md, borderTopWidth: 1, borderTopColor: Colors.border, backgroundColor: Colors.surface },
-  textInput: { flex: 1, backgroundColor: Colors.surfaceElevated, borderRadius: BorderRadius.lg, paddingHorizontal: Spacing.lg, paddingVertical: Spacing.md, color: Colors.textPrimary, fontSize: FontSizes.md, maxHeight: 100, borderWidth: 1, borderColor: Colors.border },
-  sendBtn: { width: 44, height: 44, borderRadius: BorderRadius.lg, justifyContent: 'center', alignItems: 'center' },
-  sendText: { fontSize: 22, fontWeight: '800' },
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: Colors.bg,
+  },
+  header: {
+    paddingHorizontal: 24,
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255,255,255,0.05)',
+  },
+  headerInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 16,
+  },
+  headerAvatar: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+  },
+  headerTitle: {
+    fontFamily: Typography.fonts.outfitB,
+    fontSize: 20,
+    color: Colors.text,
+    letterSpacing: -0.3,
+  },
+  headerStatus: {
+    fontFamily: Typography.fonts.manropeB,
+    fontSize: 13,
+    color: Colors.emerald,
+    marginTop: 2,
+  },
+  listContent: {
+    padding: 24,
+    paddingBottom: 40,
+    gap: 20,
+  },
+  bubbleWrapper: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    marginBottom: 8,
+    maxWidth: '85%',
+  },
+  bubbleWrapperLeft: {
+    alignSelf: 'flex-start',
+  },
+  bubbleWrapperRight: {
+    alignSelf: 'flex-end',
+  },
+  avatar: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 10,
+    borderWidth: 1,
+  },
+  bubble: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 20,
+  },
+  bubbleUser: {
+    backgroundColor: Colors.emerald,
+    borderBottomRightRadius: 4,
+  },
+  bubbleAI: {
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    borderBottomLeftRadius: 4,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.04)',
+  },
+  bubbleText: {
+    fontFamily: Typography.fonts.manropeM,
+    fontSize: 16,
+    lineHeight: 24,
+  },
+  bubbleTextUser: {
+    color: Colors.bg,
+    fontFamily: Typography.fonts.manropeSB,
+  },
+  bubbleTextAI: {
+    color: Colors.text,
+  },
+  inputArea: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    paddingBottom: Platform.OS === 'ios' ? 32 : 16,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255,255,255,0.05)',
+  },
+  inputBox: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    backgroundColor: 'rgba(0,0,0,0.4)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)',
+    borderRadius: 24,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+  },
+  input: {
+    flex: 1,
+    color: Colors.text,
+    fontFamily: Typography.fonts.manropeM,
+    fontSize: 16,
+    maxHeight: 120,
+    minHeight: 40,
+    paddingTop: 10,
+  },
+  sendBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: Colors.emerald,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginLeft: 12,
+    marginBottom: 0,
+  },
+  typingBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    padding: 16,
+    alignSelf: 'flex-start',
+    marginLeft: 38,
+    marginTop: 8,
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    borderRadius: 16,
+    borderBottomLeftRadius: 4,
+  },
+  dot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: Colors.emerald,
+  },
 });

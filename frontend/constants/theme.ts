@@ -60,18 +60,45 @@ export const FontSizes = {
   hero: 40,
 };
 
+export const Fonts = {
+  regular: 'Outfit_400Regular',
+  medium: 'Outfit_500Medium',
+  semibold: 'Outfit_600SemiBold',
+  bold: 'Outfit_700Bold',
+  bodyRegular: 'Manrope_400Regular',
+  bodyMedium: 'Manrope_500Medium',
+  bodySemibold: 'Manrope_600SemiBold',
+  bodyBold: 'Manrope_700Bold',
+};
+
 export const Shadows = {
   card: {
-    boxShadow: '0px 4px 12px rgba(0, 0, 0, 0.25)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 12,
+    elevation: 6,
   },
   glow: (color: string) => ({
-    boxShadow: `0px 0px 16px ${color}66`,
+    shadowColor: color,
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.4,
+    shadowRadius: 16,
+    elevation: 8,
   }),
   glass: {
-    boxShadow: '0px 2px 8px rgba(0, 0, 0, 0.15)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    elevation: 3,
   },
   depth: {
-    boxShadow: '0px 8px 24px rgba(0, 0, 0, 0.3)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.3,
+    shadowRadius: 24,
+    elevation: 12,
   },
 };
 

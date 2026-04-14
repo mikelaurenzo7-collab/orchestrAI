@@ -1,717 +1,289 @@
-import { useState, useCallback, useEffect, useRef } from 'react';
-import {
-  View, Text, StyleSheet, ScrollView, RefreshControl, TouchableOpacity,
-  TextInput, ActivityIndicator, KeyboardAvoidingView, Platform, Keyboard, Modal, Alert,
-} from 'react-native';
+import React, { useState, useEffect, useCallback } from 'react';
+import { View, Text, StyleSheet, FlatList, Dimensions, RefreshControl, Image } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import Animated, { FadeInDown, FadeIn, LinearTransition } from 'react-native-reanimated';
+import { BlurView } from 'expo-blur';
+import { Colors, Typography, Shadows } from '../../constants/theme';
+import { PenTool, MoreHorizontal, Heart, MessageCircle, Share2, BarChart2, Bot, Globe, Repeat } from 'lucide-react-native';
+import AnimatedPressable from '../../components/AnimatedPressable';
+import * as Haptics from 'expo-haptics';
 import { authFetch } from '../../utils/api';
-import { Colors, Spacing, BorderRadius, FontSizes, Shadows, AgentColors } from '../../constants/theme';
 
-type ActionDef = { id: string; name: string; icon: string; desc: string };
-type WorkflowTemplate = { id: string; name: string; icon: string; desc: string; steps: any[] };
-type SocialContent = { id: string; platform: string; content: string; hashtags: string[]; product_name: string; created_at: string; status: string; platform_url?: string };
+const { width: W } = Dimensions.get('window');
 
-export default function ExecuteScreen() {
-  const [tab, setTab] = useState<'actions' | 'workflows' | 'builder' | 'social'>('actions');
-  const [catalog, setCatalog] = useState<Record<string, ActionDef[]>>({});
-  const [templates, setTemplates] = useState<WorkflowTemplate[]>([]);
-  const [history, setHistory] = useState<any[]>([]);
+interface SocialPost {
+  id: string;
+  content: string;
+  platforms: string[];
+  status: 'draft' | 'published' | 'scheduled';
+  scheduled_for?: string;
+  created_at: string;
+  metrics?: { likes: number, clicks: number, shares: number };
+}
+
+// Dummy robust placeholder
+const MOCK_POST: SocialPost = {
+  id: '01',
+  content: 'Just launched our new automated compliance tracking features. 🚀\n\nSave your team 40+ hours a month by letting orchestrAI handle vendor vetting. Sign up for early access today! 👇',
+  platforms: ['twitter', 'linkedin'],
+  status: 'published',
+  created_at: new Date().toISOString(),
+  metrics: { likes: 2400, clicks: 850, shares: 140 }
+};
+
+export default function SocialScreen() {
+  const [posts, setPosts] = useState<SocialPost[]>([MOCK_POST]);
   const [loading, setLoading] = useState(true);
-  const [executing, setExecuting] = useState<string | null>(null);
-  const [resultModal, setResultModal] = useState<any>(null);
-  // Builder state — conversational
-  const [showBuilder, setShowBuilder] = useState(false);
-  const [niche, setNiche] = useState('');
-  const [storeName, setStoreName] = useState('');
-  const [style, setStyle] = useState('modern');
-  const [building, setBuilding] = useState(false);
-  const [buildId, setBuildId] = useState<string | null>(null);
-  const [buildChat, setBuildChat] = useState<any[]>([]);
-  const [buildComplete, setBuildComplete] = useState(false);
-  const [buildPlan, setBuildPlan] = useState<any>(null);
-  const [buildMsg, setBuildMsg] = useState('');
-  const [autopilot, setAutopilot] = useState(true);
-  const buildScrollRef = useRef<ScrollView>(null);
-  // Social posting state
-  const [socialContent, setSocialContent] = useState<SocialContent[]>([]);
-  const [posting, setPosting] = useState<string | null>(null);
-  const [integrations, setIntegrations] = useState<any>({});
-  const [campaignProduct, setCampaignProduct] = useState('');
-  const [campaignDesc, setCampaignDesc] = useState('');
-  const [launching, setLaunching] = useState(false);
-  const [campaignResult, setCampaignResult] = useState<any>(null);
   const [refreshing, setRefreshing] = useState(false);
 
-  const fetchData = useCallback(async () => {
+  const fetchPosts = useCallback(async () => {
     try {
-      const [catRes, tplRes, histRes, socialRes, intRes] = await Promise.all([
-        authFetch('/api/actions/catalog'),
-        authFetch('/api/workflows/templates'),
-        authFetch('/api/actions/history'),
-        authFetch('/api/social/content'),
-        authFetch('/api/integrations/status'),
-      ]);
-      if (catRes.ok) setCatalog(await catRes.json());
-      if (tplRes.ok) setTemplates(await tplRes.json());
-      if (histRes.ok) setHistory(await histRes.json());
-      if (socialRes.ok) setSocialContent(await socialRes.json());
-      if (intRes.ok) setIntegrations(await intRes.json());
-    } catch (e) { console.error(e); }
+      const res = await authFetch('/api/social/posts');
+      if (res.ok) {
+        const data = await res.json();
+        if (data.length > 0) setPosts(data);
+      }
+    } catch (e) { } 
     finally { setLoading(false); setRefreshing(false); }
   }, []);
 
-  useEffect(() => { fetchData(); }, [fetchData]);
+  useEffect(() => { fetchPosts(); }, [fetchPosts]);
 
-  const executeAction = async (agentType: string, actionId: string) => {
-    setExecuting(`${agentType}_${actionId}`);
-    try {
-      const res = await authFetch('/api/actions/execute', {
-        method: 'POST', body: JSON.stringify({ action_id: actionId, agent_type: agentType }),
-      });
-      const data = await res.json();
-      if (data.result) setResultModal(data);
-      fetchData();
-    } catch (e) { console.error(e); }
-    finally { setExecuting(null); }
+  const handleCompose = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
   };
 
-  const executeWorkflow = async (templateId: string) => {
-    setExecuting(`wf_${templateId}`);
-    try {
-      const res = await authFetch('/api/workflows/execute', {
-        method: 'POST', body: JSON.stringify({ template_id: templateId }),
-      });
-      const data = await res.json();
-      if (data.steps_results) setResultModal(data);
-      fetchData();
-    } catch (e) { console.error(e); }
-    finally { setExecuting(null); }
+  const renderPost = ({ item, index }: { item: SocialPost, index: number }) => {
+    return (
+      <Animated.View entering={FadeInDown.delay(index * 150).duration(600).springify().damping(16)} layout={LinearTransition}>
+        <AnimatedPressable scaleDown={0.97} onPress={() => Haptics.selectionAsync()} style={styles.cardBox}>
+          <BlurView intensity={25} tint="dark" style={styles.card}>
+            
+            <View style={styles.cardHeader}>
+              <View style={styles.authorBadgeRow}>
+                <View style={styles.avatar}>
+                  <Bot size={20} color={Colors.emerald} />
+                </View>
+                <View>
+                  <Text style={styles.authorName}>Marketing AI Exec</Text>
+                  <Text style={styles.timestamp}>2h ago • {item.platforms.join(', ')}</Text>
+                </View>
+              </View>
+              <AnimatedPressable onPress={() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)}>
+                <MoreHorizontal size={24} color={Colors.textSecondary} />
+              </AnimatedPressable>
+            </View>
+
+            <Text style={styles.bodyText}>{item.content}</Text>
+
+            <View style={styles.mediaContainer}>
+              <BlurView intensity={10} tint="light" style={styles.mediaPlaceholder}>
+                <BarChart2 size={40} color={Colors.emerald} opacity={0.6} />
+                <Text style={styles.mediaPlaceholderText}>Attached Media</Text>
+              </BlurView>
+            </View>
+
+            <View style={styles.divider} />
+
+            <View style={styles.actionRow}>
+              <AnimatedPressable style={styles.actionBtn} onPress={() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)}>
+                <Heart size={20} color={Colors.textSecondary} />
+                <Text style={styles.actionTxt}>{(item.metrics?.likes || 0).toLocaleString()}</Text>
+              </AnimatedPressable>
+
+              <AnimatedPressable style={styles.actionBtn}>
+                <MessageCircle size={20} color={Colors.textSecondary} />
+                <Text style={styles.actionTxt}>{(item.metrics?.clicks || 0).toLocaleString()}</Text>
+              </AnimatedPressable>
+
+              <AnimatedPressable style={styles.actionBtn}>
+                <Repeat size={20} color={Colors.textSecondary} />
+                <Text style={styles.actionTxt}>{(item.metrics?.shares || 0).toLocaleString()}</Text>
+              </AnimatedPressable>
+
+              <AnimatedPressable style={[styles.actionBtn, { marginLeft: 'auto' }]}>
+                <Share2 size={20} color={Colors.emerald} />
+              </AnimatedPressable>
+            </View>
+
+          </BlurView>
+        </AnimatedPressable>
+      </Animated.View>
+    );
   };
-
-  const launchCampaign = async () => {
-    if (!campaignProduct.trim()) return;
-    setLaunching(true); Keyboard.dismiss();
-    try {
-      const platforms = [];
-      if (integrations.twitter?.configured) platforms.push('twitter');
-      if (integrations.pinterest?.configured) platforms.push('pinterest');
-      const res = await authFetch('/api/campaigns/launch', {
-        method: 'POST', body: JSON.stringify({
-          product_name: campaignProduct.trim(),
-          product_description: campaignDesc.trim() || undefined,
-          platforms, auto_post: true,
-        }),
-      });
-      const data = await res.json();
-      if (res.ok) {
-        setCampaignResult(data);
-        setCampaignProduct(''); setCampaignDesc('');
-        fetchData(); // refresh content list
-      } else {
-        Alert.alert('Campaign Error', data.detail || 'Failed to launch');
-      }
-    } catch (e) { Alert.alert('Error', 'Campaign launch failed'); }
-    finally { setLaunching(false); }
-  };
-
-  const approvePost = async (postId: string) => {
-    setPosting(`approve_${postId}`);
-    try {
-      const res = await authFetch(`/api/campaigns/approve/${postId}`, { method: 'POST' });
-      if (res.ok) {
-        setSocialContent(prev => prev.map(c => c.id === postId ? { ...c, status: 'posted' } : c));
-      } else {
-        const data = await res.json();
-        Alert.alert('Error', data.detail || 'Publish failed');
-      }
-    } catch (e) { Alert.alert('Error', 'Failed to publish'); }
-    finally { setPosting(null); }
-  };
-
-  const rejectPost = async (postId: string) => {
-    setPosting(`reject_${postId}`);
-    try {
-      await authFetch(`/api/campaigns/reject/${postId}`, { method: 'POST' });
-      setSocialContent(prev => prev.map(c => c.id === postId ? { ...c, status: 'rejected' } : c));
-    } catch (e) { console.error(e); }
-    finally { setPosting(null); }
-  };
-
-  const startBuild = async () => {
-    if (!niche.trim()) return;
-    setBuilding(true); Keyboard.dismiss();
-    try {
-      const res = await authFetch('/api/store-builder/start', {
-        method: 'POST', body: JSON.stringify({ niche: niche.trim(), store_name: storeName.trim() || null, style, autopilot }),
-      });
-      const data = await res.json();
-      setBuildId(data.build_id);
-      setBuildChat(data.chat_log || []);
-      setShowBuilder(false);
-      // Auto-run all steps
-      runBuildSteps(data.build_id);
-    } catch (e) { console.error(e); setBuilding(false); }
-  };
-
-  const runBuildSteps = async (id: string) => {
-    for (let i = 0; i < 6; i++) {
-      try {
-        const res = await authFetch(`/api/store-builder/step/${id}`, { method: 'POST' });
-        const data = await res.json();
-        setBuildChat(data.chat_log || []);
-        if (data.plan) setBuildPlan(data.plan);
-        if (data.status === 'complete') { setBuildComplete(true); break; }
-        // Small delay between steps for UX
-        await new Promise(r => setTimeout(r, 500));
-      } catch (e) { console.error(e); break; }
-    }
-    setBuilding(false);
-  };
-
-  const sendBuildChat = async () => {
-    if (!buildMsg.trim() || !buildId) return;
-    const msg = buildMsg.trim();
-    setBuildMsg(''); Keyboard.dismiss();
-    try {
-      const res = await authFetch(`/api/store-builder/chat/${buildId}`, {
-        method: 'POST', body: JSON.stringify({ build_id: buildId, message: msg }),
-      });
-      const data = await res.json();
-      setBuildChat(data.chat_log || []);
-    } catch (e) { console.error(e); }
-  };
-
-  const executeBrowser = async () => {
-    setBrowsing(true); Keyboard.dismiss();
-    try {
-      const res = await authFetch('/api/browser/execute', {
-        method: 'POST', body: JSON.stringify({
-          task_type: browserType, url: browserUrl.trim() || null,
-          instructions: browserInstructions.trim() || null,
-        }),
-      });
-      const data = await res.json();
-      if (data.result) setBrowserResult(data);
-    } catch (e) { console.error(e); }
-    finally { setBrowsing(false); }
-  };
-
-  if (loading) return <SafeAreaView style={s.container}><View style={s.center}><ActivityIndicator size="large" color={Colors.emerald} /></View></SafeAreaView>;
-
-  const agentOrder = ['store_manager', 'marketing', 'analytics', 'customer_service'];
-  const agentNames: Record<string, string> = { store_manager: 'Store Commander', marketing: 'Growth Engine', analytics: 'Insight Oracle', customer_service: 'Support Shield' };
 
   return (
-    <SafeAreaView style={s.container}>
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={s.scroll}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); fetchData(); }} tintColor={Colors.emerald} />}>
-        <Text style={s.overline}>EXECUTION ENGINE</Text>
-        <Text style={s.title}>Execute</Text>
-
-        {/* Tab Switcher */}
-        <View style={s.tabs}>
-          {[
-            { id: 'actions' as const, label: 'Actions', icon: '⚡' },
-            { id: 'workflows' as const, label: 'Flows', icon: '🔄' },
-            { id: 'social' as const, label: 'Post', icon: '📣' },
-            { id: 'builder' as const, label: 'Build', icon: '🏗️' },
-          ].map(t => (
-            <TouchableOpacity key={t.id} testID={`tab-${t.id}`}
-              style={[s.tabBtn, tab === t.id && s.tabActive]} onPress={() => setTab(t.id)}>
-              <Text style={s.tabIcon}>{t.icon}</Text>
-              <Text style={[s.tabLabel, tab === t.id && s.tabLabelActive]}>{t.label}</Text>
-            </TouchableOpacity>
-          ))}
+    <SafeAreaView edges={['top']} style={styles.container}>
+      <Animated.View entering={FadeIn.duration(600)} style={styles.header}>
+        <View>
+          <Text style={styles.title}>Broadcast</Text>
+          <Text style={styles.subtitle}>AI-generated social campaigns</Text>
         </View>
+        <AnimatedPressable scaleDown={0.9} style={styles.composeBtn} onPress={handleCompose}>
+          <PenTool size={20} color={Colors.bg} />
+          <Text style={styles.composeTxt}>Draft</Text>
+        </AnimatedPressable>
+      </Animated.View>
 
-        {/* ACTIONS TAB */}
-        {tab === 'actions' && agentOrder.map(agentType => {
-          const actions = catalog[agentType] || [];
-          const ac = AgentColors[agentType] || AgentColors.general;
-          if (!actions.length) return null;
-          return (
-            <View key={agentType} style={s.agentSection}>
-              <Text style={[s.agentLabel, { color: ac.primary }]}>{agentNames[agentType]}</Text>
-              {actions.map(action => {
-                const isExec = executing === `${agentType}_${action.id}`;
-                return (
-                  <TouchableOpacity key={action.id} testID={`action-${action.id}`}
-                    style={[s.actionCard, { borderColor: ac.primary + '15' }]}
-                    onPress={() => executeAction(agentType, action.id)} disabled={!!executing} activeOpacity={0.7}>
-                    <View style={s.actionRow}>
-                      <Text style={s.actionIcon}>{action.icon}</Text>
-                      <View style={{ flex: 1 }}>
-                        <Text style={s.actionName}>{action.name}</Text>
-                        <Text style={s.actionDesc}>{action.desc}</Text>
-                      </View>
-                      {isExec ? <ActivityIndicator size="small" color={ac.primary} /> :
-                        <View style={[s.runBadge, { backgroundColor: ac.glow, borderColor: ac.primary + '30' }]}>
-                          <Text style={[s.runText, { color: ac.primary }]}>RUN</Text>
-                        </View>}
-                    </View>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-          );
-        })}
-
-        {/* WORKFLOWS TAB */}
-        {tab === 'workflows' && (
-          <View>
-            <Text style={s.sectionSub}>Multi-step AI pipelines — each agent passes context to the next</Text>
-            {templates.map(wf => {
-              const isExec = executing === `wf_${wf.id}`;
-              return (
-                <TouchableOpacity key={wf.id} testID={`workflow-${wf.id}`}
-                  style={s.wfCard} onPress={() => executeWorkflow(wf.id)} disabled={!!executing} activeOpacity={0.7}>
-                  <View style={s.wfHeader}>
-                    <Text style={s.wfIcon}>{wf.icon}</Text>
-                    <View style={{ flex: 1 }}>
-                      <Text style={s.wfName}>{wf.name}</Text>
-                      <Text style={s.wfDesc}>{wf.desc}</Text>
-                    </View>
-                  </View>
-                  <View style={s.wfSteps}>
-                    {wf.steps.map((step: any, i: number) => (
-                      <View key={i} style={s.wfStep}>
-                        <View style={[s.wfStepDot, { backgroundColor: (AgentColors[step.agent] || AgentColors.general).primary }]} />
-                        <Text style={s.wfStepText}>{step.agent.replace('_', ' ')}</Text>
-                        {i < wf.steps.length - 1 && <Text style={s.wfArrow}>→</Text>}
-                      </View>
-                    ))}
-                  </View>
-                  {isExec ? <ActivityIndicator size="small" color={Colors.emerald} style={{ marginTop: 12 }} /> :
-                    <View style={s.wfRunBtn}><Text style={s.wfRunText}>Execute Pipeline</Text></View>}
-                </TouchableOpacity>
-              );
-            })}
-          </View>
-        )}
-
-        {/* STORE BUILDER TAB — Conversational */}
-        {tab === 'builder' && (
-          <View>
-            {!buildId ? (
-              <>
-                <Text style={s.sectionSub}>Tell us your niche — AI builds your entire store while you watch. Chat with the builder anytime.</Text>
-                <TouchableOpacity testID="start-builder-btn" style={s.builderBtn} onPress={() => setShowBuilder(true)}>
-                  <Text style={s.builderBtnIcon}>🏗️</Text>
-                  <Text style={s.builderBtnTitle}>Build a New Store</Text>
-                  <Text style={s.builderBtnSub}>Pick a niche → AI creates brand, products, pricing, policies, marketing → Deploy to any platform</Text>
-                </TouchableOpacity>
-              </>
-            ) : (
-              <View style={s.buildChatWrap}>
-                <View style={s.buildProgress}>
-                  <Text style={s.buildProgressText}>
-                    {buildComplete ? '✅ Build Complete!' : building ? '🔨 Building...' : 'Ready'}
-                  </Text>
-                </View>
-                <ScrollView ref={buildScrollRef} style={s.buildChatScroll} showsVerticalScrollIndicator={false}
-                  onContentSizeChange={() => buildScrollRef.current?.scrollToEnd({ animated: true })}>
-                  {buildChat.map((msg: any, i: number) => (
-                    <View key={i} style={[s.buildMsg, msg.role === 'user' ? s.buildMsgUser : s.buildMsgAgent]}>
-                      {msg.role !== 'user' && <View style={s.buildMsgDot} />}
-                      <Text style={[s.buildMsgText, msg.role === 'user' && { color: Colors.emerald }]}>{msg.content}</Text>
-                    </View>
-                  ))}
-                  {building && <ActivityIndicator size="small" color={Colors.emerald} style={{ marginTop: 12 }} />}
-                </ScrollView>
-
-                {/* Chat input during build */}
-                <View style={s.buildInputBar}>
-                  <TextInput testID="build-chat-input" style={s.buildInput} value={buildMsg} onChangeText={setBuildMsg}
-                    placeholder="Feedback or changes..." placeholderTextColor="#475569" />
-                  <TouchableOpacity testID="build-chat-send" style={s.buildSendBtn} onPress={sendBuildChat} disabled={!buildMsg.trim()}>
-                    <Text style={s.buildSendText}>↑</Text>
-                  </TouchableOpacity>
-                </View>
-
-                {buildComplete && buildPlan && (
-                  <View style={s.planCard}>
-                    <Text style={s.planTitle}>{buildPlan.brand_name || 'Your Store'}</Text>
-                    {buildPlan.tagline && <Text style={s.planTagline}>{buildPlan.tagline}</Text>}
-                    {buildPlan.estimated_monthly_revenue && (
-                      <View style={s.revBadge}><Text style={s.revText}>Est: {buildPlan.estimated_monthly_revenue}</Text></View>
-                    )}
-                    <Text style={s.planSection}>Products ({buildPlan.products?.length || 0})</Text>
-                    {(buildPlan.products || []).slice(0, 5).map((p: any, i: number) => (
-                      <View key={i} style={s.productRow}>
-                        <View style={{ flex: 1 }}><Text style={s.productName}>{p.title}</Text></View>
-                        <Text style={s.productPrice}>${p.price}</Text>
-                      </View>
-                    ))}
-                    {(buildPlan.products?.length || 0) > 5 && (
-                      <Text style={s.moreText}>+ {buildPlan.products.length - 5} more</Text>
-                    )}
-                  </View>
-                )}
-
-                {buildComplete && (
-                  <TouchableOpacity style={s.newBuildBtn} onPress={() => { setBuildId(null); setBuildChat([]); setBuildComplete(false); setBuildPlan(null); }}>
-                    <Text style={s.newBuildText}>Start Another Build</Text>
-                  </TouchableOpacity>
-                )}
-              </View>
-            )}
-          </View>
-        )}
-
-        {/* AUTONOMOUS CAMPAIGN CONTROL TAB */}
-        {tab === 'social' && (
-          <View>
-            {/* Connected Platforms */}
-            <View style={s.intBadges}>
-              {[
-                { key: 'twitter', label: 'X / Twitter', icon: '🐦', color: '#1DA1F2' },
-                { key: 'pinterest', label: 'Pinterest', icon: '📌', color: '#E60023' },
-              ].map(p => {
-                const connected = integrations[p.key]?.configured;
-                return (
-                  <View key={p.key} style={[s.intBadge, { borderColor: connected ? p.color + '40' : Colors.border }]}>
-                    <View style={[s.intDot, { backgroundColor: connected ? p.color : Colors.textMuted }]} />
-                    <Text style={{ fontSize: 14 }}>{p.icon}</Text>
-                    <Text style={[s.intBadgeText, { color: connected ? p.color : Colors.textMuted }]}>{p.label}</Text>
-                  </View>
-                );
-              })}
-            </View>
-
-            {/* Campaign Launcher */}
-            <View style={s.genCard}>
-              <Text style={s.genTitle}>Launch Campaign</Text>
-              <Text style={s.genSub}>Growth Engine generates optimized content for each platform and auto-publishes. One tap, all platforms.</Text>
-              <TextInput testID="campaign-product-input" style={s.input} value={campaignProduct} onChangeText={setCampaignProduct}
-                placeholder="What are you promoting?" placeholderTextColor={Colors.textMuted} />
-              <TextInput testID="campaign-desc-input" style={[s.input, { marginTop: 8 }]} value={campaignDesc} onChangeText={setCampaignDesc}
-                placeholder="Extra context for the AI (optional)" placeholderTextColor={Colors.textMuted} />
-              <TouchableOpacity testID="launch-campaign-btn"
-                style={[s.launchBtn, !campaignProduct.trim() && { opacity: 0.4 }]}
-                onPress={launchCampaign} disabled={!campaignProduct.trim() || launching}>
-                {launching ? (
-                  <View style={s.launchingRow}>
-                    <ActivityIndicator size="small" color={Colors.bg} />
-                    <Text style={s.launchBtnText}>Growth Engine is working...</Text>
-                  </View>
-                ) : (
-                  <View style={s.launchingRow}>
-                    <Text style={{ fontSize: 18 }}>🚀</Text>
-                    <Text style={s.launchBtnText}>Launch Autonomous Campaign</Text>
-                  </View>
-                )}
-              </TouchableOpacity>
-              <Text style={s.autoNote}>
-                {integrations.twitter?.configured && integrations.pinterest?.configured
-                  ? 'Will auto-post to Twitter + Pinterest'
-                  : integrations.twitter?.configured ? 'Will auto-post to Twitter'
-                  : integrations.pinterest?.configured ? 'Will auto-post to Pinterest'
-                  : 'Connect a platform in Stores tab first'}
-              </Text>
-            </View>
-
-            {/* Campaign Result */}
-            {campaignResult && (
-              <View style={[s.campaignResultCard, { borderColor: campaignResult.auto_posted ? Colors.emerald + '30' : Colors.amber + '30' }]}>
-                <View style={s.campaignResultHeader}>
-                  <Text style={{ fontSize: 24 }}>{campaignResult.auto_posted ? '✅' : '⏳'}</Text>
-                  <View style={{ flex: 1, marginLeft: 12 }}>
-                    <Text style={s.campaignResultTitle}>
-                      {campaignResult.auto_posted ? 'Campaign Live!' : 'Awaiting Approval'}
-                    </Text>
-                    <Text style={s.campaignResultSub}>
-                      {campaignResult.posts_published}/{campaignResult.posts_created} posts published across {campaignResult.posts?.length} platforms
-                    </Text>
-                  </View>
-                </View>
-                {campaignResult.posts?.map((post: any) => (
-                  <View key={post.id} style={s.campaignPost}>
-                    <Text style={s.campaignPostPlatform}>{post.platform.toUpperCase()}</Text>
-                    <Text style={s.campaignPostContent}>{post.content}</Text>
-                    <Text style={s.hashtagText}>{post.hashtags?.join(' ')}</Text>
-                    {post.platform_url && <Text style={s.linkText}>{post.platform_url}</Text>}
-                    <View style={[s.statusPill, { backgroundColor: post.status === 'posted' ? Colors.emeraldGlow : Colors.amberGlow }]}>
-                      <Text style={[s.statusText, { color: post.status === 'posted' ? Colors.emerald : Colors.amber }]}>
-                        {post.status === 'posted' ? 'LIVE' : post.status.toUpperCase()}
-                      </Text>
-                    </View>
-                  </View>
-                ))}
-              </View>
-            )}
-
-            {/* Mission Log — Pending Approvals + Posted Feed */}
-            {socialContent.length > 0 && (
-              <View style={{ marginTop: Spacing.xl }}>
-                <Text style={s.histTitle}>Mission Log</Text>
-
-                {/* Pending approvals first */}
-                {socialContent.filter(c => c.status === 'pending_approval').length > 0 && (
-                  <View style={s.approvalSection}>
-                    <Text style={s.approvalTitle}>Awaiting Your Approval</Text>
-                    {socialContent.filter(c => c.status === 'pending_approval').map(item => (
-                      <View key={item.id} style={[s.contentCard, { borderColor: Colors.amber + '30' }]}>
-                        <View style={s.contentHeader}>
-                          <Text style={[s.contentPlatform, { color: Colors.amber }]}>{item.platform.toUpperCase()}</Text>
-                          <Text style={s.contentProduct}>{item.product_name}</Text>
-                        </View>
-                        <Text style={s.contentText}>{item.content}</Text>
-                        <Text style={s.hashtagText}>{item.hashtags?.join(' ')}</Text>
-                        <View style={s.approvalActions}>
-                          <TouchableOpacity testID={`approve-${item.id}`}
-                            style={[s.approveBtn]} onPress={() => approvePost(item.id)}
-                            disabled={posting === `approve_${item.id}`}>
-                            {posting === `approve_${item.id}` ? <ActivityIndicator size="small" color={Colors.emerald} /> :
-                              <Text style={s.approveBtnText}>Approve & Publish</Text>}
-                          </TouchableOpacity>
-                          <TouchableOpacity testID={`reject-${item.id}`}
-                            style={s.rejectBtn} onPress={() => rejectPost(item.id)}>
-                            <Text style={s.rejectBtnText}>Skip</Text>
-                          </TouchableOpacity>
-                        </View>
-                      </View>
-                    ))}
-                  </View>
-                )}
-
-                {/* Posted feed */}
-                {socialContent.filter(c => c.status === 'posted').map(item => (
-                  <View key={item.id} style={[s.contentCard, { borderColor: Colors.emerald + '15' }]}>
-                    <View style={s.contentHeader}>
-                      <View style={[s.liveDot, { backgroundColor: Colors.emerald }]} />
-                      <Text style={[s.contentPlatform, { color: Colors.emerald }]}>{item.platform.toUpperCase()}</Text>
-                      <Text style={s.contentProduct}>{item.product_name}</Text>
-                      <View style={s.postedBadge}><Text style={s.postedText}>LIVE</Text></View>
-                    </View>
-                    <Text style={s.contentText} numberOfLines={3}>{item.content}</Text>
-                    {item.platform_url && <Text style={s.linkText}>{item.platform_url}</Text>}
-                    <Text style={s.contentTime}>{new Date(item.created_at).toLocaleString()}</Text>
-                  </View>
-                ))}
-
-                {/* Draft/failed */}
-                {socialContent.filter(c => c.status === 'draft').map(item => (
-                  <View key={item.id} style={[s.contentCard, { borderColor: Colors.border }]}>
-                    <View style={s.contentHeader}>
-                      <Text style={s.contentPlatform}>{item.platform.toUpperCase()}</Text>
-                      <Text style={s.contentProduct}>{item.product_name}</Text>
-                      <View style={[s.postedBadge, { backgroundColor: Colors.surfaceElevated }]}><Text style={[s.postedText, { color: Colors.textMuted }]}>DRAFT</Text></View>
-                    </View>
-                    <Text style={s.contentText} numberOfLines={2}>{item.content}</Text>
-                    <Text style={s.contentTime}>{new Date(item.created_at).toLocaleString()}</Text>
-                  </View>
-                ))}
-              </View>
-            )}
-          </View>
-        )}
-
-        {/* Recent History */}
-        {history.length > 0 && tab === 'actions' && (
-          <View style={s.histSection}>
-            <Text style={s.histTitle}>Recent Executions</Text>
-            {history.slice(0, 5).map((h, i) => (
-              <TouchableOpacity key={i} style={s.histItem} onPress={() => setResultModal(h)}>
-                <View style={[s.histDot, { backgroundColor: h.status === 'completed' ? Colors.emerald : Colors.rose }]} />
-                <View style={{ flex: 1 }}>
-                  <Text style={s.histName}>{h.action_name}</Text>
-                  <Text style={s.histTime}>{new Date(h.created_at).toLocaleString()}</Text>
-                </View>
-                <Text style={s.histArrow}>→</Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-        )}
-
-        <View style={{ height: 32 }} />
-      </ScrollView>
-
-      {/* Result Modal */}
-      <Modal visible={!!resultModal} animationType="slide" transparent>
-        <View style={s.modalOverlay}>
-          <View style={s.resultSheet}>
-            <View style={s.modalHandle} />
-            <ScrollView showsVerticalScrollIndicator={false} style={{ maxHeight: 500 }}>
-              <Text style={s.resultTitle}>{resultModal?.action_name || resultModal?.name || 'Result'}</Text>
-              <Text style={s.resultContent}>
-                {resultModal?.result || resultModal?.steps_results?.map((sr: any) => `## ${sr.action_name}\n${sr.result}\n\n`).join('') || 'No result'}
-              </Text>
-            </ScrollView>
-            <TouchableOpacity testID="close-result-btn" style={s.closeBtn} onPress={() => setResultModal(null)}>
-              <Text style={s.closeBtnText}>Close</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
-
-      {/* Builder Modal */}
-      <Modal visible={showBuilder} animationType="slide" transparent>
-        <KeyboardAvoidingView style={s.modalOverlay} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
-          <View style={s.resultSheet}>
-            <View style={s.modalHandle} />
-            <Text style={s.resultTitle}>Build Your Store</Text>
-            <Text style={s.builderSub}>Describe your niche and we'll create a full store blueprint</Text>
-            <Text style={s.label}>What do you sell? *</Text>
-            <TextInput testID="niche-input" style={s.input} value={niche} onChangeText={setNiche}
-              placeholder="e.g., vintage jewelry, fitness gear, organic skincare" placeholderTextColor={Colors.textMuted} />
-            <Text style={s.label}>Brand Name (optional)</Text>
-            <TextInput testID="brand-input" style={s.input} value={storeName} onChangeText={setStoreName}
-              placeholder="We'll suggest one if blank" placeholderTextColor={Colors.textMuted} />
-            <Text style={s.label}>Style</Text>
-            <View style={s.styleRow}>
-              {['modern', 'minimal', 'bold', 'luxury', 'playful'].map(st => (
-                <TouchableOpacity key={st} testID={`style-${st}`}
-                  style={[s.stylePill, style === st && { borderColor: Colors.emerald, backgroundColor: Colors.emeraldGlow }]}
-                  onPress={() => setStyle(st)}>
-                  <Text style={[s.styleText, style === st && { color: Colors.emerald }]}>{st}</Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-            <View style={s.modalActions}>
-              <TouchableOpacity style={s.cancelBtn} onPress={() => setShowBuilder(false)}>
-                <Text style={s.cancelText}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity testID="generate-plan-btn"
-                style={[s.genBtn, !niche.trim() && { opacity: 0.5 }]}
-                onPress={startBuild} disabled={!niche.trim() || building}>
-                {building ? <ActivityIndicator size="small" color={Colors.bg} /> :
-                  <Text style={s.genText}>Generate Blueprint</Text>}
-              </TouchableOpacity>
-            </View>
-          </View>
-        </KeyboardAvoidingView>
-      </Modal>
+      <FlatList
+        data={posts}
+        keyExtractor={(item) => item.id}
+        renderItem={renderPost}
+        contentContainerStyle={styles.listContent}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl tintColor={Colors.emerald} refreshing={refreshing} onRefresh={() => {
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+            setRefreshing(true);
+            fetchPosts();
+          }} />
+        }
+      />
     </SafeAreaView>
   );
 }
 
-const s = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.bg },
-  center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  scroll: { padding: Spacing.lg },
-  overline: { fontSize: FontSizes.xs, fontWeight: '800', letterSpacing: 3, color: Colors.amber, marginBottom: 4 },
-  title: { fontSize: FontSizes.xxxl, fontWeight: '900', color: Colors.textPrimary, marginBottom: Spacing.lg },
-  tabs: { flexDirection: 'row', gap: Spacing.sm, marginBottom: Spacing.xl },
-  tabBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 12, borderRadius: BorderRadius.lg, backgroundColor: Colors.surface, borderWidth: 1, borderColor: Colors.border },
-  tabActive: { backgroundColor: Colors.emeraldGlow, borderColor: Colors.emerald + '40' },
-  tabIcon: { fontSize: 16 },
-  tabLabel: { fontSize: FontSizes.sm, fontWeight: '700', color: Colors.textMuted },
-  tabLabelActive: { color: Colors.emerald },
-  sectionSub: { fontSize: FontSizes.md, color: Colors.textSecondary, marginBottom: Spacing.xl, lineHeight: 22 },
-  agentSection: { marginBottom: Spacing.xl },
-  agentLabel: { fontSize: FontSizes.md, fontWeight: '800', letterSpacing: 1, marginBottom: Spacing.md },
-  actionCard: { backgroundColor: Colors.surface, borderRadius: BorderRadius.lg, padding: Spacing.lg, borderWidth: 1, marginBottom: Spacing.sm, ...Shadows.card },
-  actionRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.md },
-  actionIcon: { fontSize: 24, width: 36, textAlign: 'center' },
-  actionName: { fontSize: FontSizes.md, fontWeight: '700', color: Colors.textPrimary },
-  actionDesc: { fontSize: FontSizes.xs, color: Colors.textMuted, marginTop: 2 },
-  runBadge: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: BorderRadius.lg, borderWidth: 1 },
-  runText: { fontSize: FontSizes.xs, fontWeight: '800', letterSpacing: 1 },
-  wfCard: { backgroundColor: Colors.surface, borderRadius: BorderRadius.xl, padding: Spacing.xl, borderWidth: 1, borderColor: Colors.border, marginBottom: Spacing.lg, ...Shadows.card },
-  wfHeader: { flexDirection: 'row', gap: Spacing.md, marginBottom: Spacing.md },
-  wfIcon: { fontSize: 32 },
-  wfName: { fontSize: FontSizes.lg, fontWeight: '800', color: Colors.textPrimary },
-  wfDesc: { fontSize: FontSizes.sm, color: Colors.textSecondary, marginTop: 4, lineHeight: 20 },
-  wfSteps: { flexDirection: 'row', flexWrap: 'wrap', gap: 4, alignItems: 'center' },
-  wfStep: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  wfStepDot: { width: 8, height: 8, borderRadius: 4 },
-  wfStepText: { fontSize: FontSizes.xs, color: Colors.textSecondary, fontWeight: '600', textTransform: 'capitalize' },
-  wfArrow: { fontSize: FontSizes.xs, color: Colors.textMuted, marginHorizontal: 2 },
-  wfRunBtn: { backgroundColor: Colors.emerald, borderRadius: BorderRadius.lg, paddingVertical: 12, alignItems: 'center', marginTop: Spacing.md },
-  wfRunText: { fontSize: FontSizes.md, fontWeight: '800', color: Colors.bg },
-  builderBtn: { backgroundColor: Colors.surface, borderRadius: BorderRadius.xl, padding: Spacing.xxl, borderWidth: 1, borderColor: Colors.emerald + '25', alignItems: 'center', gap: 8, ...Shadows.card },
-  builderBtnIcon: { fontSize: 40 },
-  builderBtnTitle: { fontSize: FontSizes.xl, fontWeight: '900', color: Colors.textPrimary },
-  builderBtnSub: { fontSize: FontSizes.md, color: Colors.textSecondary, textAlign: 'center', lineHeight: 22 },
-  planCard: { backgroundColor: Colors.surface, borderRadius: BorderRadius.xl, padding: Spacing.xl, borderWidth: 1, borderColor: Colors.emerald + '25', marginTop: Spacing.xl, ...Shadows.card },
-  planTitle: { fontSize: FontSizes.xxl, fontWeight: '900', color: Colors.emerald },
-  planTagline: { fontSize: FontSizes.md, color: Colors.textSecondary, fontStyle: 'italic', marginTop: 4 },
-  revBadge: { backgroundColor: Colors.emeraldGlow, paddingHorizontal: 14, paddingVertical: 8, borderRadius: BorderRadius.lg, alignSelf: 'flex-start', marginTop: Spacing.md, borderWidth: 1, borderColor: Colors.emerald + '30' },
-  revText: { fontSize: FontSizes.sm, fontWeight: '800', color: Colors.emerald },
-  planSection: { fontSize: FontSizes.md, fontWeight: '800', color: Colors.textPrimary, marginTop: Spacing.xl, marginBottom: Spacing.md },
-  productRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: Spacing.sm, borderBottomWidth: 1, borderBottomColor: Colors.border },
-  productName: { fontSize: FontSizes.md, fontWeight: '700', color: Colors.textPrimary },
-  productDesc: { fontSize: FontSizes.xs, color: Colors.textMuted, marginTop: 2 },
-  productPrice: { fontSize: FontSizes.lg, fontWeight: '800', color: Colors.emerald, marginLeft: Spacing.md },
-  moreText: { fontSize: FontSizes.sm, color: Colors.textMuted, marginTop: Spacing.md, textAlign: 'center' },
-  // Build chat
-  buildChatWrap: { flex: 1 },
-  buildProgress: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 8, marginBottom: 8 },
-  buildProgressText: { fontSize: FontSizes.md, fontWeight: '700', color: Colors.emerald },
-  buildChatScroll: { maxHeight: 320, backgroundColor: '#0A0F1E', borderRadius: 16, padding: 16, marginBottom: 12 },
-  buildMsg: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 10, gap: 8 },
-  buildMsgUser: { alignSelf: 'flex-end', justifyContent: 'flex-end' },
-  buildMsgAgent: { alignSelf: 'flex-start' },
-  buildMsgDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: Colors.emerald, marginTop: 6 },
-  buildMsgText: { fontSize: FontSizes.md, color: '#E2E8F0', lineHeight: 22, flex: 1 },
-  buildInputBar: { flexDirection: 'row', gap: 8, marginBottom: 12 },
-  buildInput: { flex: 1, backgroundColor: '#0D1424', borderRadius: 12, paddingHorizontal: 16, paddingVertical: 12, color: '#F1F5F9', fontSize: FontSizes.md, borderWidth: 1, borderColor: '#1E293B' },
-  buildSendBtn: { width: 44, height: 44, borderRadius: 12, backgroundColor: Colors.emerald, justifyContent: 'center', alignItems: 'center' },
-  buildSendText: { fontSize: 20, fontWeight: '800', color: '#050A18' },
-  newBuildBtn: { backgroundColor: '#0D1424', borderRadius: 14, paddingVertical: 14, alignItems: 'center', borderWidth: 1, borderColor: '#1E293B', marginTop: 12 },
-  newBuildText: { fontSize: FontSizes.md, fontWeight: '700', color: '#94A3B8' },
-  histSection: { marginTop: Spacing.xl },
-  histTitle: { fontSize: FontSizes.lg, fontWeight: '800', color: Colors.textPrimary, marginBottom: Spacing.md },
-  histItem: { flexDirection: 'row', alignItems: 'center', gap: Spacing.md, paddingVertical: Spacing.md, borderBottomWidth: 1, borderBottomColor: Colors.border },
-  histDot: { width: 10, height: 10, borderRadius: 5 },
-  histName: { fontSize: FontSizes.md, fontWeight: '600', color: Colors.textPrimary },
-  histTime: { fontSize: FontSizes.xs, color: Colors.textMuted, marginTop: 2 },
-  histArrow: { fontSize: FontSizes.lg, color: Colors.emerald },
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'flex-end' },
-  resultSheet: { backgroundColor: Colors.surface, borderTopLeftRadius: BorderRadius.xxl, borderTopRightRadius: BorderRadius.xxl, padding: Spacing.xxl, paddingBottom: 40, borderTopWidth: 1, borderColor: Colors.border, maxHeight: '85%' },
-  modalHandle: { width: 40, height: 4, backgroundColor: Colors.textMuted, borderRadius: 2, alignSelf: 'center', marginBottom: Spacing.xl },
-  resultTitle: { fontSize: FontSizes.xl, fontWeight: '900', color: Colors.textPrimary, marginBottom: Spacing.md },
-  resultContent: { fontSize: FontSizes.md, color: Colors.textSecondary, lineHeight: 24 },
-  closeBtn: { backgroundColor: Colors.surfaceElevated, paddingVertical: 14, borderRadius: BorderRadius.lg, alignItems: 'center', marginTop: Spacing.xl, borderWidth: 1, borderColor: Colors.border },
-  closeBtnText: { fontSize: FontSizes.md, fontWeight: '700', color: Colors.textSecondary },
-  builderSub: { fontSize: FontSizes.md, color: Colors.textSecondary, marginBottom: Spacing.xl },
-  // Social / Campaign styles
-  intBadges: { flexDirection: 'row', gap: Spacing.sm, marginBottom: Spacing.lg },
-  intBadge: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 14, paddingVertical: 8, borderRadius: BorderRadius.full, backgroundColor: Colors.surface, borderWidth: 1 },
-  intBadgeText: { fontSize: FontSizes.sm, fontWeight: '700' },
-  intDot: { width: 6, height: 6, borderRadius: 3 },
-  genCard: { backgroundColor: Colors.surface, borderRadius: BorderRadius.xl, padding: Spacing.xl, borderWidth: 1, borderColor: Colors.amber + '20', ...Shadows.card },
-  genTitle: { fontSize: FontSizes.xl, fontWeight: '900', color: Colors.textPrimary, marginBottom: 4 },
-  genSub: { fontSize: FontSizes.sm, color: Colors.textSecondary, marginBottom: Spacing.lg, lineHeight: 20 },
-  launchBtn: { backgroundColor: Colors.amber, borderRadius: BorderRadius.lg, paddingVertical: 16, alignItems: 'center', marginTop: Spacing.lg },
-  launchBtnText: { fontSize: FontSizes.md, fontWeight: '900', color: Colors.bg },
-  launchingRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  autoNote: { fontSize: FontSizes.xs, color: Colors.textMuted, textAlign: 'center', marginTop: Spacing.sm, fontStyle: 'italic' },
-  campaignResultCard: { backgroundColor: Colors.surface, borderRadius: BorderRadius.xl, padding: Spacing.xl, borderWidth: 1, marginTop: Spacing.xl, ...Shadows.card },
-  campaignResultHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: Spacing.lg },
-  campaignResultTitle: { fontSize: FontSizes.lg, fontWeight: '800', color: Colors.textPrimary },
-  campaignResultSub: { fontSize: FontSizes.sm, color: Colors.textSecondary, marginTop: 2 },
-  campaignPost: { backgroundColor: Colors.surfaceElevated, borderRadius: BorderRadius.lg, padding: Spacing.lg, marginBottom: Spacing.sm },
-  campaignPostPlatform: { fontSize: FontSizes.xs, fontWeight: '800', color: Colors.amber, letterSpacing: 1, marginBottom: 6 },
-  campaignPostContent: { fontSize: FontSizes.md, color: Colors.textPrimary, lineHeight: 22, marginBottom: 4 },
-  statusPill: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: BorderRadius.full, alignSelf: 'flex-start', marginTop: 8 },
-  statusText: { fontSize: FontSizes.xs, fontWeight: '800', letterSpacing: 0.5 },
-  contentCard: { backgroundColor: Colors.surface, borderRadius: BorderRadius.lg, padding: Spacing.lg, borderWidth: 1, borderColor: Colors.border, marginBottom: Spacing.md, ...Shadows.card },
-  contentHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 },
-  contentPlatform: { fontSize: FontSizes.xs, fontWeight: '800', color: Colors.textMuted, letterSpacing: 1 },
-  contentProduct: { fontSize: FontSizes.sm, fontWeight: '600', color: Colors.textSecondary, flex: 1 },
-  contentText: { fontSize: FontSizes.md, color: Colors.textPrimary, lineHeight: 22, marginBottom: 4 },
-  hashtagText: { fontSize: FontSizes.sm, color: Colors.amber, marginTop: 4 },
-  linkText: { fontSize: FontSizes.xs, color: Colors.cyan, marginTop: 4 },
-  postedBadge: { backgroundColor: Colors.emeraldGlow, paddingHorizontal: 8, paddingVertical: 2, borderRadius: BorderRadius.full },
-  postedText: { fontSize: 9, fontWeight: '800', color: Colors.emerald, letterSpacing: 0.5 },
-  liveDot: { width: 6, height: 6, borderRadius: 3 },
-  contentTime: { fontSize: FontSizes.xs, color: Colors.textMuted, marginTop: 8 },
-  approvalSection: { marginBottom: Spacing.lg },
-  approvalTitle: { fontSize: FontSizes.md, fontWeight: '800', color: Colors.amber, marginBottom: Spacing.md },
-  approvalActions: { flexDirection: 'row', gap: Spacing.md, marginTop: Spacing.md },
-  approveBtn: { flex: 2, backgroundColor: Colors.emerald, borderRadius: BorderRadius.lg, paddingVertical: 12, alignItems: 'center' },
-  approveBtnText: { fontSize: FontSizes.md, fontWeight: '800', color: Colors.bg },
-  rejectBtn: { flex: 1, backgroundColor: Colors.surfaceElevated, borderRadius: BorderRadius.lg, paddingVertical: 12, alignItems: 'center', borderWidth: 1, borderColor: Colors.border },
-  rejectBtnText: { fontSize: FontSizes.md, fontWeight: '600', color: Colors.textMuted },
-  label: { fontSize: FontSizes.sm, fontWeight: '700', color: Colors.textSecondary, marginBottom: 6, marginTop: Spacing.md },
-  input: { backgroundColor: Colors.surfaceElevated, borderRadius: BorderRadius.md, paddingHorizontal: Spacing.lg, paddingVertical: Spacing.md, color: Colors.textPrimary, fontSize: FontSizes.md, borderWidth: 1, borderColor: Colors.border },
-  styleRow: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.sm },
-  stylePill: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: BorderRadius.full, borderWidth: 1, borderColor: Colors.border, backgroundColor: Colors.surfaceElevated },
-  styleText: { fontSize: FontSizes.sm, fontWeight: '700', color: Colors.textSecondary, textTransform: 'capitalize' },
-  modalActions: { flexDirection: 'row', gap: Spacing.md, marginTop: Spacing.xxl },
-  cancelBtn: { flex: 1, paddingVertical: 14, borderRadius: BorderRadius.lg, backgroundColor: Colors.surfaceElevated, alignItems: 'center', borderWidth: 1, borderColor: Colors.border },
-  cancelText: { fontSize: FontSizes.md, fontWeight: '700', color: Colors.textSecondary },
-  genBtn: { flex: 1, paddingVertical: 14, borderRadius: BorderRadius.lg, backgroundColor: Colors.emerald, alignItems: 'center' },
-  genText: { fontSize: FontSizes.md, fontWeight: '800', color: Colors.bg },
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: Colors.bg,
+  },
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 24,
+    paddingTop: 16,
+    paddingBottom: 24,
+  },
+  title: {
+    fontFamily: Typography.fonts.outfitL,
+    fontSize: 34,
+    color: Colors.text,
+    letterSpacing: -1,
+  },
+  subtitle: {
+    fontFamily: Typography.fonts.manropeB,
+    fontSize: 15,
+    color: Colors.textSecondary,
+    marginTop: 4,
+  },
+  composeBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: Colors.emerald,
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 100,
+    shadowColor: Colors.emerald,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  composeTxt: {
+    fontFamily: Typography.fonts.outfitB,
+    fontSize: 16,
+    color: Colors.bg,
+  },
+  listContent: {
+    paddingHorizontal: 16,
+    paddingBottom: 120,
+    gap: 16,
+  },
+  cardBox: {
+    borderRadius: 24,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.06)',
+    backgroundColor: 'rgba(0,0,0,0.3)',
+  },
+  card: {
+    padding: 20,
+  },
+  cardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  authorBadgeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  avatar: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: 'rgba(16, 185, 129, 0.1)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(16, 185, 129, 0.3)',
+  },
+  authorName: {
+    fontFamily: Typography.fonts.outfitB,
+    fontSize: 18,
+    color: Colors.text,
+  },
+  timestamp: {
+    fontFamily: Typography.fonts.manropeM,
+    fontSize: 13,
+    color: Colors.textSecondary,
+    marginTop: 2,
+    textTransform: 'capitalize',
+  },
+  bodyText: {
+    fontFamily: Typography.fonts.manropeM,
+    fontSize: 15,
+    color: Colors.text,
+    lineHeight: 24,
+    marginBottom: 16,
+  },
+  mediaContainer: {
+    width: '100%',
+    height: 180,
+    borderRadius: 16,
+    overflow: 'hidden',
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.05)',
+  },
+  mediaPlaceholder: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(16, 185, 129, 0.05)',
+  },
+  mediaPlaceholderText: {
+    fontFamily: Typography.fonts.manropeB,
+    fontSize: 14,
+    color: Colors.textSecondary,
+    marginTop: 12,
+  },
+  divider: {
+    height: 1,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    marginBottom: 16,
+  },
+  actionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 24,
+  },
+  actionBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    borderRadius: 8,
+  },
+  actionTxt: {
+    fontFamily: Typography.fonts.manropeB,
+    fontSize: 14,
+    color: Colors.textSecondary,
+  },
 });
