@@ -129,17 +129,17 @@ export default function StoresScreen() {
 
         {stores.length === 0 ? (
           <View style={s.empty}>
-            <Text style={{ fontSize: 48 }}>🏪</Text>
-            <Text style={s.emptyTitle}>No stores connected</Text>
-            <Text style={s.emptyText}>Connect your store to unleash Maestro, Aria, Cadence & Harmony.</Text>
+            <Text style={{ fontSize: 44 }}>🏪</Text>
+            <Text style={s.emptyTitle}>Connect a Platform</Text>
+            <Text style={s.emptyText}>Each platform gets its own AI Executive Assistant.</Text>
             <View style={s.oauthGrid}>
               {STORE_PLATFORMS.map(p => (
                 <TouchableOpacity key={p.id} testID={`quick-connect-${p.id}`}
-                  style={[s.oauthBtn, { borderColor: p.color + '40' }]}
+                  style={[s.oauthBtn, { borderColor: p.color + '30' }]}
                   onPress={() => { setSelectedPlatform(p.id); setShowModal(true); }}>
-                  <Text style={{ fontSize: 24 }}>{p.icon}</Text>
+                  <Text style={{ fontSize: 26 }}>{p.icon}</Text>
                   <Text style={[s.oauthBtnText, { color: p.color }]}>{p.name}</Text>
-                  {p.hasOAuth && <View style={[s.oauthTag, { marginTop: 4 }]}><Text style={s.oauthTagText}>1-tap</Text></View>}
+                  {p.hasOAuth && <View style={s.oauthTag}><Text style={s.oauthTagText}>1-tap</Text></View>}
                 </TouchableOpacity>
               ))}
             </View>
@@ -276,15 +276,17 @@ const s = StyleSheet.create({
   subtitle: { fontSize: FontSizes.md, color: Colors.textSecondary, marginTop: 4 },
   connectBtn: { backgroundColor: Colors.emerald, paddingHorizontal: 20, paddingVertical: 12, borderRadius: BorderRadius.lg },
   connectBtnText: { fontSize: FontSizes.md, fontWeight: '800', color: Colors.bg },
-  empty: { alignItems: 'center', paddingVertical: 40, gap: 12 },
-  emptyTitle: { fontSize: FontSizes.xl, fontWeight: '800', color: Colors.textPrimary },
-  emptyText: { fontSize: FontSizes.md, color: Colors.textSecondary, textAlign: 'center', paddingHorizontal: 24, marginBottom: 8 },
-  oauthGrid: { flexDirection: 'row', gap: Spacing.md, marginTop: 8 },
+  empty: { alignItems: 'center', paddingVertical: 32, gap: 8 },
+  emptyTitle: { fontSize: FontSizes.xl, fontWeight: '900', color: Colors.textPrimary },
+  emptyText: { fontSize: FontSizes.md, color: Colors.textSecondary, textAlign: 'center', paddingHorizontal: 16, marginBottom: 12 },
+  oauthGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, justifyContent: 'center', width: '100%', paddingHorizontal: 4 },
   oauthBtn: {
-    flex: 1, paddingVertical: 20, paddingHorizontal: 16, borderRadius: BorderRadius.xl,
-    backgroundColor: Colors.surface, borderWidth: 1, alignItems: 'center', gap: 8, ...Shadows.card,
+    width: '30%', paddingVertical: 16, borderRadius: BorderRadius.xl,
+    backgroundColor: Colors.surface, borderWidth: 1, alignItems: 'center', gap: 6, ...Shadows.card,
   },
-  oauthBtnText: { fontSize: FontSizes.sm, fontWeight: '800' },
+  oauthBtnText: { fontSize: 11, fontWeight: '800' },
+  oauthTag: { backgroundColor: Colors.emerald + '15', paddingHorizontal: 8, paddingVertical: 2, borderRadius: BorderRadius.full },
+  oauthTagText: { fontSize: 8, fontWeight: '800', color: Colors.emerald, letterSpacing: 0.5 },
   manualBtn: { marginTop: 16 },
   manualBtnText: { fontSize: FontSizes.sm, color: Colors.textMuted, fontWeight: '600' },
   storeCard: { backgroundColor: Colors.surface, borderRadius: BorderRadius.xl, padding: Spacing.xl, borderWidth: 1, marginBottom: Spacing.lg, ...Shadows.card },
