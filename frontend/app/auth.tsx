@@ -84,9 +84,8 @@ export default function AuthScreen() {
 
             {/* Hero — oversized, asymmetric */}
             <Animated.View style={[s.heroBlock, { opacity: heroA, transform: [{ translateY: heroSlide }] }]}>
-              {/* Pulsing logo */}
+              {/* Logo — clean, no glow */}
               <View style={s.logoCenter}>
-                <Animated.View style={[s.logoGlow, { opacity: logoGlow }]} />
                 <Animated.View style={{ transform: [{ scale: logoPulse }] }}>
                   <Image source={require('../assets/images/orchestrai-logo.png')} style={s.heroLogo} resizeMode="contain" />
                 </Animated.View>
@@ -169,7 +168,6 @@ const s = StyleSheet.create({
   // Hero block
   heroBlock: { marginBottom: 32 },
   logoCenter: { alignItems: 'center', marginBottom: 24 },
-  logoGlow: { position: 'absolute', width: 160, height: 160, borderRadius: 80, backgroundColor: Colors.emerald },
   heroLogo: { width: 120, height: 120 },
   heroText: { fontSize: 42, fontWeight: '900', color: '#F1F5F9', letterSpacing: -1.5, lineHeight: 48 },
   heroGreen: { color: Colors.emerald },
