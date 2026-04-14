@@ -9,141 +9,42 @@ import { useAuth } from '../contexts/AuthContext';
 import { Colors, BorderRadius } from '../constants/theme';
 
 const { width: W, height: H } = Dimensions.get('window');
-const HUB_SIZE = 56;
-const AGENT_R = 68;
-const ORBIT_R = 120;
-
-const AGENTS = [
-  { emoji: '📦', name: 'Store', color: Colors.emerald },
-  { emoji: '📣', name: 'Growth', color: '#FBBF24' },
-  { emoji: '📊', name: 'Insight', color: '#22D3EE' },
-  { emoji: '🎧', name: 'Support', color: '#FB7185' },
-];
 
 const INTEGRATIONS = [
   { label: 'Shopify', emoji: '🛍️', color: '#96BF48' },
   { label: 'Etsy', emoji: '🧶', color: '#F1641E' },
   { label: 'Amazon', emoji: '📦', color: '#FF9900' },
   { label: 'eBay', emoji: '🏷️', color: '#E53238' },
-  { label: 'Woo', emoji: '🛒', color: '#7B51AD' },
-  { label: 'Square', emoji: '⬛', color: '#006AFF' },
-  { label: 'BigC', emoji: '🔷', color: '#34313F' },
-  { label: 'Wix', emoji: '🌐', color: '#0C6EFC' },
+  { label: 'Twitter', emoji: '🐦', color: '#1DA1F2' },
+  { label: 'Pinterest', emoji: '📌', color: '#E60023' },
+  { label: 'TikTok', emoji: '🎵', color: '#010101' },
+  { label: 'Meta', emoji: '📘', color: '#0866FF' },
 ];
 
 function OrbitalHero() {
-  const hubPulse = useRef(new Animated.Value(1)).current;
-  const hubGlow = useRef(new Animated.Value(0.2)).current;
-  const agentPulses = useRef(AGENTS.map(() => new Animated.Value(0.7))).current;
-  const agentScales = useRef(AGENTS.map(() => new Animated.Value(1))).current;
-  const intPulses = useRef(INTEGRATIONS.map(() => new Animated.Value(0.5))).current;
-  const connPulses = useRef(AGENTS.map(() => new Animated.Value(0.1))).current;
+  const pulse = useRef(new Animated.Value(1)).current;
+  const glow = useRef(new Animated.Value(0.1)).current;
 
   useEffect(() => {
-    // Central hub breathe — subtle, contained
     Animated.loop(Animated.sequence([
-      Animated.timing(hubPulse, { toValue: 1.04, duration: 2200, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
-      Animated.timing(hubPulse, { toValue: 0.97, duration: 2200, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+      Animated.timing(pulse, { toValue: 1.03, duration: 2400, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+      Animated.timing(pulse, { toValue: 0.98, duration: 2400, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
     ])).start();
     Animated.loop(Animated.sequence([
-      Animated.timing(hubGlow, { toValue: 0.5, duration: 2800, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
-      Animated.timing(hubGlow, { toValue: 0.15, duration: 2800, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+      Animated.timing(glow, { toValue: 0.3, duration: 3000, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+      Animated.timing(glow, { toValue: 0.06, duration: 3000, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
     ])).start();
-
-    // Agent nodes pulse with staggered timing (each agent has its own rhythm)
-    AGENTS.forEach((_, i) => {
-      setTimeout(() => {
-        Animated.loop(Animated.sequence([
-          Animated.timing(agentPulses[i], { toValue: 1, duration: 1400 + i * 300, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
-          Animated.timing(agentPulses[i], { toValue: 0.6, duration: 1400 + i * 300, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
-        ])).start();
-        Animated.loop(Animated.sequence([
-          Animated.timing(agentScales[i], { toValue: 1.05, duration: 1800 + i * 200, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
-          Animated.timing(agentScales[i], { toValue: 0.97, duration: 1800 + i * 200, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
-        ])).start();
-        // Connection pulse (data flowing from hub to agent)
-        Animated.loop(Animated.sequence([
-          Animated.timing(connPulses[i], { toValue: 0.5, duration: 800 + i * 150, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
-          Animated.timing(connPulses[i], { toValue: 0.08, duration: 1200 + i * 150, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
-        ])).start();
-      }, i * 400);
-    });
-
-    // Integration icons subtle pulse
-    intPulses.forEach((p, i) => {
-      setTimeout(() => {
-        Animated.loop(Animated.sequence([
-          Animated.timing(p, { toValue: 0.9, duration: 1500 + i * 180, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
-          Animated.timing(p, { toValue: 0.4, duration: 1500 + i * 180, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
-        ])).start();
-      }, i * 250);
-    });
   }, []);
 
-  const containerSize = ORBIT_R * 2 + 56;
-  const cx = containerSize / 2;
-
   return (
-    <View style={[o.container, { width: containerSize, height: containerSize, alignSelf: 'center', overflow: 'hidden' }]}>
-      {/* Outer glow */}
-      <Animated.View style={[o.outerGlow, { opacity: hubGlow, left: cx - 130, top: cx - 130 }]} />
-
-      {/* Outer orbit ring (integrations) */}
-      <View style={[o.orbitRing, { left: cx - ORBIT_R - 20, top: cx - ORBIT_R - 20, width: ORBIT_R * 2 + 40, height: ORBIT_R * 2 + 40, borderRadius: ORBIT_R + 20 }]} />
-
-      {/* Inner orbit ring (agents) */}
-      <View style={[o.innerRing, { left: cx - AGENT_R - 12, top: cx - AGENT_R - 12, width: AGENT_R * 2 + 24, height: AGENT_R * 2 + 24, borderRadius: AGENT_R + 12 }]} />
-
-      {/* Integration icons on outer ring */}
-      {INTEGRATIONS.map((integ, i) => {
-        const angle = (i / INTEGRATIONS.length) * Math.PI * 2 - Math.PI / 2;
-        const x = cx + Math.cos(angle) * ORBIT_R - 22;
-        const y = cx + Math.sin(angle) * ORBIT_R - 22;
-        return (
-          <Animated.View key={`int-${i}`} style={[o.intBubble, {
-            position: 'absolute', left: x, top: y,
-            opacity: intPulses[i], borderColor: integ.color + '50',
-          }]}>
-            <Text style={o.intEmoji}>{integ.emoji}</Text>
-            <Text style={[o.intLabel, { color: integ.color }]}>{integ.label}</Text>
-          </Animated.View>
-        );
-      })}
-
-      {/* Agent nodes on inner ring */}
-      {AGENTS.map((agent, i) => {
-        const angle = (i / AGENTS.length) * Math.PI * 2 - Math.PI / 2;
-        const ax = cx + Math.cos(angle) * AGENT_R - 26;
-        const ay = cx + Math.sin(angle) * AGENT_R - 26;
-
-        return (
-          <Animated.View key={`agent-${i}`} style={[o.agentNode, {
-            position: 'absolute', left: ax, top: ay,
-            opacity: agentPulses[i],
-            transform: [{ scale: agentScales[i] }],
-            borderColor: agent.color + '60',
-            backgroundColor: agent.color + '15',
-          }]}>
-            <Text style={o.agentEmoji}>{agent.emoji}</Text>
-            <Text style={[o.agentName, { color: agent.color }]}>{agent.name}</Text>
-          </Animated.View>
-        );
-      })}
-
-      {/* Central Conductor Hub */}
-      <Animated.View style={[o.hubWrap, {
-        position: 'absolute', left: cx - HUB_SIZE / 2, top: cx - HUB_SIZE / 2,
-        transform: [{ scale: hubPulse }],
-      }]}>
-        <Animated.View style={[o.hubGlowRing, { opacity: hubGlow }]} />
-        <View style={o.hubCore}>
-          <Image source={require('../assets/images/orchestrai-logo-icon.png')} style={{ width: 38, height: 38 }} resizeMode="contain" />
-        </View>
+    <View style={o.heroWrap}>
+      <Animated.View style={[o.glowCircle, { opacity: glow }]} />
+      <Animated.View style={[o.logoWrap, { transform: [{ scale: pulse }] }]}>
+        <Image source={require('../assets/images/orchestrai-logo.png')} style={o.heroLogo} resizeMode="contain" />
       </Animated.View>
     </View>
   );
 }
-
 // Press-animated button
 function PressBtn({ testID, onPress, children, style }: any) {
   const sc = useRef(new Animated.Value(1)).current;
@@ -284,39 +185,10 @@ export default function AuthScreen() {
 }
 
 const o = StyleSheet.create({
-  container: { position: 'relative', marginBottom: 10 },
-  outerGlow: {
-    position: 'absolute', width: 260, height: 260, borderRadius: 130,
-    backgroundColor: Colors.emerald, opacity: 0.06,
-  },
-  orbitRing: {
-    position: 'absolute', borderWidth: 1, borderColor: Colors.emerald + '10', borderStyle: 'dashed',
-  },
-  innerRing: {
-    position: 'absolute', borderWidth: 1.5, borderColor: Colors.emerald + '18',
-  },
-  intBubble: {
-    width: 44, height: 44, borderRadius: 22,
-    backgroundColor: '#0D1424', borderWidth: 1.5, justifyContent: 'center', alignItems: 'center',
-  },
-  intEmoji: { fontSize: 16 },
-  intLabel: { fontSize: 6, fontWeight: '800', marginTop: 1, letterSpacing: 0.3 },
-  agentNode: {
-    width: 52, height: 52, borderRadius: 26,
-    borderWidth: 2, justifyContent: 'center', alignItems: 'center',
-  },
-  agentEmoji: { fontSize: 20 },
-  agentName: { fontSize: 7, fontWeight: '900', marginTop: 1, letterSpacing: 0.5 },
-  hubWrap: { zIndex: 10 },
-  hubGlowRing: {
-    position: 'absolute', width: HUB_SIZE + 30, height: HUB_SIZE + 30, borderRadius: (HUB_SIZE + 30) / 2,
-    backgroundColor: Colors.emerald, left: -15, top: -15,
-  },
-  hubCore: {
-    width: HUB_SIZE, height: HUB_SIZE, borderRadius: HUB_SIZE / 2,
-    backgroundColor: '#0A1A2E', borderWidth: 2, borderColor: Colors.emerald + '60',
-    justifyContent: 'center', alignItems: 'center',
-  },
+  heroWrap: { alignItems: 'center', justifyContent: 'center', height: 200, marginBottom: 8 },
+  glowCircle: { position: 'absolute', width: 220, height: 220, borderRadius: 110, backgroundColor: Colors.emerald },
+  logoWrap: { width: 160, height: 160 },
+  heroLogo: { width: 160, height: 160 },
 });
 
 const s = StyleSheet.create({
