@@ -73,7 +73,7 @@ export default function AgentsHubScreen() {
             return (
               <AnimatedPressable
                 key={agent.agent_type}
-                haptic="light"
+                haptic={Haptics.ImpactFeedbackStyle.Light}
                 scaleDown={0.92}
                 onPress={() => navigateToChat(agent.agent_type)}
                 style={[s.card, { borderColor: `${meta.color}20` }]}
@@ -110,7 +110,7 @@ export default function AgentsHubScreen() {
           })}
           
           {/* Add New Agent Placeholder */}
-          <AnimatedPressable haptic="light" style={[s.card, s.cardDashed]} onPress={() => Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning)}>
+          <AnimatedPressable haptic={Haptics.ImpactFeedbackStyle.Light} style={[s.card, s.cardDashed]} onPress={() => Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning)}>
              <BlurView intensity={10} tint="dark" style={[s.cardInner, s.center]}>
                 <View style={[s.iconBox, { backgroundColor: `${Colors.textMuted}20` }]}>
                   <ShieldCheck size={32} color={Colors.textMuted} />

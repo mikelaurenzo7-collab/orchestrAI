@@ -24,6 +24,13 @@ export const Colors = {
   textSecondary: '#94A3B8',
   textMuted: '#475569',
 
+  // Aliases for backward compatibility
+  blue: '#3B82F6',
+  accent: '#FBBF24',
+  error: '#EF4444',
+  text: '#F1F5F9',
+  textDisabled: '#334155',
+
   // Borders
   border: 'rgba(30, 41, 59, 0.6)',
   borderHighlight: 'rgba(52,211,153,0.3)',
@@ -69,6 +76,21 @@ export const Fonts = {
   bodyMedium: 'Manrope_500Medium',
   bodySemibold: 'Manrope_600SemiBold',
   bodyBold: 'Manrope_700Bold',
+};
+
+// Typography alias (backward compat with screens using Typography.fonts)
+export const Typography = {
+  fonts: {
+    outfitL: 'Outfit_400Regular',
+    outfitR: 'Outfit_400Regular',
+    outfitM: 'Outfit_500Medium',
+    outfitSB: 'Outfit_600SemiBold',
+    outfitB: 'Outfit_700Bold',
+    manropeR: 'Manrope_400Regular',
+    manropeM: 'Manrope_500Medium',
+    manropeSB: 'Manrope_600SemiBold',
+    manropeB: 'Manrope_700Bold',
+  },
 };
 
 export const Shadows = {

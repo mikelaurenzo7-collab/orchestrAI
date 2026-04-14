@@ -37,7 +37,7 @@ function TrialBanner({ trialEnds }: { trialEnds?: string }) {
             <Text style={tb.sub}>{days} days remaining</Text>
           </View>
         </View>
-        <AnimatedPressable haptic="medium" style={tb.btn} scaleDown={0.92}>
+        <AnimatedPressable haptic={Haptics.ImpactFeedbackStyle.Medium} style={tb.btn} scaleDown={0.92}>
           <Text style={tb.btnText}>Upgrade</Text>
         </AnimatedPressable>
       </BlurView>
@@ -90,7 +90,7 @@ export default function DashboardScreen() {
           <Text style={s.greets}>Good morning,</Text>
           <Text style={s.name}>{user?.name?.split(' ')[0] || 'Founder'}</Text>
         </View>
-        <AnimatedPressable haptic="light" scaleDown={0.9} style={s.profileBtn}>
+        <AnimatedPressable haptic={Haptics.ImpactFeedbackStyle.Light} scaleDown={0.9} style={s.profileBtn}>
           <Text style={s.profileInit}>{(user?.name?.[0] || 'O').toUpperCase()}</Text>
         </AnimatedPressable>
       </Animated.View>

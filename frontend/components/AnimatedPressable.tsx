@@ -1,5 +1,5 @@
 import React, { ReactNode } from 'react';
-import { Pressable, PressableProps, StyleProp, ViewStyle, Gestures } from 'react-native';
+import { Pressable, PressableProps, StyleProp, ViewStyle } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
 
@@ -57,3 +57,5 @@ export function AnimatedPressable({
     </AnimatedPress>
   );
 }
+
+export default AnimatedPressable;
