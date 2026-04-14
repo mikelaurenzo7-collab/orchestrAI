@@ -119,6 +119,17 @@ PINTEREST_APP_ID=your-pinterest-app-id
 ```
 📌 **Get from:** https://developers.pinterest.com/apps/
 
+**Reddit** (✅ NEW - Working!)
+```bash
+REDDIT_CLIENT_ID=your-reddit-client-id
+REDDIT_CLIENT_SECRET=your-reddit-client-secret
+REDDIT_USER_AGENT=orchestrAI:v1.0.0 (by /u/yourusername)
+REDDIT_USERNAME=your-reddit-username
+REDDIT_PASSWORD=your-reddit-password
+```
+📌 **Get from:** https://www.reddit.com/prefs/apps (create "script" or "web app")
+📌 **Full guide:** [memory/REDDIT_INTEGRATION_GUIDE.md](memory/REDDIT_INTEGRATION_GUIDE.md)
+
 **TikTok** (Needs OAuth implementation)
 ```bash
 TIKTOK_CLIENT_KEY=your-tiktok-client-key

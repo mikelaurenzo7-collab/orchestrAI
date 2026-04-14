@@ -601,7 +601,7 @@ AGENT_TIERS = {
 # ──────────────── Connector Permissions (Phase 1: Centralized) ────────────────
 # Default permissions for social media connectors
 DEFAULT_CONNECTOR_PERMISSIONS = {
-    "social": {  # Twitter, Instagram, Pinterest, TikTok, LinkedIn, YouTube
+    "social": {  # Twitter, Instagram, Pinterest, TikTok, Reddit, YouTube, etc.
         "marketing_suite": {
             "access_level": "write",
             "can_post": True,
@@ -3542,6 +3542,14 @@ PINTEREST_ACCESS_TOKEN = os.environ.get('PINTEREST_ACCESS_TOKEN', '')
 PINTEREST_APP_ID = os.environ.get('PINTEREST_APP_ID', '')
 PINTEREST_API_BASE = "https://api.pinterest.com/v5"
 
+# ──────────────── Reddit Integration ────────────────
+
+REDDIT_CLIENT_ID = os.environ.get('REDDIT_CLIENT_ID', '')
+REDDIT_CLIENT_SECRET = os.environ.get('REDDIT_CLIENT_SECRET', '')
+REDDIT_USER_AGENT = os.environ.get('REDDIT_USER_AGENT', 'orchestrAI:v1.0.0')
+REDDIT_USERNAME = os.environ.get('REDDIT_USERNAME', '')
+REDDIT_PASSWORD = os.environ.get('REDDIT_PASSWORD', '')
+
 class PinterestPinRequest(BaseModel):
     title: str
     description: str
@@ -3665,6 +3673,134 @@ async def verify_pinterest(request: Request):
     except Exception as e:
         return {"status": "error", "detail": str(e)}
 
+# ──────────────── Reddit Integration ────────────────
+
+class RedditPostRequest(BaseModel):
+    subreddit: str  # Subreddit name (without /r/)
+    title: str
+    text: Optional[str] = None  # For text posts
+    url: Optional[str] = None  # For link posts
+    content_id: Optional[str] = None
+
+@api_router.post("/reddit/post")
+async def post_to_reddit(req: RedditPostRequest, request: Request):
+    """Submit a post to a subreddit using Reddit API"""
+    import praw
+    user = await get_current_user(request)
+    user_id = user["_id"]
+    
+    if not REDDIT_CLIENT_ID or not REDDIT_CLIENT_SECRET:
+        raise HTTPException(status_code=503, detail="Reddit integration not configured. Add API credentials.")
+    
+    # PERMISSION CHECK: Determine which agent is posting
+    agent_type = "marketing_suite"  # Default to Marketing EA
+    
+    # Check if agent has permission to post to Reddit
+    can_post = await check_agent_can_post(user_id, agent_type, "reddit")
+    if not can_post:
+        raise HTTPException(
+            status_code=403,
+            detail=f"Agent '{agent_type}' does not have permission to post to Reddit. Only Marketing EA can post to social media by default."
+        )
+    
+    try:
+        # Create/update Reddit connector if not exists
+        await create_or_update_connector(
+            user_id=user_id,
+            platform="reddit",
+            connector_type="social",
+            credentials={"has_token": True}
+        )
+        
+        # Initialize Reddit client
+        reddit = praw.Reddit(
+            client_id=REDDIT_CLIENT_ID,
+            client_secret=REDDIT_CLIENT_SECRET,
+            username=REDDIT_USERNAME,
+            password=REDDIT_PASSWORD,
+            user_agent=REDDIT_USER_AGENT
+        )
+        
+        # Submit post
+        subreddit = reddit.subreddit(req.subreddit)
+        
+        if req.url:
+            # Link post
+            submission = subreddit.submit(req.title, url=req.url)
+        else:
+            # Text post
+            submission = subreddit.submit(req.title, selftext=req.text or "")
+        
+        post_url = f"https://reddit.com{submission.permalink}"
+        post_id = submission.id
+        
+        # Update content status if linked
+        if req.content_id:
+            await db.social_content.update_one(
+                {"id": req.content_id, "user_id": user["_id"]},
+                {"$set": {
+                    "status": "posted",
+                    "posted_at": datetime.now(timezone.utc).isoformat(),
+                    "platform_post_id": post_id,
+                    "platform_url": post_url
+                }}
+            )
+        
+        await db.activity_log.insert_one({
+            "user_id": user["_id"],
+            "type": "reddit_posted",
+            "message": f"Posted to /r/{req.subreddit}: {req.title[:60]}...",
+            "timestamp": datetime.now(timezone.utc).isoformat()
+        })
+        
+        return {"status": "posted", "post_id": post_id, "url": post_url, "subreddit": req.subreddit}
+    
+    except praw.exceptions.RedditAPIException as e:
+        logger.error(f"Reddit post error: {e}")
+        # Reddit API returns errors like rate limits, banned subreddits, etc.
+        error_msg = str(e)
+        if "RATELIMIT" in error_msg:
+            raise HTTPException(status_code=429, detail="Reddit rate limit exceeded. Please wait before posting again.")
+        elif "SUBREDDIT_NOEXIST" in error_msg:
+            raise HTTPException(status_code=404, detail=f"Subreddit /r/{req.subreddit} does not exist")
+        else:
+            raise HTTPException(status_code=500, detail=f"Reddit error: {error_msg}")
+    except Exception as e:
+        logger.error(f"Reddit post error: {e}")
+        raise HTTPException(status_code=500, detail=f"Reddit error: {str(e)}")
+
+@api_router.get("/reddit/verify")
+async def verify_reddit(request: Request):
+    """Verify Reddit credentials are working"""
+    import praw
+    await get_current_user(request)
+    
+    if not REDDIT_CLIENT_ID or not REDDIT_CLIENT_SECRET:
+        return {"status": "not_configured"}
+    
+    try:
+        reddit = praw.Reddit(
+            client_id=REDDIT_CLIENT_ID,
+            client_secret=REDDIT_CLIENT_SECRET,
+            username=REDDIT_USERNAME,
+            password=REDDIT_PASSWORD,
+            user_agent=REDDIT_USER_AGENT
+        )
+        
+        # Get current user info to verify credentials
+        me = reddit.user.me()
+        
+        return {
+            "status": "connected",
+            "username": str(me),
+            "karma": {
+                "link": me.link_karma,
+                "comment": me.comment_karma
+            }
+        }
+    except Exception as e:
+        return {"status": "error", "detail": str(e)}
+
 # ──────────────── Integration Status ────────────────
 
 @api_router.get("/integrations/status")
@@ -3680,6 +3816,7 @@ async def get_integration_status(request: Request):
         "social": {
             "twitter": {"configured": bool(TWITTER_API_KEY and TWITTER_ACCESS_TOKEN), "type": "direct", "status": "live"},
             "pinterest": {"configured": bool(PINTEREST_ACCESS_TOKEN), "type": "direct", "status": "live"},
+            "reddit": {"configured": bool(REDDIT_CLIENT_ID and REDDIT_CLIENT_SECRET), "type": "direct", "status": "live"},
             "tiktok": {"configured": bool(os.environ.get('TIKTOK_CLIENT_KEY', '')), "type": "oauth", "status": "live"},
             "meta": {"configured": bool(os.environ.get('META_APP_ID', '')), "type": "oauth", "status": "live"},
         },
