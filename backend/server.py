@@ -416,8 +416,109 @@ TikTok's algorithm: first 3 seconds decide everything, trending sounds boost rea
 
     "meta": """You are the user's Meta Executive Assistant covering Facebook AND Instagram.
 FB: Conversational posts get 3x engagement, questions drive comments, Reels get 2x reach of photos, Groups build community.
-IG: First line of caption must hook, 20-30 hashtags still work (mix sizes), Stories drive DM sales, Reels > everything else."""
+IG: First line of caption must hook, 20-30 hashtags still work (mix sizes), Stories drive DM sales, Reels > everything else.""",
+
+    "email": """You are the user's Email Executive Assistant. You manage their inbox like a world-class chief of staff.
+Draft professional emails, create follow-up sequences, manage campaign copy, sort priorities. Never send without approval. Match the user's brand voice exactly. Keep emails concise — nobody reads long emails.""",
+
+    "crm": """You are the user's CRM Executive Assistant. You manage their sales pipeline and customer relationships.
+Track every lead, suggest follow-up timing, score leads by engagement, forecast deal closings, and never let a prospect fall through the cracks. Think like a VP of Sales.""",
+
+    "marketing_suite": """You are the user's Marketing Executive Assistant. You run campaigns, optimize ad spend, and grow their audience.
+Know email marketing (subject lines, segmentation, timing), paid ads (ROAS optimization, audience targeting), and conversion funnels. Every dollar should have measurable ROI.""",
+
+    "finance": """You are the user's Finance Executive Assistant. You keep their books clean and their cash flow healthy.
+Track expenses, generate invoice copy, forecast revenue, flag unusual spending, and prepare financial summaries. Think like a CFO — every number matters.""",
+
+    "hr": """You are the user's HR Executive Assistant. You manage people operations.
+Draft job descriptions, create onboarding checklists, write team policies, manage hiring pipelines, and keep the team aligned. Be empathetic but efficient.""",
+
+    "sales": """You are the user's Sales Executive Assistant. You close deals.
+Qualify leads, craft outreach messages, prepare proposals, handle objections, and book meetings. Know the difference between enterprise sales cycles and SMB quick closes. Always be closing.""",
+
+    "operations": """You are the user's Operations Executive Assistant. You keep the machine running.
+Manage projects, assign tasks, track deadlines, create status reports, and optimize workflows. Think like a COO — efficiency is everything.""",
+
+    "legal": """You are the user's Legal Executive Assistant. You protect the business.
+Generate contract drafts, create NDA templates, review terms of service, check compliance requirements, and flag legal risks. Always recommend professional legal review for critical documents."""
 }
+
+# ──────────────── Pricing & Plans ────────────────
+
+PRICING_PLANS = {
+    "free": {
+        "name": "Free", "price": 0, "interval": "forever",
+        "agents": 2, "actions_per_month": 100, "connectors": 1,
+        "features": ["2 AI agents", "100 actions/mo", "1 connector", "Basic chat"],
+        "categories": ["commerce"],
+    },
+    "starter": {
+        "name": "Starter", "price": 29, "interval": "month",
+        "agents": 5, "actions_per_month": 1000, "connectors": 3,
+        "features": ["5 AI agents", "1,000 actions/mo", "3 connectors", "Campaign launcher", "Safety controls"],
+        "categories": ["commerce", "social"],
+    },
+    "growth": {
+        "name": "Growth", "price": 79, "interval": "month",
+        "agents": 10, "actions_per_month": 5000, "connectors": 8,
+        "features": ["All commerce & social agents", "5,000 actions/mo", "8 connectors", "Autopilot mode", "Custom training", "Priority support"],
+        "categories": ["commerce", "social"],
+        "popular": True,
+    },
+    "business": {
+        "name": "Business", "price": 199, "interval": "month",
+        "agents": 16, "actions_per_month": 25000, "connectors": "unlimited",
+        "features": ["All 16 agents (commerce + business)", "25,000 actions/mo", "Unlimited connectors", "Email, CRM, Finance, HR, Sales, Ops, Legal agents", "White-glove onboarding"],
+        "categories": ["commerce", "social", "business"],
+    },
+    "enterprise": {
+        "name": "Enterprise", "price": 499, "interval": "month",
+        "agents": "unlimited", "actions_per_month": "unlimited", "connectors": "unlimited",
+        "features": ["Unlimited everything", "Custom agents", "API access", "White-label option", "Dedicated success manager", "SLA guarantee"],
+        "categories": ["commerce", "social", "business", "custom"],
+    },
+}
+
+@api_router.get("/pricing")
+async def get_pricing():
+    """Get pricing plans"""
+    return PRICING_PLANS
+
+@api_router.get("/connectors")
+async def get_available_connectors():
+    """Get all available tool connectors"""
+    return {
+        "commerce": [
+            {"id": "shopify", "name": "Shopify", "icon": "🛍️", "color": "#96BF48", "status": "live"},
+            {"id": "etsy", "name": "Etsy", "icon": "🧶", "color": "#F1641E", "status": "live"},
+            {"id": "ebay", "name": "eBay", "icon": "🏷️", "color": "#E53238", "status": "live"},
+            {"id": "woocommerce", "name": "WooCommerce", "icon": "🛒", "color": "#7B51AD", "status": "coming_soon"},
+            {"id": "amazon", "name": "Amazon", "icon": "📦", "color": "#FF9900", "status": "coming_soon"},
+        ],
+        "social": [
+            {"id": "twitter", "name": "Twitter/X", "icon": "🐦", "color": "#1DA1F2", "status": "live"},
+            {"id": "pinterest", "name": "Pinterest", "icon": "📌", "color": "#E60023", "status": "live"},
+            {"id": "tiktok", "name": "TikTok", "icon": "🎵", "color": "#FE2C55", "status": "live"},
+            {"id": "meta", "name": "Meta", "icon": "📘", "color": "#0866FF", "status": "live"},
+        ],
+        "business": [
+            {"id": "gmail", "name": "Gmail", "icon": "📧", "color": "#EA4335", "status": "coming_soon"},
+            {"id": "outlook", "name": "Outlook", "icon": "📧", "color": "#0078D4", "status": "coming_soon"},
+            {"id": "hubspot", "name": "HubSpot", "icon": "🤝", "color": "#FF7A59", "status": "coming_soon"},
+            {"id": "salesforce", "name": "Salesforce", "icon": "☁️", "color": "#00A1E0", "status": "coming_soon"},
+            {"id": "mailchimp", "name": "Mailchimp", "icon": "📮", "color": "#FFE01B", "status": "coming_soon"},
+            {"id": "google_ads", "name": "Google Ads", "icon": "📊", "color": "#4285F4", "status": "coming_soon"},
+            {"id": "quickbooks", "name": "QuickBooks", "icon": "💰", "color": "#2CA01C", "status": "coming_soon"},
+            {"id": "stripe", "name": "Stripe", "icon": "💳", "color": "#635BFF", "status": "coming_soon"},
+            {"id": "calendly", "name": "Calendly", "icon": "📅", "color": "#006BFF", "status": "coming_soon"},
+            {"id": "slack", "name": "Slack", "icon": "💬", "color": "#4A154B", "status": "coming_soon"},
+            {"id": "asana", "name": "Asana", "icon": "⚙️", "color": "#F06A6A", "status": "coming_soon"},
+            {"id": "notion", "name": "Notion", "icon": "📝", "color": "#000000", "status": "coming_soon"},
+            {"id": "docusign", "name": "DocuSign", "icon": "📋", "color": "#4C2B90", "status": "coming_soon"},
+            {"id": "zoom", "name": "Zoom", "icon": "🎥", "color": "#2D8CFF", "status": "coming_soon"},
+            {"id": "gusto", "name": "Gusto", "icon": "👥", "color": "#F45D48", "status": "coming_soon"},
+        ],
+    }
 
 # ──────────────── User Profile & Privacy ────────────────
 
