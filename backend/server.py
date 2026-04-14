@@ -1622,12 +1622,16 @@ async def get_dashboard(request: Request):
             "pending_actions": pending, "active_workflows": active_wf, "recent_activity": recent}
 
 STORE_DEFAULT_SAFETY = {
+    # AUTONOMOUS by default — agents act freely
     "auto_edit_products": True, "auto_manage_collections": True,
     "auto_post_social": True, "auto_respond_customers": True,
     "auto_update_seo": True,
+    # APPROVAL REQUIRED — money-touching actions
     "auto_change_prices": False, "auto_create_discounts": False,
     "auto_purchase_inventory": False, "auto_run_ads": False,
     "auto_issue_refunds": False,
+    # APPROVAL REQUIRED — customer communication
+    "auto_email_customers": False, "auto_dm_customers": False,
     "max_price_change_pct": 20, "max_discount_pct": 30,
 }
 
@@ -1804,13 +1808,15 @@ async def queue_store_action(action: StoreAction, request: Request):
     mode = store.get("mode", "autonomous")
     safety = store.get("safety", STORE_DEFAULT_SAFETY)
 
-    # Money-touching actions ALWAYS need approval unless user explicitly unlocked them
+    # Money-touching + customer communication actions ALWAYS need approval unless user explicitly unlocked
     MONEY_ACTIONS = {
         "update_price": "auto_change_prices",
         "create_discount": "auto_create_discounts",
         "purchase_inventory": "auto_purchase_inventory",
         "run_ads": "auto_run_ads",
         "issue_refund": "auto_issue_refunds",
+        "email_customers": "auto_email_customers",
+        "dm_customers": "auto_dm_customers",
     }
     # Non-money actions are autonomous by default, user can lock them
     NON_MONEY_ACTIONS = {
