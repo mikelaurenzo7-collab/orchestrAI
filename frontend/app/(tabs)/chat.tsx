@@ -11,10 +11,14 @@ import { Colors, Spacing, BorderRadius, FontSizes, AgentColors } from '../../con
 type Message = { role: string; content: string; timestamp: string; agent_type?: string };
 const AGENTS = [
   { type: 'general', name: 'orchestrAI', icon: '🎵' },
-  { type: 'store_manager', name: 'Maestro', icon: '📦' },
-  { type: 'marketing', name: 'Aria', icon: '📣' },
-  { type: 'analytics', name: 'Cadence', icon: '📊' },
-  { type: 'customer_service', name: 'Harmony', icon: '🎧' },
+  { type: 'shopify', name: 'Shopify', icon: '🛍️' },
+  { type: 'etsy', name: 'Etsy', icon: '🧶' },
+  { type: 'ebay', name: 'eBay', icon: '🏷️' },
+  { type: 'twitter', name: 'Twitter', icon: '🐦' },
+  { type: 'pinterest', name: 'Pinterest', icon: '📌' },
+  { type: 'tiktok', name: 'TikTok', icon: '🎵' },
+  { type: 'meta', name: 'Meta', icon: '📘' },
+  { type: 'analytics', name: 'Analytics', icon: '📊' },
 ];
 
 export default function ChatScreen() {
@@ -99,10 +103,14 @@ export default function ChatScreen() {
   const agentColor = AgentColors[selectedAgent]?.primary || Colors.emerald;
   const suggestions: Record<string, string[]> = {
     general: ['Give me a full business health check', 'What should I focus on this week?', 'How do I 10x my revenue?'],
-    store_manager: ['Audit my product catalog for quick wins', 'What pricing changes would boost my margins?', 'Create an inventory management plan'],
-    marketing: ['Build me a 7-day social media calendar', 'Write 3 Instagram posts for my best products', 'Design a product launch campaign'],
-    analytics: ['Break down my store performance', 'Which products should I double down on?', 'What does my customer data tell you?'],
-    customer_service: ['Write a returns policy for my store', 'Create 10 FAQ answers for common questions', 'Draft response templates for complaints'],
+    shopify: ['Audit my Shopify catalog for quick wins', 'Create 5 new products for my store', 'Optimize my bestselling listings'],
+    etsy: ['Improve my Etsy listing SEO', 'What keywords should I target?', 'Review my shop policies'],
+    ebay: ['Optimize my eBay listing titles', 'Analyze my seller metrics', 'What auction strategy works best?'],
+    twitter: ['Write 5 viral tweets for my brand', 'Build me a Twitter content calendar', 'What trending topics fit my niche?'],
+    pinterest: ['Create SEO pin descriptions', 'What boards should I create?', 'Plan a seasonal pin strategy'],
+    tiktok: ['What TikTok trends fit my brand?', 'Write 3 viral TikTok captions', 'Plan a content series'],
+    meta: ['Write Instagram captions for my products', 'Plan a Facebook ad campaign', 'Create a Reel strategy'],
+    analytics: ['Break down my cross-platform performance', 'Which channel is most profitable?', 'What does my data tell you?'],
   };
 
   return (

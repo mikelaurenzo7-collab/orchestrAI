@@ -104,10 +104,10 @@ export default function OnboardingScreen() {
                 <Text style={s.welcomeText}>Your AI agents are warming up. Let's give them some context about your business so they can hit the ground running.</Text>
                 <View style={s.agentGrid}>
                   {[
-                    { name: 'Maestro', emoji: '📦', color: Colors.emerald },
-                    { name: 'Aria', emoji: '📣', color: Colors.amber },
-                    { name: 'Cadence', emoji: '📊', color: Colors.cyan },
-                    { name: 'Harmony', emoji: '🎧', color: Colors.rose },
+                    { name: 'Shopify EA', emoji: '🛍️', color: '#96BF48' },
+                    { name: 'Twitter EA', emoji: '🐦', color: '#1DA1F2' },
+                    { name: 'Pinterest EA', emoji: '📌', color: '#E60023' },
+                    { name: 'Analytics', emoji: '📊', color: Colors.cyan },
                   ].map((a, i) => (
                     <View key={i} style={[s.agentMini, { borderColor: a.color + '30' }]}>
                       <Text style={{ fontSize: 20 }}>{a.emoji}</Text>
@@ -165,7 +165,7 @@ export default function OnboardingScreen() {
                   {brandName ? <Text style={s.readyBrand}>{brandName}</Text> : null}
                   {niche ? <Text style={s.readyNiche}>{niche}</Text> : null}
                   <View style={s.readyRow}>
-                    <View style={s.readyStat}><Text style={[s.readyStatV, { color: Colors.emerald }]}>4</Text><Text style={s.readyStatL}>Agents Online</Text></View>
+                    <View style={s.readyStat}><Text style={[s.readyStatV, { color: Colors.emerald }]}>8</Text><Text style={s.readyStatL}>Agents Online</Text></View>
                     <View style={s.readyStat}><Text style={[s.readyStatV, { color: Colors.amber }]}>24</Text><Text style={s.readyStatL}>Actions Ready</Text></View>
                     <View style={s.readyStat}><Text style={[s.readyStatV, { color: Colors.cyan }]}>30</Text><Text style={s.readyStatL}>Days Free</Text></View>
                   </View>
