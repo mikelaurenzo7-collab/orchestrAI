@@ -22,12 +22,18 @@ export default function ChatScreen() {
   const [sending, setSending] = useState(false);
   const [selectedAgent, setSelectedAgent] = useState('general');
   const [loadingHistory, setLoadingHistory] = useState(true);
+  const [pendingActions, setPendingActions] = useState<any[]>([]);
+  const [approvingAction, setApprovingAction] = useState<string | null>(null);
   const scrollRef = useRef<ScrollView>(null);
 
   const loadHistory = useCallback(async () => {
     try {
-      const res = await authFetch(`/api/chat/history/${selectedAgent}`);
-      if (res.ok) setMessages(await res.json());
+      const [histRes, actionsRes] = await Promise.all([
+        authFetch(`/api/chat/history/${selectedAgent}`),
+        authFetch('/api/stores/actions/pending'),
+      ]);
+      if (histRes.ok) setMessages(await histRes.json());
+      if (actionsRes.ok) setPendingActions(await actionsRes.json());
     } catch (e) { console.error(e); }
     finally { setLoadingHistory(false); }
   }, [selectedAgent]);
@@ -44,10 +50,37 @@ export default function ChatScreen() {
     try {
       const res = await authFetch('/api/chat', { method: 'POST', body: JSON.stringify({ message: text, agent_type: selectedAgent }) });
       const data = await res.json();
-      if (data.content) setMessages(p => [...p, { role: 'assistant', content: data.content, timestamp: new Date().toISOString(), agent_type: selectedAgent }]);
+      if (data.content) {
+        setMessages(p => [...p, { role: 'assistant', content: data.content, timestamp: new Date().toISOString(), agent_type: selectedAgent }]);
+        if (data.queued_actions?.length) {
+          setPendingActions(prev => [...data.queued_actions.map((a: any) => ({
+            ...a, id: a.id, action_type: a.type, status: 'pending',
+            payload: { title: a.title, price: a.price },
+          })), ...prev]);
+        }
+      }
     } catch (e) {
       setMessages(p => [...p, { role: 'assistant', content: 'Connection error. Try again.', timestamp: new Date().toISOString() }]);
     } finally { setSending(false); }
+  };
+
+  const approveAction = async (actionId: string) => {
+    setApprovingAction(actionId);
+    try {
+      const res = await authFetch(`/api/stores/actions/${actionId}/approve`, { method: 'POST' });
+      if (res.ok) {
+        setPendingActions(prev => prev.filter(a => a.id !== actionId));
+        setMessages(p => [...p, { role: 'assistant', content: '✅ Action approved and executed on your store!', timestamp: new Date().toISOString(), agent_type: selectedAgent }]);
+      }
+    } catch (e) { console.error(e); }
+    finally { setApprovingAction(null); }
+  };
+
+  const rejectAction = async (actionId: string) => {
+    try {
+      await authFetch(`/api/stores/actions/${actionId}/reject`, { method: 'POST' });
+      setPendingActions(prev => prev.filter(a => a.id !== actionId));
+    } catch (e) { console.error(e); }
   };
 
   const clearChat = async () => {
@@ -88,6 +121,30 @@ export default function ChatScreen() {
 
         <ScrollView ref={scrollRef} style={{ flex: 1 }} contentContainerStyle={s.msgContent} showsVerticalScrollIndicator={false}
           onContentSizeChange={() => scrollRef.current?.scrollToEnd({ animated: true })}>
+          {/* Pending Actions Banner */}
+          {pendingActions.length > 0 && (
+            <View style={s.pendingBanner}>
+              <Text style={s.pendingTitle}>📋 {pendingActions.length} Pending Action{pendingActions.length > 1 ? 's' : ''}</Text>
+              {pendingActions.slice(0, 5).map((action) => (
+                <View key={action.id} style={s.pendingCard}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={s.pendingType}>{(action.action_type || '').replace('_', ' ').toUpperCase()}</Text>
+                    <Text style={s.pendingDetail} numberOfLines={1}>{action.payload?.title || action.title || 'Action'}{action.payload?.price || action.price ? ` — $${action.payload?.price || action.price}` : ''}</Text>
+                  </View>
+                  <View style={s.pendingBtns}>
+                    <TouchableOpacity style={s.approveBtn} onPress={() => approveAction(action.id)}
+                      disabled={approvingAction === action.id}>
+                      {approvingAction === action.id ? <ActivityIndicator size="small" color="#fff" /> :
+                        <Text style={s.approveBtnText}>✓</Text>}
+                    </TouchableOpacity>
+                    <TouchableOpacity style={s.rejectBtn} onPress={() => rejectAction(action.id)}>
+                      <Text style={s.rejectBtnText}>✗</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              ))}
+            </View>
+          )}
           {loadingHistory ? <View style={s.center}><ActivityIndicator size="small" color={agentColor} /></View>
           : messages.length === 0 ? (
             <View style={s.empty}>
@@ -158,6 +215,16 @@ const s = StyleSheet.create({
   sugWrap: { marginTop: 24, gap: 10, width: '100%' },
   sugPill: { borderWidth: 1, borderRadius: BorderRadius.lg, paddingHorizontal: 16, paddingVertical: 12 },
   sugText: { fontSize: FontSizes.md, fontWeight: '600' },
+  pendingBanner: { backgroundColor: '#FBBF24' + '10', borderRadius: 16, padding: 16, marginBottom: 16, borderWidth: 1, borderColor: '#FBBF24' + '25' },
+  pendingTitle: { fontSize: 15, fontWeight: '800', color: '#FBBF24', marginBottom: 10 },
+  pendingCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: Colors.surface, borderRadius: 12, padding: 12, marginBottom: 8, borderWidth: 1, borderColor: Colors.border },
+  pendingType: { fontSize: 10, fontWeight: '800', color: '#FBBF24', letterSpacing: 0.5 },
+  pendingDetail: { fontSize: 14, color: Colors.textPrimary, fontWeight: '600', marginTop: 2 },
+  pendingBtns: { flexDirection: 'row', gap: 8, marginLeft: 12 },
+  approveBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: Colors.emerald, justifyContent: 'center', alignItems: 'center' },
+  approveBtnText: { fontSize: 16, fontWeight: '800', color: '#fff' },
+  rejectBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: Colors.surfaceElevated, justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: Colors.border },
+  rejectBtnText: { fontSize: 16, fontWeight: '600', color: Colors.textMuted },
   msgRow: { flexDirection: 'row', marginBottom: Spacing.md, maxWidth: '90%' },
   msgUser: { alignSelf: 'flex-end' },
   msgAi: { alignSelf: 'flex-start' },

@@ -792,8 +792,29 @@ async def chat_with_agent(req: ChatRequest, request: Request):
     await db.chat_messages.insert_one({"user_id": user_id, "session_id": user_id, "agent_type": req.agent_type,
         "role": "user", "content": req.message, "timestamp": datetime.now(timezone.utc).isoformat()})
     try:
-        # Append memory instruction to user message
-        enhanced_msg = req.message + "\n\n[SYSTEM: If the user reveals important facts about their business (product types, revenue goals, pain points, preferences), remember them by ending your response with a line starting with 'MEMORY:' followed by a key=value pair. Example: MEMORY: main_product=handmade jewelry. Only do this when genuinely new info is shared. Do NOT include MEMORY lines for casual chat.]"
+        # Check if user has connected stores (for store-aware agents)
+        user_stores = await db.stores.find({"user_id": user_id, "status": "connected"}).to_list(10)
+        store_context = ""
+        if user_stores and req.agent_type in ("store", "marketing"):
+            store_names = ", ".join([f"{s['platform']}:{s.get('name','')}" for s in user_stores])
+            store_context = f"\n\n[CONNECTED STORES: {store_names}]"
+
+        # Store Commander gets special instructions for creating products
+        action_instruction = ""
+        if req.agent_type == "store" and user_stores:
+            action_instruction = """
+
+[SYSTEM: You can create products, collections, and manage stores. When the user asks you to create a product or build out their store, respond with your recommendation AND include a structured ACTION block at the end of your response.
+
+Format for each product:
+ACTION:CREATE_PRODUCT|title=Product Name|description=HTML description|price=29.99|product_type=Category|tags=tag1,tag2|inventory=10
+
+Format for collections:
+ACTION:CREATE_COLLECTION|title=Collection Name|description=Collection description
+
+You can include MULTIPLE action lines. The user will approve each one before it executes on their store. Always explain what you're about to create BEFORE the action lines. Be creative with product names, descriptions, and pricing based on the niche.]"""
+
+        enhanced_msg = req.message + store_context + action_instruction + "\n\n[SYSTEM: If the user reveals important facts about their business (product types, revenue goals, pain points, preferences), remember them by ending your response with a line starting with 'MEMORY:' followed by a key=value pair. Example: MEMORY: main_product=handmade jewelry. Only do this when genuinely new info is shared. Do NOT include MEMORY lines for casual chat.]"
         response = await chat.send_message(UserMessage(text=enhanced_msg))
 
         # Extract and save memory if present
@@ -812,11 +833,57 @@ async def chat_with_agent(req: ChatRequest, request: Request):
                 except Exception:
                     pass
 
+        # Extract and queue store actions if present
+        queued_actions = []
+        if "ACTION:" in clean_response:
+            lines = clean_response.split("\n")
+            action_lines = [l.strip() for l in lines if l.strip().startswith("ACTION:")]
+            display_lines = [l for l in lines if not l.strip().startswith("ACTION:")]
+            clean_response = "\n".join(display_lines).strip()
+
+            for al in action_lines:
+                try:
+                    parts = al.replace("ACTION:", "").strip().split("|")
+                    action_type_raw = parts[0].strip().lower()
+                    params = {}
+                    for part in parts[1:]:
+                        if "=" in part:
+                            k, v = part.split("=", 1)
+                            params[k.strip()] = v.strip()
+
+                    action_type_map = {
+                        "create_product": "create_product",
+                        "create_collection": "create_collection",
+                        "update_price": "update_price",
+                    }
+                    action_type = action_type_map.get(action_type_raw)
+                    if action_type and user_stores:
+                        target_store = user_stores[0]  # Default to first connected store
+                        action_doc = {
+                            "id": str(uuid.uuid4()), "user_id": user_id, "store_id": target_store["id"],
+                            "store_name": target_store.get("name", ""), "platform": target_store.get("platform", ""),
+                            "action_type": action_type, "payload": params,
+                            "status": "pending",
+                            "created_at": datetime.now(timezone.utc).isoformat(),
+                            "executed_at": None, "result": None,
+                        }
+                        await db.store_actions.insert_one(action_doc)
+                        queued_actions.append({"id": action_doc["id"], "type": action_type,
+                            "title": params.get("title", ""), "price": params.get("price", "")})
+                except Exception as e:
+                    logger.error(f"Action parsing error: {e}")
+
         await db.chat_messages.insert_one({"user_id": user_id, "session_id": user_id, "agent_type": req.agent_type,
-            "role": "assistant", "content": clean_response, "timestamp": datetime.now(timezone.utc).isoformat()})
+            "role": "assistant", "content": clean_response, "timestamp": datetime.now(timezone.utc).isoformat(),
+            "queued_actions": queued_actions if queued_actions else None})
         await db.agents.update_one({"user_id": user_id, "agent_type": req.agent_type},
             {"$set": {"last_active": datetime.now(timezone.utc).isoformat()}, "$inc": {"tasks_completed": 1}})
-        return {"role": "assistant", "content": clean_response, "agent_type": req.agent_type}
+
+        response_data = {"role": "assistant", "content": clean_response, "agent_type": req.agent_type}
+        if queued_actions:
+            response_data["queued_actions"] = queued_actions
+            response_data["content"] += f"\n\n📋 **{len(queued_actions)} action(s) queued for your approval.** Check your pending actions to review and approve."
+        return response_data
     except Exception as e:
         logger.error(f"Chat error: {e}")
         raise HTTPException(status_code=500, detail=f"Agent communication error: {str(e)}")
@@ -1705,6 +1772,162 @@ async def sync_shopify_store(store_id: str, request: Request):
     except Exception as e:
         logger.error(f"Shopify sync error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+# ──────────────── Store Action Queue (Approval System) ────────────────
+
+class StoreAction(BaseModel):
+    store_id: str
+    action_type: str  # "create_product", "update_price", "create_collection", "create_discount"
+    payload: Dict[str, Any]
+    auto_approve: bool = False
+
+@api_router.post("/stores/actions/queue")
+async def queue_store_action(action: StoreAction, request: Request):
+    """Queue a store action for approval (copilot mode) or auto-execute (autopilot mode)"""
+    user = await get_current_user(request)
+    store = await db.stores.find_one({"id": action.store_id, "user_id": user["_id"]})
+    if not store:
+        raise HTTPException(status_code=404, detail="Store not found")
+
+    mode = store.get("mode", "copilot")
+    safety = store.get("safety", {})
+
+    # Determine if this action can auto-execute based on mode + safety settings
+    auto_execute = False
+    if mode == "autopilot":
+        safety_map = {
+            "create_product": safety.get("auto_create_products", False),
+            "update_price": safety.get("auto_change_prices", False),
+            "create_collection": safety.get("auto_create_products", False),
+            "create_discount": safety.get("auto_create_discounts", False),
+        }
+        auto_execute = safety_map.get(action.action_type, False)
+    elif mode == "observe":
+        raise HTTPException(status_code=403, detail="Store is in observe mode. Switch to copilot or autopilot to make changes.")
+
+    action_doc = {
+        "id": str(uuid.uuid4()), "user_id": user["_id"], "store_id": action.store_id,
+        "store_name": store.get("name", ""), "platform": store.get("platform", ""),
+        "action_type": action.action_type, "payload": action.payload,
+        "status": "approved" if auto_execute else "pending",
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "executed_at": None, "result": None,
+    }
+    await db.store_actions.insert_one(action_doc)
+
+    if auto_execute:
+        result = await _execute_store_action(action_doc, store)
+        return {"status": "executed", "action_id": action_doc["id"], "result": result}
+
+    return {"status": "pending_approval", "action_id": action_doc["id"],
+            "message": f"Action queued. Approve in the app to execute."}
+
+@api_router.get("/stores/actions/pending")
+async def get_pending_actions(request: Request):
+    """Get all pending store actions awaiting approval"""
+    user = await get_current_user(request)
+    actions = await db.store_actions.find(
+        {"user_id": user["_id"], "status": "pending"}, {"_id": 0}
+    ).sort("created_at", -1).to_list(50)
+    return actions
+
+@api_router.post("/stores/actions/{action_id}/approve")
+async def approve_store_action(action_id: str, request: Request):
+    """Approve and execute a pending store action"""
+    user = await get_current_user(request)
+    action = await db.store_actions.find_one({"id": action_id, "user_id": user["_id"]})
+    if not action:
+        raise HTTPException(status_code=404, detail="Action not found")
+    if action["status"] != "pending":
+        raise HTTPException(status_code=400, detail=f"Action is already {action['status']}")
+    store = await db.stores.find_one({"id": action["store_id"], "user_id": user["_id"]})
+    if not store:
+        raise HTTPException(status_code=404, detail="Store not found")
+    result = await _execute_store_action(action, store)
+    return {"status": "executed", "result": result}
+
+@api_router.post("/stores/actions/{action_id}/reject")
+async def reject_store_action(action_id: str, request: Request):
+    """Reject a pending store action"""
+    user = await get_current_user(request)
+    await db.store_actions.update_one({"id": action_id, "user_id": user["_id"]},
+        {"$set": {"status": "rejected", "executed_at": datetime.now(timezone.utc).isoformat()}})
+    return {"status": "rejected"}
+
+async def _execute_store_action(action: dict, store: dict) -> dict:
+    """Execute a store action on the actual platform"""
+    import httpx
+    platform = store.get("platform", "")
+    token = store.get("access_token", "")
+    result = {"success": False, "detail": "Unknown platform"}
+
+    try:
+        if platform == "shopify":
+            shop = store["store_url"].replace("https://", "")
+            api_version = "2024-10"
+            headers = {"X-Shopify-Access-Token": token, "Content-Type": "application/json"}
+            base = f"https://{shop}/admin/api/{api_version}"
+
+            async with httpx.AsyncClient(timeout=30) as hc:
+                if action["action_type"] == "create_product":
+                    payload = action["payload"]
+                    product_data = {
+                        "product": {
+                            "title": payload.get("title", ""),
+                            "body_html": payload.get("description", ""),
+                            "vendor": payload.get("vendor", store.get("name", "")),
+                            "product_type": payload.get("product_type", ""),
+                            "tags": payload.get("tags", ""),
+                            "variants": [{"price": str(payload.get("price", "0.00")),
+                                          "inventory_quantity": payload.get("inventory", 10)}],
+                        }
+                    }
+                    if payload.get("image_url"):
+                        product_data["product"]["images"] = [{"src": payload["image_url"]}]
+                    resp = await hc.post(f"{base}/products.json", headers=headers, json=product_data)
+                    if resp.status_code == 201:
+                        product = resp.json().get("product", {})
+                        result = {"success": True, "product_id": product.get("id"), "title": product.get("title"),
+                                  "url": f"https://{shop}/products/{product.get('handle', '')}"}
+                    else:
+                        result = {"success": False, "detail": resp.text}
+
+                elif action["action_type"] == "create_collection":
+                    payload = action["payload"]
+                    coll_data = {"custom_collection": {
+                        "title": payload.get("title", ""),
+                        "body_html": payload.get("description", ""),
+                    }}
+                    resp = await hc.post(f"{base}/custom_collections.json", headers=headers, json=coll_data)
+                    if resp.status_code == 201:
+                        coll = resp.json().get("custom_collection", {})
+                        result = {"success": True, "collection_id": coll.get("id"), "title": coll.get("title")}
+                    else:
+                        result = {"success": False, "detail": resp.text}
+
+                elif action["action_type"] == "update_price":
+                    payload = action["payload"]
+                    variant_id = payload.get("variant_id")
+                    new_price = payload.get("price")
+                    resp = await hc.put(f"{base}/variants/{variant_id}.json", headers=headers,
+                        json={"variant": {"id": variant_id, "price": str(new_price)}})
+                    result = {"success": resp.status_code == 200, "detail": resp.text if resp.status_code != 200 else "Price updated"}
+
+        await db.store_actions.update_one({"id": action["id"]}, {"$set": {
+            "status": "executed" if result.get("success") else "failed",
+            "executed_at": datetime.now(timezone.utc).isoformat(), "result": result}})
+
+        if result.get("success"):
+            await db.activity_log.insert_one({"user_id": action["user_id"], "type": "store_action_executed",
+                "message": f"Executed {action['action_type']} on {store.get('name', '')}: {result.get('title', '')}",
+                "timestamp": datetime.now(timezone.utc).isoformat()})
+
+    except Exception as e:
+        logger.error(f"Store action execution error: {e}")
+        result = {"success": False, "detail": str(e)}
+        await db.store_actions.update_one({"id": action["id"]}, {"$set": {"status": "failed", "result": result}})
+
+    return result
 
 # ──────────────── eBay OAuth ────────────────
 
