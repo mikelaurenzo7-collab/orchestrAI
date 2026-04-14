@@ -102,7 +102,7 @@
 # Testing Data - Main Agent and testing sub agent both should log testing data below this section
 #====================================================================================================
 
-user_problem_statement: "Social Agent permission architecture - social agents available to all users with configurable scope (personal/store/business). Marketing EA manages business scope, Store EA manages store scope. Non-social agents cannot post to social media directly."
+user_problem_statement: "Refactored architecture: Removed standalone social agents. Social platforms are now CONNECTORS (output channels). 7 Store EAs (Shopify, Etsy, eBay, Walmart, Faire, Mercari, Poshmark) + 9 Employee EAs (Marketing, Analytics, Email, CRM, Finance, Sales, Ops, HR, Legal) = 16 total EAs. Marketing EA orchestrates all social posting. Store EAs can promote products to connected socials."
 
 backend:
   - task: "Login endpoint"
@@ -115,9 +115,9 @@ backend:
     status_history:
         - working: true
           agent: "main"
-          comment: "Existing auth - mikelaurenzo7@gmail.com / chet1212!"
+          comment: "Auth works - mikelaurenzo7@gmail.com / chet1212!"
 
-  - task: "GET /api/agents - List all agents"
+  - task: "GET /api/agents - List all 16 EAs"
     implemented: true
     working: "NA"
     file: "/app/backend/server.py"
@@ -127,9 +127,9 @@ backend:
     status_history:
         - working: "NA"
           agent: "main"
-          comment: "Existing endpoint, returns all user agents including social ones"
+          comment: "Should return 16 agents: 7 store + 9 employee. No social agents. Each has category field (store/employee/intelligence)."
 
-  - task: "GET /api/agents/social - Get social agents with scope"
+  - task: "POST /api/chat - Social context enforcement"
     implemented: true
     working: "NA"
     file: "/app/backend/server.py"
@@ -139,47 +139,35 @@ backend:
     status_history:
         - working: "NA"
           agent: "main"
-          comment: "New endpoint - returns only social agents (twitter, pinterest, tiktok, meta, etc.) with their social_scope field (defaults to personal)"
+          comment: "Marketing EA gets connected social platforms info. Store EAs get social promo capability. Other EAs told to delegate social to Marketing EA."
 
-  - task: "PUT /api/agents/{agent_id}/scope - Update social agent scope"
+  - task: "GET /api/connectors/social - Social connector info"
     implemented: true
     working: "NA"
     file: "/app/backend/server.py"
     stuck_count: 0
-    priority: "high"
+    priority: "medium"
     needs_retesting: true
     status_history:
         - working: "NA"
           agent: "main"
-          comment: "New endpoint - sets scope to personal/store/business. Validates only social agents can have scope."
-
-  - task: "POST /api/chat - Social scope enforcement in chat"
-    implemented: true
-    working: "NA"
-    file: "/app/backend/server.py"
-    stuck_count: 0
-    priority: "high"
-    needs_retesting: true
-    status_history:
-        - working: "NA"
-          agent: "main"
-          comment: "Chat now injects scope context for social agents (BUSINESS/STORE/PERSONAL instructions). Non-social agents get blocked from direct social posting."
+          comment: "Returns list of social platforms with connected status"
 
 metadata:
   created_by: "main_agent"
-  version: "1.0"
-  test_sequence: 1
+  version: "2.0"
+  test_sequence: 2
   run_ui: false
 
 test_plan:
   current_focus:
-    - "GET /api/agents/social - Get social agents with scope"
-    - "PUT /api/agents/{agent_id}/scope - Update social agent scope"
-    - "POST /api/chat - Social scope enforcement in chat"
+    - "GET /api/agents - List all 16 EAs"
+    - "POST /api/chat - Social context enforcement"
+    - "GET /api/connectors/social - Social connector info"
   stuck_tasks: []
   test_all: false
   test_priority: "high_first"
 
 agent_communication:
     - agent: "main"
-      message: "Implemented social agent scope system. Test flow: 1) Login with mikelaurenzo7@gmail.com / chet1212!, 2) GET /api/agents to find a social agent (twitter/pinterest/tiktok/meta), 3) GET /api/agents/social to see social agents with default scope, 4) PUT /api/agents/{id}/scope with body {scope: 'business'} to change scope, 5) POST /api/chat with agent_type='twitter' to verify scope context is injected, 6) POST /api/chat with agent_type='finance' to verify non-social agents get the delegation message. Auth uses cookies from login."
+      message: "MAJOR REFACTOR: Removed social agents entirely. Social platforms are now connectors only. 16 EAs total (7 store + 9 employee). Test flow: 1) Login mikelaurenzo7@gmail.com / chet1212!, 2) GET /api/agents should return exactly 16 agents with categories, 3) GET /api/connectors/social should return social platforms, 4) POST /api/chat with agent_type=marketing_suite should work, 5) POST /api/chat with agent_type=shopify should work. Auth uses cookies."

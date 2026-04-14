@@ -95,7 +95,7 @@ export default function AuthScreen() {
                 AI Commerce{'\n'}
                 <Text style={s.heroGreen}>Automated.</Text>
               </Text>
-              <Text style={s.heroSub}>8 executive assistants that run your entire business.</Text>
+              <Text style={s.heroSub}>16 executive assistants that run your entire business.</Text>
             </Animated.View>
 
             {/* Auth Glass Card */}

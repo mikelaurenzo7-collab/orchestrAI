@@ -139,6 +139,7 @@ class AgentConfig(BaseModel):
     name: str
     agent_type: str
     description: str
+    category: str = "employee"
     personality: str = "professional"
     tone: str = "friendly"
     auto_execute: bool = False
@@ -382,10 +383,13 @@ RULES: Balance empathy with efficiency. Every response template should feel pers
 
     "general": """You are orchestrAI — the maestro conductor of an AI agent symphony for eCommerce empires.
 
-You command a fleet of 8 platform-specific Executive Assistants:
-- Shopify EA, Etsy EA, eBay EA — manage your stores
-- Twitter EA, Pinterest EA, TikTok EA, Meta EA — manage your social presence
-- Analytics Command Center — cross-platform intelligence
+You command a fleet of 16 Executive Assistants organized into two tiers:
+
+STORE EAs (7): Shopify EA, Etsy EA, eBay EA, Walmart EA, Faire EA, Mercari EA, Poshmark EA — each manages a specific marketplace.
+
+EMPLOYEE EAs (9): Marketing EA (social media + campaigns), Analytics (data intelligence), Email EA, CRM EA, Finance EA, Sales EA, Operations EA, HR EA, Legal EA — your full C-suite.
+
+Social platforms (Twitter, Pinterest, TikTok, Meta, etc.) are CONNECTORS — output channels that the Marketing EA and Store EAs use to post content, not standalone agents.
 
 YOUR ROLE: You're not just an assistant — you're the user's AI co-founder. Think strategically about their entire business. Connect dots between departments. When they ask about marketing, also consider how it affects inventory. When they discuss pricing, think about the customer experience impact.
 
@@ -428,8 +432,15 @@ Draft professional emails, create follow-up sequences, manage campaign copy, sor
     "crm": """You are the user's CRM Executive Assistant. You manage their sales pipeline and customer relationships.
 Track every lead, suggest follow-up timing, score leads by engagement, forecast deal closings, and never let a prospect fall through the cracks. Think like a VP of Sales.""",
 
-    "marketing_suite": """You are the user's Marketing Executive Assistant. You run campaigns, optimize ad spend, and grow their audience.
-Know email marketing (subject lines, segmentation, timing), paid ads (ROAS optimization, audience targeting), and conversion funnels. Every dollar should have measurable ROI.""",
+    "marketing_suite": """You are the user's Marketing Executive Assistant — their CMO. You orchestrate ALL social media and marketing across every connected platform.
+
+SOCIAL MEDIA MASTERY: You are the ONLY agent that manages social media posting. You create content for Twitter/X, Pinterest, TikTok, Instagram/Facebook (Meta), YouTube, LinkedIn, Threads, Reddit, and Discord — whichever platforms the user has connected.
+
+Know each platform's algorithm: Twitter (engagement in first 30 min), Pinterest (SEO-driven search engine), TikTok (3-second hooks), Instagram (Reels > everything), LinkedIn (thought leadership).
+
+CAMPAIGN EXPERTISE: Email marketing (subject lines, segmentation, timing), paid ads (ROAS optimization, audience targeting), content calendars, influencer outreach, and conversion funnels. Every dollar should have measurable ROI.
+
+When Store EAs or other Employee EAs need social content posted, they route through you. You are the central hub for all outbound marketing.""",
 
     "finance": """You are the user's Finance Executive Assistant. You keep their books clean and their cash flow healthy.
 Track expenses, generate invoice copy, forecast revenue, flag unusual spending, and prepare financial summaries. Think like a CFO — every number matters.""",
@@ -479,17 +490,14 @@ Manage closet strategy, share listings during Posh Parties, create bundles, and 
 
 # ──────────────── Pricing & Plans ────────────────
 
-# Social posting: ONLY social agents post. User chooses the purpose.
-# - Personal: user's own social content
-# - Store: promoting their ecommerce products
-# - Business: Marketing EA delegates to social agents
-# Other agents (Email, CRM, Finance, HR, Sales, Ops, Legal, Analytics) NEVER post directly.
-# They can REQUEST the Marketing EA to coordinate social posting on their behalf.
-SOCIAL_AGENT_TYPES = {
+# Social platforms are CONNECTORS, not agents. They are output channels.
+# Marketing EA orchestrates social posting across all connected social platforms.
+# Store EAs can promote products to connected socials.
+# Other Employee EAs can REQUEST the Marketing EA to post on their behalf.
+SOCIAL_CONNECTOR_PLATFORMS = {
     "twitter", "pinterest", "tiktok", "meta", "youtube",
     "whatsapp", "threads", "linkedin", "reddit", "discord",
 }
-SOCIAL_DELEGATOR = "marketing_suite"  # Business agents route through Marketing EA
 
 PRICING_PLANS = {
     "free": {
@@ -899,53 +907,103 @@ async def refresh_token(request: Request, response: Response):
 
 async def seed_user_agents(user_id: str):
     default_agents = [
+        # ── Store EAs (7) ──
         {"id": str(uuid.uuid4()), "user_id": user_id, "name": "Shopify Executive Assistant", "agent_type": "shopify",
          "category": "store", "platform": "shopify",
          "description": "Manages your Shopify store — products, inventory, orders, and optimization.",
          "personality": "strategic", "tone": "executive", "auto_execute": True, "is_active": True,
-         "capabilities": ["product_management", "inventory_optimization", "order_processing", "store_setup", "catalog_audit"],
+         "capabilities": ["product_management", "inventory_optimization", "order_processing", "store_setup", "catalog_audit", "social_promo"],
          "tasks_completed": 0, "last_active": None, "training": {}},
         {"id": str(uuid.uuid4()), "user_id": user_id, "name": "Etsy Executive Assistant", "agent_type": "etsy",
          "category": "store", "platform": "etsy",
          "description": "Manages your Etsy shop — listings, SEO, reviews, and marketplace strategy.",
          "personality": "creative", "tone": "artisan", "auto_execute": True, "is_active": True,
-         "capabilities": ["listing_optimization", "etsy_seo", "review_management", "shop_policies", "seasonal_strategy"],
+         "capabilities": ["listing_optimization", "etsy_seo", "review_management", "shop_policies", "seasonal_strategy", "social_promo"],
          "tasks_completed": 0, "last_active": None, "training": {}},
         {"id": str(uuid.uuid4()), "user_id": user_id, "name": "eBay Executive Assistant", "agent_type": "ebay",
          "category": "store", "platform": "ebay",
          "description": "Manages your eBay presence — listings, auctions, pricing, and seller metrics.",
          "personality": "analytical", "tone": "competitive", "auto_execute": True, "is_active": True,
-         "capabilities": ["auction_strategy", "listing_optimization", "pricing_intelligence", "seller_metrics", "bulk_listing"],
+         "capabilities": ["auction_strategy", "listing_optimization", "pricing_intelligence", "seller_metrics", "bulk_listing", "social_promo"],
          "tasks_completed": 0, "last_active": None, "training": {}},
-        {"id": str(uuid.uuid4()), "user_id": user_id, "name": "Twitter Executive Assistant", "agent_type": "twitter",
-         "category": "social", "platform": "twitter",
-         "description": "Manages your X/Twitter — viral tweets, threads, engagement, and audience growth.",
-         "personality": "witty", "tone": "punchy", "auto_execute": True, "is_active": True,
-         "capabilities": ["tweet_creation", "thread_strategy", "engagement_replies", "trending_hooks", "audience_growth"],
+        {"id": str(uuid.uuid4()), "user_id": user_id, "name": "Walmart Executive Assistant", "agent_type": "walmart",
+         "category": "store", "platform": "walmart",
+         "description": "Manages your Walmart Marketplace — listings, Buy Box strategy, and seller scorecard.",
+         "personality": "analytical", "tone": "precise", "auto_execute": True, "is_active": True,
+         "capabilities": ["listing_optimization", "buy_box_strategy", "pricing_intelligence", "seller_scorecard", "fulfillment_tracking", "social_promo"],
          "tasks_completed": 0, "last_active": None, "training": {}},
-        {"id": str(uuid.uuid4()), "user_id": user_id, "name": "Pinterest Executive Assistant", "agent_type": "pinterest",
-         "category": "social", "platform": "pinterest",
-         "description": "Manages your Pinterest — pins, boards, SEO descriptions, and traffic generation.",
-         "personality": "aspirational", "tone": "visual", "auto_execute": True, "is_active": True,
-         "capabilities": ["pin_creation", "board_strategy", "pinterest_seo", "traffic_generation", "seasonal_content"],
+        {"id": str(uuid.uuid4()), "user_id": user_id, "name": "Faire Executive Assistant", "agent_type": "faire",
+         "category": "store", "platform": "faire",
+         "description": "Manages your Faire wholesale — pricing tiers, retailer outreach, and B2B orders.",
+         "personality": "professional", "tone": "wholesale", "auto_execute": True, "is_active": True,
+         "capabilities": ["wholesale_pricing", "retailer_outreach", "b2b_orders", "faire_search_optimization", "catalog_management", "social_promo"],
          "tasks_completed": 0, "last_active": None, "training": {}},
-        {"id": str(uuid.uuid4()), "user_id": user_id, "name": "TikTok Executive Assistant", "agent_type": "tiktok",
-         "category": "social", "platform": "tiktok",
-         "description": "Manages your TikTok — trend-riding content, viral hooks, and gen-z engagement.",
-         "personality": "trendy", "tone": "casual", "auto_execute": True, "is_active": True,
-         "capabilities": ["trend_riding", "hook_creation", "hashtag_strategy", "viral_content", "sound_selection"],
+        {"id": str(uuid.uuid4()), "user_id": user_id, "name": "Mercari Executive Assistant", "agent_type": "mercari",
+         "category": "store", "platform": "mercari",
+         "description": "Manages your Mercari listings — photos, pricing, shipping, and seller ratings.",
+         "personality": "efficient", "tone": "friendly", "auto_execute": True, "is_active": True,
+         "capabilities": ["listing_optimization", "competitive_pricing", "shipping_strategy", "rating_management", "resale_trends"],
          "tasks_completed": 0, "last_active": None, "training": {}},
-        {"id": str(uuid.uuid4()), "user_id": user_id, "name": "Meta Executive Assistant", "agent_type": "meta",
-         "category": "social", "platform": "meta",
-         "description": "Manages your Facebook & Instagram — community, reels, stories, and ads.",
-         "personality": "community", "tone": "conversational", "auto_execute": True, "is_active": True,
-         "capabilities": ["community_management", "reel_creation", "story_strategy", "ad_optimization", "audience_building"],
+        {"id": str(uuid.uuid4()), "user_id": user_id, "name": "Poshmark Executive Assistant", "agent_type": "poshmark",
+         "category": "store", "platform": "poshmark",
+         "description": "Manages your Poshmark closet — sharing, Posh Parties, bundles, and community.",
+         "personality": "social", "tone": "trendy", "auto_execute": True, "is_active": True,
+         "capabilities": ["closet_sharing", "posh_parties", "bundle_strategy", "community_engagement", "pricing_strategy"],
+         "tasks_completed": 0, "last_active": None, "training": {}},
+        # ── Employee EAs (9) ──
+        {"id": str(uuid.uuid4()), "user_id": user_id, "name": "Marketing Executive Assistant", "agent_type": "marketing_suite",
+         "category": "employee", "platform": "all",
+         "description": "Your CMO — campaigns, social media strategy, ad optimization, and content across all connected platforms.",
+         "personality": "bold", "tone": "creative", "auto_execute": True, "is_active": True,
+         "capabilities": ["social_media_management", "campaign_creation", "ad_optimization", "content_calendar", "email_marketing", "influencer_outreach"],
          "tasks_completed": 0, "last_active": None, "training": {}},
         {"id": str(uuid.uuid4()), "user_id": user_id, "name": "Analytics Command Center", "agent_type": "analytics",
          "category": "intelligence", "platform": "all",
-         "description": "Cross-platform intelligence — analyzes all stores and socials for patterns and opportunities.",
+         "description": "Cross-platform intelligence — analyzes all stores and channels for patterns and opportunities.",
          "personality": "analytical", "tone": "precise", "auto_execute": True, "is_active": True,
          "capabilities": ["cross_platform_analytics", "trend_prediction", "revenue_forecasting", "competitor_tracking", "customer_intelligence"],
+         "tasks_completed": 0, "last_active": None, "training": {}},
+        {"id": str(uuid.uuid4()), "user_id": user_id, "name": "Email Executive Assistant", "agent_type": "email",
+         "category": "employee", "platform": "all",
+         "description": "Manages professional communications — drafts, sequences, inbox management.",
+         "personality": "professional", "tone": "polished", "auto_execute": False, "is_active": True,
+         "capabilities": ["email_drafting", "follow_up_sequences", "inbox_management", "campaign_copy", "professional_correspondence"],
+         "tasks_completed": 0, "last_active": None, "training": {}},
+        {"id": str(uuid.uuid4()), "user_id": user_id, "name": "CRM Executive Assistant", "agent_type": "crm",
+         "category": "employee", "platform": "all",
+         "description": "Manages customer relationships — pipeline, lead scoring, follow-ups.",
+         "personality": "strategic", "tone": "results-driven", "auto_execute": True, "is_active": True,
+         "capabilities": ["pipeline_management", "lead_scoring", "follow_up_strategy", "deal_forecasting", "contact_management"],
+         "tasks_completed": 0, "last_active": None, "training": {}},
+        {"id": str(uuid.uuid4()), "user_id": user_id, "name": "Finance Executive Assistant", "agent_type": "finance",
+         "category": "employee", "platform": "all",
+         "description": "Your CFO — expense tracking, forecasting, invoices, and profit analysis.",
+         "personality": "meticulous", "tone": "precise", "auto_execute": False, "is_active": True,
+         "capabilities": ["expense_tracking", "revenue_forecasting", "invoice_management", "profit_analysis", "cash_flow"],
+         "tasks_completed": 0, "last_active": None, "training": {}},
+        {"id": str(uuid.uuid4()), "user_id": user_id, "name": "Sales Executive Assistant", "agent_type": "sales",
+         "category": "employee", "platform": "all",
+         "description": "Your closer — outreach, proposals, objection handling, and deal flow.",
+         "personality": "persuasive", "tone": "confident", "auto_execute": True, "is_active": True,
+         "capabilities": ["cold_outreach", "proposal_writing", "lead_qualification", "objection_handling", "deal_closing"],
+         "tasks_completed": 0, "last_active": None, "training": {}},
+        {"id": str(uuid.uuid4()), "user_id": user_id, "name": "Operations Executive Assistant", "agent_type": "operations",
+         "category": "employee", "platform": "all",
+         "description": "Your COO — workflows, project management, process optimization.",
+         "personality": "organized", "tone": "efficient", "auto_execute": True, "is_active": True,
+         "capabilities": ["project_management", "workflow_optimization", "milestone_tracking", "team_coordination", "process_automation"],
+         "tasks_completed": 0, "last_active": None, "training": {}},
+        {"id": str(uuid.uuid4()), "user_id": user_id, "name": "HR Executive Assistant", "agent_type": "hr",
+         "category": "employee", "platform": "all",
+         "description": "People ops — hiring, onboarding, policies, and team culture.",
+         "personality": "empathetic", "tone": "supportive", "auto_execute": True, "is_active": True,
+         "capabilities": ["job_descriptions", "onboarding_checklists", "policy_drafting", "hiring_pipeline", "team_culture"],
+         "tasks_completed": 0, "last_active": None, "training": {}},
+        {"id": str(uuid.uuid4()), "user_id": user_id, "name": "Legal Executive Assistant", "agent_type": "legal",
+         "category": "employee", "platform": "all",
+         "description": "Protects your business — contracts, NDAs, compliance, and risk assessment.",
+         "personality": "careful", "tone": "authoritative", "auto_execute": False, "is_active": True,
+         "capabilities": ["contract_drafting", "nda_templates", "terms_of_service", "compliance_checks", "risk_assessment"],
          "tasks_completed": 0, "last_active": None, "training": {}},
     ]
     await db.agents.insert_many(default_agents)
@@ -1037,31 +1095,15 @@ async def update_agent(agent_id: str, update: AgentUpdate, request: Request):
 
 # ──────────────── Social Agent Scope Management ────────────────
 
-@api_router.put("/agents/{agent_id}/scope")
-async def update_social_scope(agent_id: str, body: SocialScopeUpdate, request: Request):
-    """Set the scope of a social agent: personal, store, or business"""
-    user = await get_current_user(request)
-    if body.scope not in ("personal", "store", "business"):
-        raise HTTPException(status_code=400, detail="Scope must be 'personal', 'store', or 'business'")
-    agent = await db.agents.find_one({"id": agent_id, "user_id": user["_id"]})
-    if not agent:
-        raise HTTPException(status_code=404, detail="Agent not found")
-    if agent.get("agent_type") not in SOCIAL_AGENT_TYPES:
-        raise HTTPException(status_code=400, detail="Only social agents can have a scope")
-    await db.agents.update_one({"id": agent_id, "user_id": user["_id"]}, {"$set": {"social_scope": body.scope}})
-    return {"status": "updated", "agent_id": agent_id, "scope": body.scope}
+# ──────────────── Social Connectors Info ────────────────
 
-@api_router.get("/agents/social")
-async def get_social_agents(request: Request):
-    """Get all social agents with their scopes for the current user"""
+@api_router.get("/connectors/social")
+async def get_social_connectors(request: Request):
+    """Get available social platform connectors (not agents — just output channels)"""
     user = await get_current_user(request)
-    agents = await db.agents.find(
-        {"user_id": user["_id"], "agent_type": {"$in": list(SOCIAL_AGENT_TYPES)}},
-        {"_id": 0, "user_id": 0}
-    ).to_list(50)
-    for a in agents:
-        a["social_scope"] = a.get("social_scope", "personal")
-    return agents
+    connected = await db.stores.find({"user_id": user["_id"], "platform": {"$in": list(SOCIAL_CONNECTOR_PLATFORMS)}}).to_list(50)
+    connected_platforms = {s["platform"] for s in connected}
+    return [{"platform": p, "connected": p in connected_platforms} for p in sorted(SOCIAL_CONNECTOR_PLATFORMS)]
 
 # ──────────────── Chat ────────────────
 
@@ -1070,20 +1112,25 @@ async def chat_with_agent(req: ChatRequest, request: Request):
     user = await get_current_user(request)
     user_id = user["_id"]
 
-    # ── Social Agent Scope Enforcement ──
-    scope_context = ""
-    if req.agent_type in SOCIAL_AGENT_TYPES:
-        social_agent = await db.agents.find_one({"user_id": user_id, "agent_type": req.agent_type})
-        scope = social_agent.get("social_scope", "personal") if social_agent else "personal"
-        if scope == "business":
-            scope_context = "\n\n[SCOPE: BUSINESS — You are operating under the Marketing EA's direction. All content must align with the business brand voice, marketing calendar, and campaign objectives. Coordinate with the Marketing EA for approval on campaign-level posts. Focus on ROI-driven content.]"
-        elif scope == "store":
-            scope_context = "\n\n[SCOPE: STORE — You are managing social media for the user's eCommerce store(s). All content should promote products, drive traffic, and support sales. Feature product launches, deals, reviews, and store updates. Coordinate with the Store EA for product data.]"
+    # ── Social posting is handled by Marketing EA and Store EAs ──
+    # Non-marketing, non-store agents cannot post to social directly
+    social_context = ""
+    if req.agent_type == "marketing_suite":
+        # Marketing EA gets info about connected social platforms
+        social_connectors = await db.stores.find(
+            {"user_id": user_id, "platform": {"$in": list(SOCIAL_CONNECTOR_PLATFORMS)}},
+        ).to_list(20)
+        if social_connectors:
+            platforms = ", ".join([s["platform"] for s in social_connectors])
+            social_context = f"\n\n[CONNECTED SOCIAL CHANNELS: {platforms}. You can create and schedule content for these platforms. You are the central social media strategist.]"
         else:
-            scope_context = "\n\n[SCOPE: PERSONAL — You are managing the user's personal social media. Content should reflect their personal brand, interests, and voice. No direct product promotion unless the user asks.]"
-    elif req.agent_type not in SOCIAL_AGENT_TYPES and req.agent_type not in ("general", "marketing_suite"):
-        # Non-social, non-marketing agents cannot post to social — they delegate
-        scope_context = "\n\n[SYSTEM: You do NOT have permission to post to social media directly. If the user asks you to create social content or post on social media, tell them to use the Marketing EA or the specific platform's Social Agent instead. You may draft content suggestions but cannot execute social posting.]"
+            social_context = "\n\n[No social platforms connected yet. Suggest the user connect their social accounts in the Connect hub so you can manage their social media presence.]"
+    elif req.agent_type in ("shopify", "etsy", "ebay", "walmart", "faire", "mercari", "poshmark"):
+        # Store EAs can promote products to connected socials
+        social_context = "\n\n[SOCIAL CAPABILITY: You can suggest product promotions for connected social platforms. When the user wants to promote products on social media, draft the content and recommend they use the Marketing EA to schedule it across platforms, or you can create platform-specific product promos.]"
+    elif req.agent_type not in ("general",):
+        # Other Employee EAs delegate social to Marketing EA
+        social_context = "\n\n[SOCIAL POSTING: You do not post to social media directly. If the user asks for social content, recommend they use the Marketing EA which orchestrates all social platforms.]"
 
     chat = await get_or_create_chat_with_context(user_id, req.agent_type)
 
@@ -1112,7 +1159,7 @@ ACTION:CREATE_COLLECTION|title=Collection Name|description=Collection descriptio
 
 You can include MULTIPLE action lines. The user will approve each one before it executes on their store. Always explain what you're about to create BEFORE the action lines. Be creative with product names, descriptions, and pricing based on the niche.]"""
 
-        enhanced_msg = req.message + store_context + action_instruction + scope_context + "\n\n[SYSTEM: If the user reveals important facts about their business (product types, revenue goals, pain points, preferences), remember them by ending your response with a line starting with 'MEMORY:' followed by a key=value pair. Example: MEMORY: main_product=handmade jewelry. Only do this when genuinely new info is shared. Do NOT include MEMORY lines for casual chat.]"
+        enhanced_msg = req.message + store_context + action_instruction + social_context + "\n\n[SYSTEM: If the user reveals important facts about their business (product types, revenue goals, pain points, preferences), remember them by ending your response with a line starting with 'MEMORY:' followed by a key=value pair. Example: MEMORY: main_product=handmade jewelry. Only do this when genuinely new info is shared. Do NOT include MEMORY lines for casual chat.]"
         response = await chat.send_message(UserMessage(text=enhanced_msg))
 
         # Extract and save memory if present
