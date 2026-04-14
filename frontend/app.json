@@ -2,12 +2,15 @@
   "expo": {
     "name": "orchestrAI",
     "slug": "orchestrai",
+    "description": "AI-powered eCommerce management. 8 specialized agents that build, manage, and grow your Shopify, Etsy, eBay, and social media presence. Automate product listings, social posting, customer support, and analytics.",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "orchestrai",
     "userInterfaceStyle": "dark",
     "newArchEnabled": true,
+    "primaryColor": "#34D399",
+    "backgroundColor": "#030712",
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.orchestrai.app",

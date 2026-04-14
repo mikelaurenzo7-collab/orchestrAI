@@ -214,7 +214,7 @@ export default function AuthScreen() {
           <Animated.View style={[s.tagWrap, { opacity: fadeIn }]}>
             <Text style={s.tagMain}>Your AI Commerce</Text>
             <Text style={s.tagAccent}>Command Center</Text>
-            <Text style={s.tagSub}>Agents that build, manage, and grow{'\n'}your store — autonomously.</Text>
+            <Text style={s.tagSub}>AI agents that build, manage, and grow{'\n'}your eCommerce empire.</Text>
           </Animated.View>
 
           {/* CTA Buttons */}
@@ -264,9 +264,9 @@ export default function AuthScreen() {
           {/* Stats */}
           <Animated.View style={[s.statsBar, { opacity: bottomFade }]}>
             {[
-              { v: '4', l: 'AI Agents', c: Colors.emerald },
-              { v: '24', l: 'Actions', c: Colors.amber },
-              { v: '30', l: 'Day Trial', c: Colors.cyan },
+              { v: '8', l: 'AI Agents', c: Colors.emerald },
+              { v: '24', l: 'Actions', c: '#FBBF24' },
+              { v: '30', l: 'Day Trial', c: '#22D3EE' },
             ].map((st, i) => (
               <View key={i} style={s.stat}>
                 <Text style={[s.statV, { color: st.c }]}>{st.v}</Text>
@@ -322,35 +322,35 @@ const o = StyleSheet.create({
 const s = StyleSheet.create({
   root: { flex: 1, backgroundColor: '#050A18' },
   safe: { flex: 1 },
-  scroll: { paddingHorizontal: 24, paddingTop: 12 },
-  topBrand: { flexDirection: 'row', alignItems: 'baseline', alignSelf: 'center', marginBottom: 8 },
-  brandLight: { fontSize: 20, fontWeight: '300', color: '#94A3B8' },
-  brandBold: { fontSize: 20, fontWeight: '900', color: Colors.emerald },
-  tagWrap: { alignItems: 'center', marginBottom: 28 },
-  tagMain: { fontSize: 28, fontWeight: '900', color: '#F1F5F9', textAlign: 'center' },
-  tagAccent: { fontSize: 28, fontWeight: '900', color: Colors.emerald, textAlign: 'center', marginBottom: 12 },
-  tagSub: { fontSize: 15, color: '#94A3B8', textAlign: 'center', lineHeight: 23 },
-  inlineInput: { backgroundColor: '#0D1424', borderRadius: 14, paddingHorizontal: 18, paddingVertical: 15, color: '#F1F5F9', fontSize: 16, borderWidth: 1, borderColor: '#1E293B', marginBottom: 10 },
-  inlineError: { color: Colors.rose, fontSize: 13, marginBottom: 10, fontWeight: '600', textAlign: 'center' },
-  toggleWrap: { alignItems: 'center', marginTop: 16 },
-  toggleText: { fontSize: 14, color: '#64748B' },
+  scroll: { paddingHorizontal: 24, paddingTop: 16 },
+  topBrand: { flexDirection: 'row', alignItems: 'baseline', alignSelf: 'center', marginBottom: 12 },
+  brandLight: { fontSize: 22, fontWeight: '300', color: '#94A3B8', letterSpacing: -0.5 },
+  brandBold: { fontSize: 22, fontWeight: '900', color: Colors.emerald, letterSpacing: -0.5 },
+  tagWrap: { alignItems: 'center', marginBottom: 32 },
+  tagMain: { fontSize: 30, fontWeight: '900', color: '#F1F5F9', textAlign: 'center', letterSpacing: -0.8 },
+  tagAccent: { fontSize: 30, fontWeight: '900', color: Colors.emerald, textAlign: 'center', marginBottom: 14, letterSpacing: -0.8 },
+  tagSub: { fontSize: 15, color: '#64748B', textAlign: 'center', lineHeight: 23 },
+  inlineInput: { backgroundColor: '#0A0F1E', borderRadius: 16, paddingHorizontal: 20, paddingVertical: 17, color: '#F1F5F9', fontSize: 16, borderWidth: 1.5, borderColor: '#1E293B', marginBottom: 12 },
+  inlineError: { color: '#FB7185', fontSize: 13, marginBottom: 10, fontWeight: '600', textAlign: 'center' },
+  toggleWrap: { alignItems: 'center', marginTop: 18 },
+  toggleText: { fontSize: 14, color: '#475569' },
   toggleLink: { color: Colors.emerald, fontWeight: '700' },
   ctaP: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: Colors.emerald, borderRadius: 20, paddingHorizontal: 24, paddingVertical: 20 },
   ctaPT: { fontSize: 19, fontWeight: '900', color: '#050A18' },
-  ctaPS: { fontSize: 13, color: '#050A18', opacity: 0.55, marginTop: 2 },
-  ctaArr: { width: 42, height: 42, borderRadius: 14, backgroundColor: 'rgba(5,10,24,0.15)', justifyContent: 'center', alignItems: 'center' },
+  ctaPS: { fontSize: 13, color: '#050A18', opacity: 0.5, marginTop: 2 },
+  ctaArr: { width: 44, height: 44, borderRadius: 14, backgroundColor: 'rgba(5,10,24,0.12)', justifyContent: 'center', alignItems: 'center' },
   ctaArrT: { fontSize: 20, color: '#050A18', fontWeight: '700' },
-  ctaS: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#0D1424', borderRadius: 16, paddingHorizontal: 24, paddingVertical: 16, borderWidth: 1, borderColor: '#1E293B' },
+  ctaS: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#0A0F1E', borderRadius: 16, paddingHorizontal: 24, paddingVertical: 16, borderWidth: 1.5, borderColor: '#1E293B' },
   ctaST: { fontSize: 16, fontWeight: '800', color: '#E2E8F0' },
   ctaSS: { fontSize: 18, color: '#64748B' },
-  intLabels: { marginTop: 28 },
-  intTitle: { fontSize: 12, fontWeight: '700', color: '#64748B', letterSpacing: 1, textAlign: 'center', marginBottom: 14, textTransform: 'uppercase' },
+  intLabels: { marginTop: 32 },
+  intTitle: { fontSize: 11, fontWeight: '800', color: '#475569', letterSpacing: 1.5, textAlign: 'center', marginBottom: 16, textTransform: 'uppercase' },
   intRow: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 8 },
-  intChip: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#0A0F1E', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 20, borderWidth: 1 },
+  intChip: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#080D1C', paddingHorizontal: 14, paddingVertical: 9, borderRadius: 24, borderWidth: 1 },
   intChipText: { fontSize: 11, fontWeight: '700' },
-  statsBar: { flexDirection: 'row', justifyContent: 'space-around', marginTop: 24, marginBottom: 16 },
+  statsBar: { flexDirection: 'row', justifyContent: 'space-around', marginTop: 28, marginBottom: 20, backgroundColor: '#080D1C', borderRadius: 20, paddingVertical: 20, borderWidth: 1, borderColor: '#1E293B' },
   stat: { alignItems: 'center' },
-  statV: { fontSize: 28, fontWeight: '900' },
-  statL: { fontSize: 10, color: '#64748B', fontWeight: '700', marginTop: 4, letterSpacing: 0.5 },
-  footer: { textAlign: 'center', color: '#334155', fontSize: 11, marginTop: 8 },
+  statV: { fontSize: 30, fontWeight: '900' },
+  statL: { fontSize: 10, color: '#475569', fontWeight: '700', marginTop: 4, letterSpacing: 0.5, textTransform: 'uppercase' },
+  footer: { textAlign: 'center', color: '#1E293B', fontSize: 11, marginTop: 8 },
 });
