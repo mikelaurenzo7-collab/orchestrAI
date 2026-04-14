@@ -1,7 +1,7 @@
 import { useState, useRef } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, TextInput,
-  Dimensions, Animated, Easing, ScrollView, KeyboardAvoidingView, Platform, Keyboard,
+  Dimensions, Animated, Easing, ScrollView, KeyboardAvoidingView, Platform, Keyboard, Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -95,7 +95,7 @@ export default function OnboardingScreen() {
             {/* STEP 0 — Welcome */}
             {step === 0 && (
               <View>
-                <Text style={s.heroEmoji}>🎵</Text>
+                <Image source={require('../assets/images/orchestrai-logo-small.png')} style={{ width: 56, height: 56, alignSelf: 'center', marginBottom: 16 }} resizeMode="contain" />
                 <Text style={s.h1}>Welcome to{'\n'}orchestr<Text style={s.accent}>AI</Text></Text>
                 <Text style={s.sub}>8 AI Executive Assistants. One mission: grow your business on autopilot.</Text>
 

@@ -2,16 +2,16 @@ import { useState, useEffect, useRef } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, ScrollView,
   KeyboardAvoidingView, Platform, ActivityIndicator, TextInput,
-  Dimensions, Animated, Keyboard, Easing, Pressable,
+  Dimensions, Animated, Keyboard, Easing, Pressable, Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../contexts/AuthContext';
 import { Colors, BorderRadius } from '../constants/theme';
 
 const { width: W, height: H } = Dimensions.get('window');
-const HUB_SIZE = 64;
-const AGENT_R = 72;
-const ORBIT_R = 130;
+const HUB_SIZE = 56;
+const AGENT_R = 68;
+const ORBIT_R = 120;
 
 const AGENTS = [
   { emoji: '📦', name: 'Store', color: Colors.emerald },
@@ -40,10 +40,10 @@ function OrbitalHero() {
   const connPulses = useRef(AGENTS.map(() => new Animated.Value(0.1))).current;
 
   useEffect(() => {
-    // Central hub breathe
+    // Central hub breathe — subtle, contained
     Animated.loop(Animated.sequence([
-      Animated.timing(hubPulse, { toValue: 1.08, duration: 2200, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
-      Animated.timing(hubPulse, { toValue: 0.94, duration: 2200, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+      Animated.timing(hubPulse, { toValue: 1.04, duration: 2200, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+      Animated.timing(hubPulse, { toValue: 0.97, duration: 2200, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
     ])).start();
     Animated.loop(Animated.sequence([
       Animated.timing(hubGlow, { toValue: 0.5, duration: 2800, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
@@ -58,8 +58,8 @@ function OrbitalHero() {
           Animated.timing(agentPulses[i], { toValue: 0.6, duration: 1400 + i * 300, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
         ])).start();
         Animated.loop(Animated.sequence([
-          Animated.timing(agentScales[i], { toValue: 1.1, duration: 1800 + i * 200, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
-          Animated.timing(agentScales[i], { toValue: 0.95, duration: 1800 + i * 200, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+          Animated.timing(agentScales[i], { toValue: 1.05, duration: 1800 + i * 200, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+          Animated.timing(agentScales[i], { toValue: 0.97, duration: 1800 + i * 200, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
         ])).start();
         // Connection pulse (data flowing from hub to agent)
         Animated.loop(Animated.sequence([
@@ -84,15 +84,15 @@ function OrbitalHero() {
   const cx = containerSize / 2;
 
   return (
-    <View style={[o.container, { width: containerSize, height: containerSize, alignSelf: 'center' }]}>
+    <View style={[o.container, { width: containerSize, height: containerSize, alignSelf: 'center', overflow: 'hidden' }]}>
       {/* Outer glow */}
-      <Animated.View style={[o.outerGlow, { opacity: hubGlow, left: cx - 140, top: cx - 140 }]} />
+      <Animated.View style={[o.outerGlow, { opacity: hubGlow, left: cx - 130, top: cx - 130 }]} />
 
       {/* Outer orbit ring (integrations) */}
       <View style={[o.orbitRing, { left: cx - ORBIT_R - 20, top: cx - ORBIT_R - 20, width: ORBIT_R * 2 + 40, height: ORBIT_R * 2 + 40, borderRadius: ORBIT_R + 20 }]} />
 
       {/* Inner orbit ring (agents) */}
-      <View style={[o.innerRing, { left: cx - AGENT_R - 14, top: cx - AGENT_R - 14, width: AGENT_R * 2 + 28, height: AGENT_R * 2 + 28, borderRadius: AGENT_R + 14 }]} />
+      <View style={[o.innerRing, { left: cx - AGENT_R - 12, top: cx - AGENT_R - 12, width: AGENT_R * 2 + 24, height: AGENT_R * 2 + 24, borderRadius: AGENT_R + 12 }]} />
 
       {/* Integration icons on outer ring */}
       {INTEGRATIONS.map((integ, i) => {
@@ -137,7 +137,7 @@ function OrbitalHero() {
       }]}>
         <Animated.View style={[o.hubGlowRing, { opacity: hubGlow }]} />
         <View style={o.hubCore}>
-          <Text style={o.hubIcon}>🎵</Text>
+          <Image source={require('../assets/images/orchestrai-logo-icon.png')} style={{ width: 38, height: 38 }} resizeMode="contain" />
         </View>
       </Animated.View>
     </View>
@@ -286,8 +286,8 @@ export default function AuthScreen() {
 const o = StyleSheet.create({
   container: { position: 'relative', marginBottom: 10 },
   outerGlow: {
-    position: 'absolute', width: 280, height: 280, borderRadius: 140,
-    backgroundColor: Colors.emerald, opacity: 0.08,
+    position: 'absolute', width: 260, height: 260, borderRadius: 130,
+    backgroundColor: Colors.emerald, opacity: 0.06,
   },
   orbitRing: {
     position: 'absolute', borderWidth: 1, borderColor: Colors.emerald + '10', borderStyle: 'dashed',
@@ -317,7 +317,6 @@ const o = StyleSheet.create({
     backgroundColor: '#0A1A2E', borderWidth: 2, borderColor: Colors.emerald + '60',
     justifyContent: 'center', alignItems: 'center',
   },
-  hubIcon: { fontSize: 28 },
 });
 
 const s = StyleSheet.create({

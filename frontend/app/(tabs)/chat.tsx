@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  TextInput, KeyboardAvoidingView, Platform, ActivityIndicator, Keyboard,
+  TextInput, KeyboardAvoidingView, Platform, ActivityIndicator, Keyboard, Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams } from 'expo-router';
@@ -125,7 +125,11 @@ export default function ChatScreen() {
                 <TouchableOpacity key={a.type} testID={`agent-select-${a.type}`}
                   style={[s.chip, sel && { backgroundColor: c + '20', borderColor: c + '50' }]}
                   onPress={() => setSelectedAgent(a.type)}>
-                  <Text style={{ fontSize: 16 }}>{a.icon}</Text>
+                  {a.type === 'general' ? (
+                    <Image source={require('../../assets/images/orchestrai-logo-icon.png')} style={{ width: 20, height: 20 }} resizeMode="contain" />
+                  ) : (
+                    <Text style={{ fontSize: 16 }}>{a.icon}</Text>
+                  )}
                   <Text style={[s.chipText, sel && { color: c }]}>{a.name}</Text>
                 </TouchableOpacity>
               );
