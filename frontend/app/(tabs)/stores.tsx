@@ -4,7 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import Animated, { FadeInDown, FadeIn, LinearTransition } from 'react-native-reanimated';
 import { BlurView } from 'expo-blur';
 import { Colors, Typography } from '../../constants/theme';
-import { Plus, Link, Power, PowerOff, ShieldCheck, CreditCard, ShoppingCart, Key, ShieldAlert } from 'lucide-react-native';
+import { Plus, Link, Power, PowerOff, ShieldCheck, CreditCard, ShoppingCart, Key, ShieldAlert, Package, Tag, Building2, Warehouse, Store as StoreIcon } from 'lucide-react-native';
 import AnimatedPressable from '../../components/AnimatedPressable';
 import * as Haptics from 'expo-haptics';
 import { authFetch } from '../../utils/api';
@@ -21,10 +21,13 @@ interface OrgStore {
 }
 
 const PLATFORMS = [
-  { id: 'shopify', name: 'Shopify', icon: ShoppingCart, color: Colors.emerald, tag: 'E-Commerce' },
-  { id: 'stripe', name: 'Stripe', icon: CreditCard, color: '#635BFF', tag: 'Payments' },
-  { id: 'amazon', name: 'Amazon', icon: ShoppingCart, color: '#FF9900', tag: 'Marketplace' },
-  { id: 'custom', name: 'Custom API', icon: Key, color: Colors.accent, tag: 'Developer' },
+  { id: 'shopify', name: 'Shopify', icon: ShoppingCart, color: '#96BF48', tag: 'E-Commerce' },
+  { id: 'etsy', name: 'Etsy', icon: Package, color: '#F1641E', tag: 'Handmade' },
+  { id: 'ebay', name: 'eBay', icon: Tag, color: '#E53238', tag: 'Marketplace' },
+  { id: 'walmart', name: 'Walmart', icon: Building2, color: '#0071DC', tag: 'Marketplace' },
+  { id: 'faire', name: 'Faire', icon: Warehouse, color: '#FF6B35', tag: 'Wholesale' },
+  { id: 'mercari', name: 'Mercari', icon: ShoppingCart, color: '#E24444', tag: 'Resale' },
+  { id: 'poshmark', name: 'Poshmark', icon: StoreIcon, color: '#C12B5B', tag: 'Fashion' },
 ];
 
 export default function StoresScreen() {

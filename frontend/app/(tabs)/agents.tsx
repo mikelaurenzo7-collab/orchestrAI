@@ -5,7 +5,7 @@ import { useRouter } from 'expo-router';
 import { authFetch } from '../../utils/api';
 import { Colors, Fonts } from '../../constants/theme';
 import { BlurView } from 'expo-blur';
-import { Bot, ShieldCheck, Activity, TerminalSquare, AlertCircle, ShoppingBag, Zap, Mail, Briefcase, FileText, Smartphone, Megaphone } from 'lucide-react-native';
+import { Bot, ShieldCheck, Activity, TerminalSquare, AlertCircle, ShoppingBag, Zap, Mail, Briefcase, FileText, Smartphone, Megaphone, Store, Package, Tag, Building2, Warehouse, ShoppingCart, Scale, TrendingUp, DollarSign, Users, Cog, UserCheck, Gavel } from 'lucide-react-native';
 import Animated, { FadeIn, FadeInDown, SlideInUp } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
 import { AnimatedPressable } from '../../components/AnimatedPressable';
@@ -13,21 +13,28 @@ import { AnimatedPressable } from '../../components/AnimatedPressable';
 const { width } = Dimensions.get('window');
 
 const AGENT_MAPPINGS: Record<string, { icon: any, color: string, badge: string }> = {
-  general: { icon: TerminalSquare, color: Colors.emerald, badge: 'CORE' },
-  shopify: { icon: ShoppingBag, color: '#96BF48', badge: 'COMMERCE' },
-  etsy: { icon: StoreIcon, color: '#F1641E', badge: 'COMMERCE' },
-  ebay: { icon: ShoppingBag, color: '#E53238', badge: 'COMMERCE' },
+  // Store EAs
+  shopify: { icon: ShoppingBag, color: '#96BF48', badge: 'STORE' },
+  etsy: { icon: Package, color: '#F1641E', badge: 'STORE' },
+  ebay: { icon: Tag, color: '#E53238', badge: 'STORE' },
+  walmart: { icon: Building2, color: '#0071DC', badge: 'STORE' },
+  faire: { icon: Warehouse, color: '#FF6B35', badge: 'STORE' },
+  mercari: { icon: ShoppingCart, color: '#E24444', badge: 'STORE' },
+  poshmark: { icon: Store, color: '#C12B5B', badge: 'STORE' },
+  // Employee EAs
   marketing_suite: { icon: Megaphone, color: '#FE2C55', badge: 'MARKETING' },
   analytics: { icon: Activity, color: '#0866FF', badge: 'INTELLIGENCE' },
   email: { icon: Mail, color: '#EA4335', badge: 'COMMUNICATION' },
-  crm: { icon: ShieldCheck, color: '#FF7A59', badge: 'SALES' },
-  finance: { icon: Zap, color: '#2CA01C', badge: 'FINANCE' },
-  hr: { icon: Briefcase, color: '#FF9900', badge: 'PEOPLE' },
-  legal: { icon: FileText, color: '#7B51AD', badge: 'COMPLIANCE' },
+  crm: { icon: Users, color: '#FF7A59', badge: 'CRM' },
+  finance: { icon: DollarSign, color: '#2CA01C', badge: 'FINANCE' },
+  sales: { icon: TrendingUp, color: '#635BFF', badge: 'SALES' },
+  operations: { icon: Cog, color: '#FF9900', badge: 'OPERATIONS' },
+  hr: { icon: UserCheck, color: '#E60023', badge: 'HR' },
+  legal: { icon: Gavel, color: '#7B51AD', badge: 'LEGAL' },
+  // General
+  general: { icon: TerminalSquare, color: Colors.emerald, badge: 'CORE' },
   default: { icon: Bot, color: Colors.emerald, badge: 'AGENT' },
 };
-
-function StoreIcon(props: any) { return <ShoppingBag {...props} />; }
 
 export default function AgentsHubScreen() {
   const router = useRouter();
