@@ -10,17 +10,36 @@ import { Colors, Spacing, BorderRadius, FontSizes, Shadows, PlatformColors } fro
 
 type Store = { id: string; name: string; platform: string; store_url: string | null; status: string; connected_at: string; products_synced: number; orders_total: number; revenue: number };
 
-const STORE_PLATFORMS = [
-  { id: 'shopify', name: 'Shopify', icon: '🟢', color: PlatformColors.shopify, hasOAuth: true },
-  { id: 'etsy', name: 'Etsy', icon: '🟠', color: PlatformColors.etsy, hasOAuth: true },
-  { id: 'ebay', name: 'eBay', icon: '🏷️', color: '#E53238', hasOAuth: true },
-  { id: 'woocommerce', name: 'WooCommerce', icon: '🟣', color: PlatformColors.woocommerce, hasOAuth: false },
-  { id: 'amazon', name: 'Amazon', icon: '📦', color: '#FF9900', hasOAuth: false },
-  { id: 'bigcommerce', name: 'BigCommerce', icon: '🔷', color: '#34313F', hasOAuth: false },
-  { id: 'square', name: 'Square', icon: '⬛', color: '#006AFF', hasOAuth: false },
-  { id: 'wix', name: 'Wix', icon: '🌐', color: '#0C6EFC', hasOAuth: false },
-  { id: 'custom', name: 'Custom API', icon: '🔧', color: Colors.emerald, hasOAuth: false },
+const CONNECTOR_GROUPS = [
+  { title: 'Commerce', key: 'commerce', items: [
+    { id: 'shopify', name: 'Shopify', icon: '🛍️', color: '#96BF48', hasOAuth: true, status: 'live' },
+    { id: 'etsy', name: 'Etsy', icon: '🧶', color: '#F1641E', hasOAuth: true, status: 'live' },
+    { id: 'ebay', name: 'eBay', icon: '🏷️', color: '#E53238', hasOAuth: true, status: 'live' },
+    { id: 'woocommerce', name: 'WooCommerce', icon: '🛒', color: '#7B51AD', hasOAuth: false, status: 'soon' },
+    { id: 'amazon', name: 'Amazon', icon: '📦', color: '#FF9900', hasOAuth: false, status: 'soon' },
+  ]},
+  { title: 'Social Media', key: 'social', items: [
+    { id: 'twitter', name: 'Twitter/X', icon: '🐦', color: '#1DA1F2', hasOAuth: false, status: 'live' },
+    { id: 'pinterest', name: 'Pinterest', icon: '📌', color: '#E60023', hasOAuth: false, status: 'live' },
+    { id: 'tiktok', name: 'TikTok', icon: '🎵', color: '#FE2C55', hasOAuth: true, status: 'live' },
+    { id: 'meta', name: 'Meta', icon: '📘', color: '#0866FF', hasOAuth: true, status: 'live' },
+  ]},
+  { title: 'Business Tools', key: 'business', items: [
+    { id: 'google', name: 'Google', icon: '📧', color: '#EA4335', hasOAuth: true, status: 'live' },
+    { id: 'microsoft', name: 'Outlook', icon: '📬', color: '#0078D4', hasOAuth: true, status: 'live' },
+    { id: 'hubspot', name: 'HubSpot', icon: '🤝', color: '#FF7A59', hasOAuth: false, status: 'live' },
+    { id: 'slack', name: 'Slack', icon: '💬', color: '#4A154B', hasOAuth: true, status: 'live' },
+    { id: 'notion', name: 'Notion', icon: '📝', color: '#000000', hasOAuth: false, status: 'live' },
+    { id: 'stripe', name: 'Stripe', icon: '💳', color: '#635BFF', hasOAuth: false, status: 'live' },
+    { id: 'mailjet', name: 'Mailjet', icon: '✉️', color: '#FABE14', hasOAuth: false, status: 'live' },
+    { id: 'calendly', name: 'Calendly', icon: '📅', color: '#006BFF', hasOAuth: true, status: 'soon' },
+    { id: 'quickbooks', name: 'QuickBooks', icon: '💰', color: '#2CA01C', hasOAuth: true, status: 'soon' },
+    { id: 'asana', name: 'Asana', icon: '⚙️', color: '#F06A6A', hasOAuth: true, status: 'soon' },
+    { id: 'docusign', name: 'DocuSign', icon: '📋', color: '#4C2B90', hasOAuth: true, status: 'soon' },
+    { id: 'zoom', name: 'Zoom', icon: '🎥', color: '#2D8CFF', hasOAuth: true, status: 'soon' },
+  ]},
 ];
+const STORE_PLATFORMS = CONNECTOR_GROUPS.flatMap(g => g.items);
 
 export default function StoresScreen() {
   const [stores, setStores] = useState<Store[]>([]);
@@ -129,20 +148,25 @@ export default function StoresScreen() {
 
         {stores.length === 0 ? (
           <View style={s.empty}>
-            <Text style={{ fontSize: 44 }}>🏪</Text>
-            <Text style={s.emptyTitle}>Connect a Platform</Text>
-            <Text style={s.emptyText}>Each platform gets its own AI Executive Assistant.</Text>
-            <View style={s.oauthGrid}>
-              {STORE_PLATFORMS.map(p => (
-                <TouchableOpacity key={p.id} testID={`quick-connect-${p.id}`}
-                  style={[s.oauthBtn, { borderColor: p.color + '30' }]}
-                  onPress={() => { setSelectedPlatform(p.id); setShowModal(true); }}>
-                  <Text style={{ fontSize: 26 }}>{p.icon}</Text>
-                  <Text style={[s.oauthBtnText, { color: p.color }]}>{p.name}</Text>
-                  {p.hasOAuth && <View style={s.oauthTag}><Text style={s.oauthTagText}>1-tap</Text></View>}
-                </TouchableOpacity>
-              ))}
-            </View>
+            <Text style={{ fontSize: 44 }}>🔌</Text>
+            <Text style={s.emptyTitle}>Connections</Text>
+            <Text style={s.emptyText}>Each connection activates an AI Executive Assistant.</Text>
+            {CONNECTOR_GROUPS.map(group => (
+              <View key={group.key} style={s.groupSection}>
+                <Text style={s.groupTitle}>{group.title}</Text>
+                <View style={s.oauthGrid}>
+                  {group.items.map(p => (
+                    <TouchableOpacity key={p.id} testID={`quick-connect-${p.id}`}
+                      style={[s.oauthBtn, { borderColor: p.color + '30', opacity: p.status === 'soon' ? 0.5 : 1 }]}
+                      onPress={() => { if (p.status === 'live') { setSelectedPlatform(p.id); setShowModal(true); } }}>
+                      <Text style={{ fontSize: 22 }}>{p.icon}</Text>
+                      <Text style={[s.oauthBtnText, { color: p.color }]}>{p.name}</Text>
+                      {p.status === 'soon' && <Text style={s.soonTag}>SOON</Text>}
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
+            ))}
           </View>
         ) : stores.map(store => {
           const plat = STORE_PLATFORMS.find(p => p.id === store.platform);
@@ -287,6 +311,9 @@ const s = StyleSheet.create({
   oauthBtnText: { fontSize: 11, fontWeight: '800' },
   oauthTag: { backgroundColor: Colors.emerald + '15', paddingHorizontal: 8, paddingVertical: 2, borderRadius: BorderRadius.full },
   oauthTagText: { fontSize: 8, fontWeight: '800', color: Colors.emerald, letterSpacing: 0.5 },
+  soonTag: { fontSize: 8, fontWeight: '800', color: Colors.textMuted, letterSpacing: 0.5 },
+  groupSection: { width: '100%', marginBottom: Spacing.lg },
+  groupTitle: { fontSize: FontSizes.xs, fontWeight: '800', color: Colors.textMuted, letterSpacing: 2, textTransform: 'uppercase', marginBottom: Spacing.md },
   manualBtn: { marginTop: 16 },
   manualBtnText: { fontSize: FontSizes.sm, color: Colors.textMuted, fontWeight: '600' },
   storeCard: { backgroundColor: Colors.surface, borderRadius: BorderRadius.xl, padding: Spacing.xl, borderWidth: 1, marginBottom: Spacing.lg, ...Shadows.card },

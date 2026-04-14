@@ -2866,13 +2866,26 @@ async def get_integration_status(request: Request):
     """Returns which integrations are configured"""
     await get_current_user(request)
     return {
-        "shopify": {"configured": bool(SHOPIFY_CLIENT_ID), "type": "oauth"},
-        "etsy": {"configured": bool(ETSY_API_KEY), "type": "oauth"},
-        "ebay": {"configured": bool(EBAY_CLIENT_ID and EBAY_CLIENT_SECRET), "type": "oauth"},
-        "twitter": {"configured": bool(TWITTER_API_KEY and TWITTER_ACCESS_TOKEN), "type": "direct"},
-        "pinterest": {"configured": bool(PINTEREST_ACCESS_TOKEN), "type": "direct"},
-        "tiktok": {"configured": bool(os.environ.get('TIKTOK_CLIENT_KEY', '')), "type": "oauth"},
-        "meta": {"configured": bool(os.environ.get('META_APP_ID', '')), "type": "oauth"},
+        "commerce": {
+            "shopify": {"configured": bool(SHOPIFY_CLIENT_ID), "type": "oauth", "status": "live"},
+            "etsy": {"configured": bool(ETSY_API_KEY), "type": "oauth", "status": "live"},
+            "ebay": {"configured": bool(EBAY_CLIENT_ID and EBAY_CLIENT_SECRET), "type": "oauth", "status": "live"},
+        },
+        "social": {
+            "twitter": {"configured": bool(TWITTER_API_KEY and TWITTER_ACCESS_TOKEN), "type": "direct", "status": "live"},
+            "pinterest": {"configured": bool(PINTEREST_ACCESS_TOKEN), "type": "direct", "status": "live"},
+            "tiktok": {"configured": bool(os.environ.get('TIKTOK_CLIENT_KEY', '')), "type": "oauth", "status": "live"},
+            "meta": {"configured": bool(os.environ.get('META_APP_ID', '')), "type": "oauth", "status": "live"},
+        },
+        "business": {
+            "google": {"configured": bool(os.environ.get('GOOGLE_CLIENT_ID', '')), "type": "oauth", "status": "live"},
+            "microsoft": {"configured": bool(os.environ.get('MICROSOFT_CLIENT_ID', '')), "type": "oauth", "status": "live"},
+            "stripe": {"configured": bool(os.environ.get('STRIPE_SECRET_KEY', '')), "type": "api_key", "status": "live"},
+            "hubspot": {"configured": bool(os.environ.get('HUBSPOT_API_KEY', '')), "type": "api_key", "status": "live"},
+            "slack": {"configured": bool(os.environ.get('SLACK_CLIENT_ID', '')), "type": "oauth", "status": "live"},
+            "notion": {"configured": bool(os.environ.get('NOTION_INTEGRATION_SECRET', '')), "type": "api_key", "status": "live"},
+            "mailjet": {"configured": bool(os.environ.get('MAILJET_API_KEY', '')), "type": "api_key", "status": "live"},
+        },
     }
 
 # ──────────────── Etsy OAuth ────────────────

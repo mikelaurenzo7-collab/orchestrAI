@@ -10,15 +10,26 @@ import { Colors, Spacing, BorderRadius, FontSizes, AgentColors } from '../../con
 
 type Message = { role: string; content: string; timestamp: string; agent_type?: string };
 const AGENTS = [
-  { type: 'general', name: 'orchestrAI', icon: '🎵' },
-  { type: 'shopify', name: 'Shopify', icon: '🛍️' },
-  { type: 'etsy', name: 'Etsy', icon: '🧶' },
-  { type: 'ebay', name: 'eBay', icon: '🏷️' },
-  { type: 'twitter', name: 'Twitter', icon: '🐦' },
-  { type: 'pinterest', name: 'Pinterest', icon: '📌' },
-  { type: 'tiktok', name: 'TikTok', icon: '🎵' },
-  { type: 'meta', name: 'Meta', icon: '📘' },
-  { type: 'analytics', name: 'Analytics', icon: '📊' },
+  { type: 'general', name: 'orchestrAI', icon: '🎵', cat: 'core' },
+  // Commerce
+  { type: 'shopify', name: 'Shopify', icon: '🛍️', cat: 'commerce' },
+  { type: 'etsy', name: 'Etsy', icon: '🧶', cat: 'commerce' },
+  { type: 'ebay', name: 'eBay', icon: '🏷️', cat: 'commerce' },
+  // Social
+  { type: 'twitter', name: 'Twitter', icon: '🐦', cat: 'social' },
+  { type: 'pinterest', name: 'Pinterest', icon: '📌', cat: 'social' },
+  { type: 'tiktok', name: 'TikTok', icon: '🎵', cat: 'social' },
+  { type: 'meta', name: 'Meta', icon: '📘', cat: 'social' },
+  // Business
+  { type: 'email', name: 'Email', icon: '📧', cat: 'business' },
+  { type: 'crm', name: 'CRM', icon: '🤝', cat: 'business' },
+  { type: 'finance', name: 'Finance', icon: '💰', cat: 'business' },
+  { type: 'sales', name: 'Sales', icon: '🎯', cat: 'business' },
+  { type: 'operations', name: 'Ops', icon: '⚙️', cat: 'business' },
+  { type: 'hr', name: 'HR', icon: '👥', cat: 'business' },
+  { type: 'legal', name: 'Legal', icon: '📋', cat: 'business' },
+  // Intelligence
+  { type: 'analytics', name: 'Analytics', icon: '📊', cat: 'intel' },
 ];
 
 export default function ChatScreen() {
@@ -110,7 +121,15 @@ export default function ChatScreen() {
     pinterest: ['Create SEO pin descriptions', 'What boards should I create?', 'Plan a seasonal pin strategy'],
     tiktok: ['What TikTok trends fit my brand?', 'Write 3 viral TikTok captions', 'Plan a content series'],
     meta: ['Write Instagram captions for my products', 'Plan a Facebook ad campaign', 'Create a Reel strategy'],
+    email: ['Draft a follow-up email sequence', 'Write a product launch email', 'Organize my inbox priorities'],
+    crm: ['Set up my sales pipeline stages', 'Score my top 10 leads', 'Create a follow-up strategy'],
+    finance: ['Generate a monthly expense report', 'Forecast next quarter revenue', 'Track my profit margins'],
+    sales: ['Write a cold outreach template', 'Build a prospect list strategy', 'Qualify my current leads'],
+    operations: ['Create a weekly team standup template', 'Map out my business workflows', 'Set up project milestones'],
+    hr: ['Write a job description for my next hire', 'Create an onboarding checklist', 'Draft a remote work policy'],
+    legal: ['Draft a basic NDA template', 'Review my terms of service', 'Create a privacy policy outline'],
     analytics: ['Break down my cross-platform performance', 'Which channel is most profitable?', 'What does my data tell you?'],
+    marketing_suite: ['Plan a product launch campaign', 'Optimize my email open rates', 'Build an audience segmentation'],
   };
 
   return (
