@@ -296,7 +296,8 @@ class WorkflowRequest(BaseModel):
 # ──────────────── Agent System Prompts ────────────────
 
 AGENT_BASE_PROMPTS = {
-    "store_manager": """You are the Store Commander — orchestrAI's elite eCommerce operations virtuoso.
+    "store_manager": """You are Maestro — orchestrAI's master store conductor. You build, optimize, and manage every aspect of eCommerce operations.
+Your name is Maestro. Introduce yourself as Maestro when users first interact with you.
 
 CORE EXPERTISE:
 - Inventory optimization: identify dead stock, predict reorder points, suggest bundle strategies
@@ -312,7 +313,8 @@ PLATFORM-SPECIFIC MASTERY:
 
 RULES: Always give specific, actionable steps. Use numbers. Reference the user's actual store data when available. Proactively suggest optimizations you notice from their metrics.""",
 
-    "marketing": """You are the Growth Engine — orchestrAI's AI marketing maestro for explosive eCommerce growth.
+    "marketing": """You are Aria — orchestrAI's powerful marketing voice. You create viral content, manage social media, and drive explosive eCommerce growth.
+Your name is Aria. Introduce yourself as Aria when users first interact with you.
 
 CORE EXPERTISE:
 - Social media strategy: platform-specific content calendars, viral hooks, engagement tactics
@@ -329,7 +331,8 @@ PLATFORM-SPECIFIC MASTERY:
 
 RULES: Be bold and creative. Every suggestion should tie to a specific conversion metric. Reference the user's store niche and products when available. Give copy-ready examples they can use immediately.""",
 
-    "analytics": """You are the Insight Oracle — orchestrAI's brilliant AI data conductor.
+    "analytics": """You are Cadence — orchestrAI's brilliant data conductor. You read the rhythm of business data and deliver actionable intelligence.
+Your name is Cadence. Introduce yourself as Cadence when users first interact with you.
 
 CORE EXPERTISE:
 - Sales analysis: revenue trends, AOV optimization, conversion funnel analysis, cohort analysis
@@ -346,7 +349,8 @@ PLATFORM-SPECIFIC MASTERY:
 
 RULES: Present data clearly with specific numbers. Always end with 3 actionable recommendations ranked by impact. Use the user's actual metrics to identify patterns. Compare to industry benchmarks when relevant.""",
 
-    "customer_service": """You are the Support Shield — orchestrAI's AI customer experience virtuoso.
+    "customer_service": """You are Harmony — orchestrAI's customer experience virtuoso. You bring resolution, peace, and lasting loyalty.
+Your name is Harmony. Introduce yourself as Harmony when users first interact with you.
 
 CORE EXPERTISE:
 - Response templates: professional yet warm replies for common scenarios (shipping delays, refunds, exchanges, complaints)
@@ -366,10 +370,10 @@ RULES: Balance empathy with efficiency. Every response template should feel pers
     "general": """You are orchestrAI — the maestro conductor of an AI agent symphony for eCommerce empires.
 
 You command a fleet of 4 specialized virtuoso agents:
-1. Store Commander — operations, inventory, pricing, fulfillment
-2. Growth Engine — marketing, social media, ads, content
-3. Insight Oracle — analytics, trends, customer intelligence
-4. Support Shield — customer service, reviews, policies
+1. Maestro — operations, inventory, pricing, fulfillment
+2. Aria — marketing, social media, ads, content
+3. Cadence — analytics, trends, customer intelligence
+4. Harmony — customer service, reviews, policies
 
 YOUR ROLE: You're not just an assistant — you're the user's AI co-founder. Think strategically about their entire business. Connect dots between departments. When they ask about marketing, also consider how it affects inventory. When they discuss pricing, think about the customer experience impact.
 
@@ -536,6 +540,34 @@ async def build_agent_context(user_id: str, agent_type: str) -> str:
     if activity:
         context_parts.append("RECENT: " + " | ".join(a.get("message", "") for a in activity))
 
+    # Agent custom training (user-defined rules, brand voice, dos/donts)
+    agent_doc = await db.agents.find_one({"user_id": user_id, "agent_type": agent_type})
+    if agent_doc and agent_doc.get("training"):
+        t = agent_doc["training"]
+        context_parts.append("\n=== YOUR CUSTOM TRAINING (FOLLOW STRICTLY) ===")
+        if t.get("brand_voice"):
+            context_parts.append(f"BRAND VOICE: {t['brand_voice']} — Match this tone in EVERY response and action.")
+        if t.get("target_audience"):
+            context_parts.append(f"TARGET AUDIENCE: {t['target_audience']}")
+        if t.get("competitive_edge"):
+            context_parts.append(f"COMPETITIVE EDGE: {t['competitive_edge']}")
+        if t.get("custom_rules"):
+            context_parts.append("RULES (never break these):")
+            for rule in t["custom_rules"]:
+                context_parts.append(f"  ⚡ {rule}")
+        if t.get("dos"):
+            context_parts.append("ALWAYS DO:")
+            for d in t["dos"]:
+                context_parts.append(f"  ✅ {d}")
+        if t.get("donts"):
+            context_parts.append("NEVER DO:")
+            for d in t["donts"]:
+                context_parts.append(f"  ❌ {d}")
+        if t.get("tone_examples"):
+            context_parts.append("EXAMPLE MESSAGES (match this style):")
+            for ex in t["tone_examples"][:3]:
+                context_parts.append(f'  "{ex}"')
+
     return "\n".join(context_parts)
 
 chat_instances: Dict[str, LlmChat] = {}
@@ -681,26 +713,26 @@ async def refresh_token(request: Request, response: Response):
 
 async def seed_user_agents(user_id: str):
     default_agents = [
-        {"id": str(uuid.uuid4()), "user_id": user_id, "name": "Store Commander", "agent_type": "store_manager",
-         "description": "Manages inventory, pricing, orders, and store operations autonomously.",
-         "personality": "strategic", "tone": "professional", "auto_execute": False, "is_active": True,
+        {"id": str(uuid.uuid4()), "user_id": user_id, "name": "Maestro", "agent_type": "store_manager",
+         "description": "Your master store conductor. Builds, optimizes, and manages every aspect of your eCommerce operations.",
+         "personality": "strategic", "tone": "executive", "auto_execute": True, "is_active": True,
          "capabilities": ["inventory_management", "price_optimization", "order_processing", "stock_alerts", "bulk_updates"],
-         "tasks_completed": 0, "last_active": None},
-        {"id": str(uuid.uuid4()), "user_id": user_id, "name": "Growth Engine", "agent_type": "marketing",
-         "description": "Creates viral content, manages social media, and drives store traffic.",
-         "personality": "creative", "tone": "bold", "auto_execute": False, "is_active": True,
+         "tasks_completed": 0, "last_active": None, "training": {}},
+        {"id": str(uuid.uuid4()), "user_id": user_id, "name": "Aria", "agent_type": "marketing",
+         "description": "Your powerful marketing voice. Creates viral content, manages social, and drives explosive growth.",
+         "personality": "creative", "tone": "bold", "auto_execute": True, "is_active": True,
          "capabilities": ["social_media_posts", "ad_copy", "email_campaigns", "seo_optimization", "influencer_outreach"],
-         "tasks_completed": 0, "last_active": None},
-        {"id": str(uuid.uuid4()), "user_id": user_id, "name": "Insight Oracle", "agent_type": "analytics",
-         "description": "Analyzes trends, predicts demand, and delivers actionable business intelligence.",
-         "personality": "analytical", "tone": "precise", "auto_execute": False, "is_active": True,
+         "tasks_completed": 0, "last_active": None, "training": {}},
+        {"id": str(uuid.uuid4()), "user_id": user_id, "name": "Cadence", "agent_type": "analytics",
+         "description": "Reads the rhythm of your data. Predicts demand and delivers actionable intelligence.",
+         "personality": "analytical", "tone": "precise", "auto_execute": True, "is_active": True,
          "capabilities": ["sales_analytics", "customer_insights", "trend_forecasting", "competitor_analysis", "revenue_optimization"],
-         "tasks_completed": 0, "last_active": None},
-        {"id": str(uuid.uuid4()), "user_id": user_id, "name": "Support Shield", "agent_type": "customer_service",
-         "description": "Handles customer inquiries, generates FAQs, and optimizes support flows.",
-         "personality": "empathetic", "tone": "friendly", "auto_execute": False, "is_active": True,
+         "tasks_completed": 0, "last_active": None, "training": {}},
+        {"id": str(uuid.uuid4()), "user_id": user_id, "name": "Harmony", "agent_type": "customer_service",
+         "description": "Brings resolution and peace. Handles inquiries, manages reviews, and builds lasting loyalty.",
+         "personality": "empathetic", "tone": "warm", "auto_execute": True, "is_active": True,
          "capabilities": ["auto_responses", "faq_generation", "review_management", "refund_processing", "satisfaction_tracking"],
-         "tasks_completed": 0, "last_active": None},
+         "tasks_completed": 0, "last_active": None, "training": {}},
     ]
     await db.agents.insert_many(default_agents)
 
@@ -910,6 +942,45 @@ async def clear_chat_history(agent_type: str, request: Request):
     if key in chat_instances:
         del chat_instances[key]
     return {"status": "cleared"}
+
+# ──────────────── Agent Training ────────────────
+
+class AgentTrainingUpdate(BaseModel):
+    brand_voice: Optional[str] = None      # "professional", "casual", "luxury", "playful"
+    custom_rules: Optional[List[str]] = None  # ["Never discount below 20%", "Always mention free shipping"]
+    dos: Optional[List[str]] = None        # Things agent should always do
+    donts: Optional[List[str]] = None      # Things agent should never do
+    tone_examples: Optional[List[str]] = None  # Example messages in the desired tone
+    target_audience: Optional[str] = None  # Description of target audience
+    competitive_edge: Optional[str] = None # What makes this brand unique
+
+@api_router.get("/agents/{agent_id}/training")
+async def get_agent_training(agent_id: str, request: Request):
+    """Get training data for an agent"""
+    user = await get_current_user(request)
+    agent = await db.agents.find_one({"id": agent_id, "user_id": user["_id"]}, {"_id": 0})
+    if not agent:
+        raise HTTPException(status_code=404, detail="Agent not found")
+    return agent.get("training", {})
+
+@api_router.put("/agents/{agent_id}/training")
+async def update_agent_training(agent_id: str, training: AgentTrainingUpdate, request: Request):
+    """Train an agent with custom rules, brand voice, dos/donts"""
+    user = await get_current_user(request)
+    agent = await db.agents.find_one({"id": agent_id, "user_id": user["_id"]})
+    if not agent:
+        raise HTTPException(status_code=404, detail="Agent not found")
+    current_training = agent.get("training", {})
+    update_data = {k: v for k, v in training.dict().items() if v is not None}
+    current_training.update(update_data)
+    await db.agents.update_one({"id": agent_id}, {"$set": {"training": current_training}})
+    # Clear chat instance so new training takes effect
+    key = f"{user['_id']}_{agent['agent_type']}"
+    if key in chat_instances:
+        del chat_instances[key]
+    await db.activity_log.insert_one({"user_id": user["_id"], "type": "agent_trained",
+        "message": f"Trained {agent['name']} with custom rules", "timestamp": datetime.now(timezone.utc).isoformat()})
+    return {"status": "updated", "training": current_training}
 
 # ──────────────── Social Content ────────────────
 
@@ -1626,11 +1697,13 @@ STORE_DEFAULT_SAFETY = {
     "auto_edit_products": True, "auto_manage_collections": True,
     "auto_post_social": True, "auto_respond_customers": True,
     "auto_update_seo": True,
+    # Social agents CAN communicate with customers autonomously
+    "auto_social_reply": True, "auto_social_dm": True,
     # APPROVAL REQUIRED — money-touching actions
     "auto_change_prices": False, "auto_create_discounts": False,
     "auto_purchase_inventory": False, "auto_run_ads": False,
     "auto_issue_refunds": False,
-    # APPROVAL REQUIRED — customer communication
+    # APPROVAL REQUIRED — store-level customer communication (emails, bulk messages)
     "auto_email_customers": False, "auto_dm_customers": False,
     "max_price_change_pct": 20, "max_discount_pct": 30,
 }

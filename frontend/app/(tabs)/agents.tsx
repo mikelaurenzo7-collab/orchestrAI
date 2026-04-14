@@ -10,20 +10,20 @@ import { Colors, Spacing, BorderRadius, FontSizes, Shadows, AgentColors } from '
 
 const AGENT_ROUTINES: Record<string, { daily: string[]; weekly: string[] }> = {
   store_manager: {
-    daily: ['Check inventory levels & flag low stock', 'Monitor new orders & fulfillment status', 'Optimize underperforming listing titles'],
-    weekly: ['Full product catalog audit', 'Competitive price analysis', 'Generate store health report'],
+    daily: ['Maestro checks inventory & flags low stock', 'Monitor new orders & fulfillment', 'Optimize underperforming listings'],
+    weekly: ['Full product catalog audit', 'Competitive price analysis', 'Store health report'],
   },
   marketing: {
-    daily: ['Post to connected socials at peak engagement time', 'Monitor content performance & engagement', 'Respond to brand mentions'],
-    weekly: ['Generate 7-day content calendar', 'A/B test top-performing content angles', 'Cross-platform campaign performance review'],
+    daily: ['Aria posts to connected socials at peak time', 'Monitor & reply to comments/mentions', 'Track content performance'],
+    weekly: ['Generate 7-day content calendar', 'A/B test top content angles', 'Cross-platform campaign review'],
   },
   analytics: {
-    daily: ['Monitor sales anomalies & flag drops', 'Track conversion rate changes', 'Surface trending products'],
-    weekly: ['Full performance report with insights', 'Customer behavior analysis', 'Revenue forecast & trend analysis'],
+    daily: ['Cadence monitors sales anomalies', 'Track conversion rate shifts', 'Surface trending products'],
+    weekly: ['Full performance report', 'Customer behavior analysis', 'Revenue forecast & trends'],
   },
   customer_service: {
-    daily: ['Draft responses to new customer queries', 'Update FAQ from common questions', 'Monitor review sentiment'],
-    weekly: ['Support quality audit', 'Identify recurring pain points', 'Generate customer satisfaction report'],
+    daily: ['Harmony drafts customer responses', 'Update FAQ from common questions', 'Monitor review sentiment'],
+    weekly: ['Support quality audit', 'Recurring pain point analysis', 'Satisfaction report'],
   },
 };
 
