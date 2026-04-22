@@ -22,5 +22,19 @@ export async function authFetch(path: string, options: RequestInit = {}): Promis
     ...(options.headers as Record<string, string> || {}),
   };
   if (token) headers['Authorization'] = `Bearer ${token}`;
-  return fetch(`${API}${path}`, { ...options, headers });
+
+  try {
+    const response = await fetch(`${API}${path}`, { ...options, headers });
+
+    // Global handling for 401 Unauthorized
+    if (response.status === 401) {
+      // In a real app, trigger logout or refresh here
+      console.warn('Session expired or unauthorized');
+    }
+
+    return response;
+  } catch (error) {
+    console.error('API Fetch Error:', error);
+    throw error;
+  }
 }

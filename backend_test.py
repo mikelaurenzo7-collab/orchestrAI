@@ -10,7 +10,7 @@ import sys
 from typing import Dict, Any, Optional
 
 # Backend URL from frontend env
-BACKEND_URL = "https://agent-marketplace-69.preview.emergentagent.com/api"
+BACKEND_URL = "http://localhost:8000/api"
 
 # Test credentials from test_credentials.md
 TEST_EMAIL = "mikelaurenzo7@gmail.com"
@@ -192,8 +192,8 @@ class BackendTester:
                 data = response.json()
                 
                 # Check if we got a response
-                if "response" in data and data["response"]:
-                    self.log_test("Marketing Suite Chat", True, f"Got response: {data['response'][:100]}...")
+                if "content" in data and data["content"]:
+                    self.log_test("Marketing Suite Chat", True, f"Got response: {data['content'][:100]}...")
                     return True
                 else:
                     self.log_test("Marketing Suite Chat", False, f"No response in data: {data}")
@@ -225,8 +225,8 @@ class BackendTester:
                 data = response.json()
                 
                 # Check if we got a response
-                if "response" in data and data["response"]:
-                    self.log_test("Shopify Agent Chat", True, f"Got response: {data['response'][:100]}...")
+                if "content" in data and data["content"]:
+                    self.log_test("Shopify Agent Chat", True, f"Got response: {data['content'][:100]}...")
                     return True
                 else:
                     self.log_test("Shopify Agent Chat", False, f"No response in data: {data}")

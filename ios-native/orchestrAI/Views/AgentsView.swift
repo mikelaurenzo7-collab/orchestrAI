@@ -66,6 +66,7 @@ struct AgentsView: View {
                                         selectedAgent = agent
                                         showDetail = true
                                     }
+                                    .tracingBeam(color: agentColor(for: agent.category).opacity(0.6))
                                     .staggered(index: index)
                                 }
                             }

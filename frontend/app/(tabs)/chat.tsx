@@ -143,7 +143,7 @@ export default function ChatScreen() {
       <BlurView intensity={20} tint="dark" style={styles.header}>
         <View style={styles.headerInfo}>
           <View style={[styles.headerAvatar, { backgroundColor: `${currentAgent.color}15`, borderColor: `${currentAgent.color}40` }]}>
-            <ActiveIcon size={24} color={currentAgent.color} />
+            <ActiveIcon size={24} color={currentAgent.color} strokeWidth={1.5} />
           </View>
           <View>
             <Text style={styles.headerTitle}>{currentAgent.name}</Text>
@@ -177,7 +177,7 @@ export default function ChatScreen() {
               maxLength={2000}
             />
             <AnimatedPressable testID="chat-send-button" haptic={Haptics.ImpactFeedbackStyle.Medium} scaleDown={0.8} style={[styles.sendBtn, !input.trim() && { opacity: 0.5 }]} onPress={sendMessage}>
-              {sending ? <ActivityIndicator color={Colors.bg} size="small" /> : <Send size={20} color={Colors.bg} />}
+              {sending ? <ActivityIndicator color={Colors.bg} size="small" /> : <Send size={20} color={Colors.bg} strokeWidth={1.5} />}
             </AnimatedPressable>
           </View>
         </BlurView>

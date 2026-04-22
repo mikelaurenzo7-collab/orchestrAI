@@ -30,7 +30,7 @@ function TabIcon({ label, Icon, focused, color }: TabIconProps) {
   return (
     <View style={styles.tabIconWrap}>
       <Animated.View style={[styles.iconContainer, animatedIconStyle]}>
-        <Icon size={24} color={color} strokeWidth={focused ? 2.5 : 2} />
+        <Icon size={24} color={color} strokeWidth={focused ? 2.0 : 1.5} />
       </Animated.View>
       <Animated.Text style={[styles.tabLabel, { color }, animatedLabelStyle]}>
         {label}

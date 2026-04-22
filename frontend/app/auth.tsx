@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, TextInput, StyleSheet, Dimensions, KeyboardAvoidingView, Platform, Keyboard, ScrollView } from 'react-native';
 import { useAuth } from '../contexts/AuthContext';
+import { useToast } from '../contexts/ToastContext';
 import { BlurView } from 'expo-blur';
 import Animated, { FadeInDown, FadeIn, withSpring, useAnimatedStyle, useSharedValue, withRepeat, withSequence, withTiming, Easing, interpolateColor } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
@@ -56,6 +57,7 @@ function FloatingOrb({ index, icon: Icon, color }: { index: number, icon: any, c
 
 export default function AuthScreen() {
   const { login, register } = useAuth();
+  const { showToast } = useToast();
   const [isLogin, setIsLogin] = useState(true);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -79,13 +81,16 @@ export default function AuthScreen() {
     Keyboard.dismiss();
     try {
       if (isLogin) {
-        await login(email, password);
+        const err = await login(email, password);
+        if (err) throw new Error(err);
       } else {
-        await register(name, email, password);
+        const err = await register(email, password, name);
+        if (err) throw new Error(err);
       }
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      showToast(isLogin ? 'Welcome back!' : 'Account created successfully', 'success');
     } catch (e: any) {
-      alert(e.message || 'Authentication failed');
+      showToast(e.message || 'Authentication failed', 'error');
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
     } finally {
       setLoading(false);

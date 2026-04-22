@@ -9,6 +9,7 @@ import AnimatedPressable from '../../components/AnimatedPressable';
 import GlassModal from '../../components/GlassModal';
 import * as Haptics from 'expo-haptics';
 import { authFetch } from '../../utils/api';
+import { useToast } from '../../contexts/ToastContext';
 
 const { width: W, height: H } = Dimensions.get('window');
 
@@ -29,6 +30,7 @@ const PLATFORMS = [
 ];
 
 export default function StoresScreen() {
+  const { showToast } = useToast();
   const [stores, setStores] = useState<OrgStore[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -60,10 +62,10 @@ export default function StoresScreen() {
           <BlurView intensity={30} tint="dark" style={styles.card}>
             <View style={styles.cardHeader}>
               <View style={[styles.iconBox, { backgroundColor: `${plat.color}15`, borderColor: `${plat.color}40` }]}>
-                <Icon size={24} color={plat.color} />
+                <Icon size={24} color={plat.color} strokeWidth={1.5} />
               </View>
               <View style={styles.statusBadge}>
-                {isLive ? <Power size={14} color={Colors.emerald} /> : <ShieldAlert size={14} color={Colors.error} />}
+                {isLive ? <Power size={14} color={Colors.emerald} strokeWidth={1.5} /> : <ShieldAlert size={14} color={Colors.error} strokeWidth={1.5} />}
                 <Text style={[styles.statusTxt, { color: isLive ? Colors.emerald : Colors.error }]}>
                   {isLive ? 'Connected' : 'Action Required'}
                 </Text>
@@ -79,10 +81,10 @@ export default function StoresScreen() {
 
             <View style={styles.cardFooter}>
               <View style={styles.footerRow}>
-                <Link size={16} color={Colors.textSecondary} />
+                <Link size={16} color={Colors.textSecondary} strokeWidth={1.5} />
                 <Text style={styles.footerUrl}>{item.store_url || 'N/A'}</Text>
               </View>
-              <ShieldCheck size={18} color={Colors.textDisabled} />
+              <ShieldCheck size={18} color={Colors.textDisabled} strokeWidth={1.5} />
             </View>
           </BlurView>
         </AnimatedPressable>
@@ -105,7 +107,7 @@ export default function StoresScreen() {
         }))}
         onSelect={(value) => {
           Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-          alert('Platform selected: ' + value);
+          showToast(`Integrating with ${value}...`, 'info');
         }}
       />
       <Animated.View entering={FadeIn.duration(600)} style={styles.header}>
@@ -114,7 +116,7 @@ export default function StoresScreen() {
           <Text style={styles.subtitle}>Connect your business data</Text>
         </View>
         <AnimatedPressable testID="add-integration-button" haptic={Haptics.ImpactFeedbackStyle.Medium} scaleDown={0.9} style={styles.addBtn} onPress={handleAddIntegration}>
-          <Plus size={24} color={Colors.bg} />
+          <Plus size={24} color={Colors.bg} strokeWidth={1.5} />
         </AnimatedPressable>
       </Animated.View>
 
@@ -135,7 +137,7 @@ export default function StoresScreen() {
           !loading ? (
             <Animated.View entering={FadeInDown.duration(800)} style={styles.emptyState}>
               <View style={styles.emptyIconBox}>
-                <PowerOff size={40} color={Colors.textSecondary} />
+                <PowerOff size={40} color={Colors.textSecondary} strokeWidth={1.5} />
               </View>
               <Text style={styles.emptyTitle}>No integrations found</Text>
               <Text style={styles.emptySubtitle}>Connect external platforms to enable AI actions across your ecosystem.</Text>

@@ -5,7 +5,7 @@ import { useRouter } from 'expo-router';
 import { authFetch } from '../../utils/api';
 import { Colors, Fonts } from '../../constants/theme';
 import { BlurView } from 'expo-blur';
-import { Bot, ShieldCheck, Activity, TerminalSquare, AlertCircle, ShoppingBag, Zap, Mail, Briefcase, FileText, Smartphone, Megaphone } from 'lucide-react-native';
+import { Bot, ShieldCheck, Activity, TerminalSquare, AlertCircle, ShoppingBag, Zap, Mail, Briefcase, FileText, Smartphone, Megaphone, Lock } from 'lucide-react-native';
 import Animated, { FadeIn, FadeInDown, SlideInUp } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
 import { AnimatedPressable } from '../../components/AnimatedPressable';
@@ -71,6 +71,7 @@ export default function AgentsHubScreen() {
         <Animated.View entering={FadeInDown.duration(600).delay(100)} style={s.grid}>
           {agents.map((agent, i) => {
             const meta = AGENT_MAPPINGS[agent.agent_type] || AGENT_MAPPINGS.default;
+            const Icon = meta.icon;
             return (
               <AnimatedPressable
                 testID={`agent-card-${agent.agent_type}`}
@@ -90,7 +91,7 @@ export default function AgentsHubScreen() {
                   </View>
                   
                   <View style={[s.iconBox, { backgroundColor: `${meta.color}15` }]}>
-                    <meta.icon size={32} color={meta.color} />
+                    <Icon size={32} color={meta.color} strokeWidth={1.5} />
                   </View>
                   
                   <Text style={s.agentName}>{agent.name}</Text>
@@ -114,13 +115,13 @@ export default function AgentsHubScreen() {
           })}
           
           {/* Add New Agent Placeholder */}
-          <AnimatedPressable testID="hire-agent-button" haptic={Haptics.ImpactFeedbackStyle.Light} style={[s.card, s.cardDashed]} onPress={() => Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning)}>
-             <BlurView intensity={10} tint="dark" style={[s.cardInner, s.center]}>
-                <View style={[s.iconBox, { backgroundColor: `${Colors.textMuted}20` }]}>
-                  <ShieldCheck size={32} color={Colors.textMuted} />
+          <AnimatedPressable testID="hire-agent-button" haptic={Haptics.ImpactFeedbackStyle.Medium} style={[s.card, s.cardDashed]} onPress={() => Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning)}>
+             <BlurView intensity={15} tint="dark" style={[s.cardInner, s.center]}>
+                <View style={[s.iconBox, { backgroundColor: `${Colors.amber}15` }]}>
+                  <Lock size={32} color={Colors.amber} strokeWidth={1.5} />
                 </View>
-                <Text style={s.agentName}>Hire Agent</Text>
-                <Text style={s.statLabel}>Unlock next tier</Text>
+                <Text style={[s.agentName, { color: Colors.textSecondary }]}>Premium Agent</Text>
+                <Text style={[s.statLabel, { color: Colors.amber }]}>Requires Pro Plan</Text>
              </BlurView>
           </AnimatedPressable>
 

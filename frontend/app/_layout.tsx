@@ -3,6 +3,7 @@ import { StatusBar } from 'expo-status-bar';
 import { useEffect, useState, useCallback } from 'react';
 import { View, ActivityIndicator, StyleSheet } from 'react-native';
 import { AuthProvider, useAuth } from '../contexts/AuthContext';
+import { ToastProvider } from '../contexts/ToastContext';
 import { authFetch } from '../utils/api';
 import { Colors } from '../constants/theme';
 import { useFonts, Outfit_400Regular, Outfit_500Medium, Outfit_600SemiBold, Outfit_700Bold } from '@expo-google-fonts/outfit';
@@ -89,13 +90,15 @@ export default function RootLayout() {
 
   return (
     <AuthProvider>
-      <StatusBar style="light" />
-      <View style={{ flex: 1, backgroundColor: Colors.bg }}>
-        <View style={StyleSheet.absoluteFill}>
-          <View style={styles.grain} />
+      <ToastProvider>
+        <StatusBar style="light" />
+        <View style={{ flex: 1, backgroundColor: Colors.bg }}>
+          <View style={StyleSheet.absoluteFill}>
+            <View style={styles.grain} />
+          </View>
+          <AuthGate />
         </View>
-        <AuthGate />
-      </View>
+      </ToastProvider>
     </AuthProvider>
   );
 }

@@ -54,7 +54,7 @@ export default function SocialScreen() {
             <View style={styles.cardHeader}>
               <View style={styles.authorBadgeRow}>
                 <View style={styles.avatar}>
-                  <Bot size={20} color={Colors.emerald} />
+                  <Bot size={20} color={Colors.emerald} strokeWidth={1.5} />
                 </View>
                 <View>
                   <Text style={styles.authorName}>{item.product_name || 'Marketing AI Exec'}</Text>
@@ -62,7 +62,7 @@ export default function SocialScreen() {
                 </View>
               </View>
               <AnimatedPressable onPress={() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)}>
-                <MoreHorizontal size={24} color={Colors.textSecondary} />
+                <MoreHorizontal size={24} color={Colors.textSecondary} strokeWidth={1.5} />
               </AnimatedPressable>
             </View>
 
@@ -70,7 +70,7 @@ export default function SocialScreen() {
 
             <View style={styles.mediaContainer}>
               <BlurView intensity={10} tint="light" style={styles.mediaPlaceholder}>
-                <BarChart2 size={40} color={Colors.emerald} opacity={0.6} />
+                <BarChart2 size={40} color={Colors.emerald} opacity={0.6} strokeWidth={1.5} />
                 <Text style={styles.mediaPlaceholderText}>Attached Media</Text>
               </BlurView>
             </View>
@@ -79,22 +79,22 @@ export default function SocialScreen() {
 
             <View style={styles.actionRow}>
               <AnimatedPressable style={styles.actionBtn} onPress={() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)}>
-                <Heart size={20} color={Colors.textSecondary} />
+                <Heart size={20} color={Colors.textSecondary} strokeWidth={1.5} />
                 <Text style={styles.actionTxt}>{(item.metrics?.likes || 0).toLocaleString()}</Text>
               </AnimatedPressable>
 
               <AnimatedPressable style={styles.actionBtn}>
-                <MessageCircle size={20} color={Colors.textSecondary} />
+                <MessageCircle size={20} color={Colors.textSecondary} strokeWidth={1.5} />
                 <Text style={styles.actionTxt}>{(item.metrics?.clicks || 0).toLocaleString()}</Text>
               </AnimatedPressable>
 
               <AnimatedPressable style={styles.actionBtn}>
-                <Repeat size={20} color={Colors.textSecondary} />
+                <Repeat size={20} color={Colors.textSecondary} strokeWidth={1.5} />
                 <Text style={styles.actionTxt}>{(item.metrics?.shares || 0).toLocaleString()}</Text>
               </AnimatedPressable>
 
               <AnimatedPressable style={[styles.actionBtn, { marginLeft: 'auto' }]}>
-                <Share2 size={20} color={Colors.emerald} />
+                <Share2 size={20} color={Colors.emerald} strokeWidth={1.5} />
               </AnimatedPressable>
             </View>
 
@@ -112,7 +112,7 @@ export default function SocialScreen() {
           <Text style={styles.subtitle}>AI-generated social campaigns</Text>
         </View>
         <AnimatedPressable testID="social-draft-button" haptic={Haptics.ImpactFeedbackStyle.Medium} scaleDown={0.9} style={styles.composeBtn} onPress={handleCompose}>
-          <PenTool size={20} color={Colors.bg} />
+          <PenTool size={20} color={Colors.bg} strokeWidth={1.5} />
           <Text style={styles.composeTxt}>Draft</Text>
         </AnimatedPressable>
       </Animated.View>

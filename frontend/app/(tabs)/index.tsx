@@ -11,6 +11,7 @@ import Animated, { FadeInDown, FadeIn, SlideInRight } from 'react-native-reanima
 import * as Haptics from 'expo-haptics';
 import { AnimatedPressable } from '../../components/AnimatedPressable';
 import TracingBeam from '../../components/TracingBeam';
+import PulseIndicator from '../../components/PulseIndicator';
 
 const { width } = Dimensions.get('window');
 
@@ -31,7 +32,7 @@ function TrialBanner({ trialEnds }: { trialEnds?: string }) {
       <BlurView intensity={40} tint="dark" style={tb.banner}>
         <View style={tb.left}>
           <View style={tb.iconContainer}>
-            <Sparkles size={20} color={Colors.emerald} />
+            <Sparkles size={20} color={Colors.emerald} strokeWidth={1.5} />
           </View>
           <View>
             <Text style={tb.title}>Free Trial</Text>
@@ -51,8 +52,11 @@ function StatCard({ title, value, sub, Icon, color, delay }: { title: string, va
     <Animated.View entering={FadeInDown.duration(600).delay(delay)} style={[stat.card, { borderColor: `${color}30` }]}>
       <TracingBeam color={color} duration={4000}>
         <BlurView intensity={30} tint="dark" style={stat.blurInner}>
-          <View style={[stat.iconWrap, { backgroundColor: `${color}15` }]}>
-            <Icon size={20} color={color} />
+          <View style={stat.statHead}>
+            <View style={[stat.iconWrap, { backgroundColor: `${color}15` }]}>
+              <Icon size={20} color={color} />
+            </View>
+            <PulseIndicator color={color} size={6} />
           </View>
           <Text style={stat.title}>{title}</Text>
           <Text style={stat.val}>{value}</Text>
@@ -66,6 +70,14 @@ function StatCard({ title, value, sub, Icon, color, delay }: { title: string, va
 export default function DashboardScreen() {
   const { user } = useAuth();
   const [metrics, setMetrics] = useState<Metrics | null>(null);
+
+  const getGreeting = () => {
+    const hour = new Date().getHours();
+    if (hour < 12) return 'Good morning';
+    if (hour < 17) return 'Good afternoon';
+    if (hour < 22) return 'Good evening';
+    return 'Burning midnight oil';
+  };
   const [refreshing, setRefreshing] = useState(true);
 
   const fetchDash = useCallback(async () => {
@@ -90,7 +102,7 @@ export default function DashboardScreen() {
     <SafeAreaView style={s.container} edges={['top']}>
       <Animated.View entering={FadeIn.duration(800)} style={s.header}>
         <View>
-          <Text style={s.greets}>Good morning,</Text>
+          <Text style={s.greets}>{getGreeting()},</Text>
           <Text style={s.name}>{user?.name?.split(' ')[0] || 'Founder'}</Text>
         </View>
         <AnimatedPressable testID="profile-button" haptic={Haptics.ImpactFeedbackStyle.Light} scaleDown={0.9} style={s.profileBtn}>
@@ -107,10 +119,10 @@ export default function DashboardScreen() {
         
         <Animated.Text entering={FadeInDown.duration(600).delay(200)} style={s.secTitle}>Operations</Animated.Text>
         <View style={s.grid}>
-          <StatCard title="Revenue" value={`$${metrics.total_revenue.toLocaleString()}`} sub={`${metrics.total_orders} Total Orders`} Icon={DollarSign} color={Colors.emerald} delay={200} />
-          <StatCard title="Storefronts" value={metrics.total_stores} sub="Active connections" Icon={Store} color="#0866FF" delay={300} />
-          <StatCard title="AI Workforce" value={metrics.active_agents} sub="Online & active" Icon={Bot} color="#F1641E" delay={400} />
-          <StatCard title="Actions Run" value={metrics.tasks_completed} sub="Automated tasks" Icon={TrendingUp} color="#FE2C55" delay={500} />
+          <StatCard title="Revenue" value={`$${metrics.total_revenue.toLocaleString()}`} sub={`${metrics.total_orders} Total Orders`} Icon={(p: any) => <DollarSign {...p} strokeWidth={1.5} />} color={Colors.emerald} delay={200} />
+          <StatCard title="Storefronts" value={metrics.total_stores} sub="Active connections" Icon={(p: any) => <Store {...p} strokeWidth={1.5} />} color="#0866FF" delay={300} />
+          <StatCard title="AI Workforce" value={metrics.active_agents} sub="Online & active" Icon={(p: any) => <Bot {...p} strokeWidth={1.5} />} color="#F1641E" delay={400} />
+          <StatCard title="Actions Run" value={metrics.tasks_completed} sub="Automated tasks" Icon={(p: any) => <TrendingUp {...p} strokeWidth={1.5} />} color="#FE2C55" delay={500} />
         </View>
         
         <Animated.Text entering={FadeInDown.duration(600).delay(600)} style={[s.secTitle, { marginTop: 32 }]}>Execution Log</Animated.Text>
@@ -122,7 +134,7 @@ export default function DashboardScreen() {
                 {metrics.recent_activity.map((a, i) => (
                   <View key={i} style={[act.row, i === metrics.recent_activity.length - 1 && act.lastRow]}>
                     <View style={act.dotWrap}>
-                      <View style={act.dotTop} />
+                      <PulseIndicator color={Colors.emerald} size={10} />
                       {i < metrics.recent_activity.length - 1 && <View style={act.dotLine} />}
                     </View>
                     <View style={act.rowTxt}>
@@ -134,7 +146,7 @@ export default function DashboardScreen() {
               </View>
             ) : (
               <View style={act.empty}>
-                <ShieldCheck size={32} color={Colors.textMuted} />
+                <ShieldCheck size={32} color={Colors.textMuted} strokeWidth={1.5} />
                 <Text style={act.emptyTxt}>No orchestrAI activity yet.</Text>
               </View>
             )}
@@ -173,7 +185,8 @@ const tb = StyleSheet.create({
 const stat = StyleSheet.create({
   card: { width: (width - 64) / 2, backgroundColor: `${Colors.surface}80`, borderRadius: 24, borderWidth: 1, overflow: 'hidden', shadowColor: '#000', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.3, shadowRadius: 20, elevation: 8 },
   blurInner: { padding: 20, alignItems: 'flex-start', minHeight: 150 },
-  iconWrap: { width: 44, height: 44, borderRadius: 16, justifyContent: 'center', alignItems: 'center', marginBottom: 16 },
+  statHead: { flexDirection: 'row', justifyContent: 'space-between', width: '100%', alignItems: 'flex-start', marginBottom: 16 },
+  iconWrap: { width: 44, height: 44, borderRadius: 16, justifyContent: 'center', alignItems: 'center' },
   title: { color: Colors.textSecondary, fontSize: 14, fontFamily: Fonts.bodyMedium, marginBottom: 8 },
   val: { color: Colors.textPrimary, fontSize: 28, fontFamily: Fonts.bold, letterSpacing: -0.5 },
   sub: { color: Colors.textMuted, fontSize: 13, fontFamily: Fonts.bodyRegular, marginTop: 6 },
