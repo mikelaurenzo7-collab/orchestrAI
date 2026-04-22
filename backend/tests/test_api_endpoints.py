@@ -8,7 +8,7 @@ import os
 import time
 
 # Use the public backend URL from frontend .env
-BASE_URL = "https://agent-marketplace-69.preview.emergentagent.com"
+BASE_URL = "http://localhost:8000"
 
 @pytest.fixture
 def api_client():

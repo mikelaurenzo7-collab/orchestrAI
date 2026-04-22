@@ -3,6 +3,7 @@ import { StatusBar } from 'expo-status-bar';
 import { useEffect, useState, useCallback } from 'react';
 import { View, ActivityIndicator, StyleSheet } from 'react-native';
 import { AuthProvider, useAuth } from '../contexts/AuthContext';
+import { ToastProvider } from '../contexts/ToastContext';
 import { authFetch } from '../utils/api';
 import { Colors } from '../constants/theme';
 import { useFonts, Outfit_400Regular, Outfit_500Medium, Outfit_600SemiBold, Outfit_700Bold } from '@expo-google-fonts/outfit';
@@ -89,12 +90,30 @@ export default function RootLayout() {
 
   return (
     <AuthProvider>
-      <StatusBar style="light" />
-      <AuthGate />
+      <ToastProvider>
+        <StatusBar style="light" />
+        <View style={{ flex: 1, backgroundColor: Colors.bg }}>
+          <View style={StyleSheet.absoluteFill}>
+            <View style={styles.grain} />
+          </View>
+          <AuthGate />
+        </View>
+      </ToastProvider>
     </AuthProvider>
   );
 }
 
 const styles = StyleSheet.create({
   loading: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: Colors.bg },
+  grain: {
+    flex: 1,
+    backgroundColor: '#030712',
+    opacity: 0.05,
+    // Note: backgroundImage with radial-gradient is web-only.
+    // On native, we'd use a repeating image asset if available.
+    // For now, this provides a visual layer that matches guidelines.
+    // @ts-ignore
+    backgroundImage: 'radial-gradient(#ffffff 0.5px, transparent 0.5px)',
+    backgroundSize: '10px 10px',
+  },
 });

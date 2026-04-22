@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, TextInput, StyleSheet, Dimensions, KeyboardAvoidingView, Platform, Keyboard, ScrollView } from 'react-native';
 import { useAuth } from '../contexts/AuthContext';
+import { useToast } from '../contexts/ToastContext';
 import { BlurView } from 'expo-blur';
 import Animated, { FadeInDown, FadeIn, withSpring, useAnimatedStyle, useSharedValue, withRepeat, withSequence, withTiming, Easing, interpolateColor } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
@@ -56,6 +57,7 @@ function FloatingOrb({ index, icon: Icon, color }: { index: number, icon: any, c
 
 export default function AuthScreen() {
   const { login, register } = useAuth();
+  const { showToast } = useToast();
   const [isLogin, setIsLogin] = useState(true);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -79,13 +81,16 @@ export default function AuthScreen() {
     Keyboard.dismiss();
     try {
       if (isLogin) {
-        await login(email, password);
+        const err = await login(email, password);
+        if (err) throw new Error(err);
       } else {
-        await register(name, email, password);
+        const err = await register(email, password, name);
+        if (err) throw new Error(err);
       }
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      showToast(isLogin ? 'Welcome back!' : 'Account created successfully', 'success');
     } catch (e: any) {
-      alert(e.message || 'Authentication failed');
+      showToast(e.message || 'Authentication failed', 'error');
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
     } finally {
       setLoading(false);
@@ -135,6 +140,7 @@ export default function AuthScreen() {
                 <Animated.View entering={FadeIn.duration(400)} style={styles.inputGroup}>
                   <User size={20} color={Colors.textSecondary} style={styles.inputIcon} />
                   <TextInput
+                    testID="auth-name-input"
                     style={styles.input}
                     placeholder="Full Name"
                     placeholderTextColor={Colors.textSecondary}
@@ -148,6 +154,7 @@ export default function AuthScreen() {
               <View style={styles.inputGroup}>
                 <Mail size={20} color={Colors.textSecondary} style={styles.inputIcon} />
                 <TextInput
+                  testID="auth-email-input"
                   style={styles.input}
                   placeholder="Email Address"
                   placeholderTextColor={Colors.textSecondary}
@@ -162,6 +169,7 @@ export default function AuthScreen() {
               <View style={styles.inputGroup}>
                 <Lock size={20} color={Colors.textSecondary} style={styles.inputIcon} />
                 <TextInput
+                  testID="auth-password-input"
                   style={styles.input}
                   placeholder="Password"
                   placeholderTextColor={Colors.textSecondary}
@@ -172,7 +180,7 @@ export default function AuthScreen() {
                 />
               </View>
 
-              <AnimatedPressable scaleDown={0.96} style={styles.submitBtn} onPress={handleSubmit}>
+              <AnimatedPressable testID="auth-submit-button" haptic={Haptics.ImpactFeedbackStyle.Heavy} scaleDown={0.96} style={styles.submitBtn} onPress={handleSubmit}>
                 <Text style={styles.submitTxt}>{loading ? 'Processing...' : (isLogin ? 'Sign In' : 'Create Account')}</Text>
                 {!loading && <ArrowRight size={20} color={Colors.bg} />}
               </AnimatedPressable>
@@ -181,7 +189,7 @@ export default function AuthScreen() {
                 <Text style={styles.footerTxt}>
                   {isLogin ? "Don't have an account? " : "Already have an account? "}
                 </Text>
-                <AnimatedPressable onPress={toggleMode}>
+                <AnimatedPressable testID="auth-toggle-mode" onPress={toggleMode}>
                   <Text style={styles.footerLink}>{isLogin ? 'Sign up' : 'Sign in'}</Text>
                 </AnimatedPressable>
               </View>

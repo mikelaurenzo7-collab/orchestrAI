@@ -8,6 +8,8 @@ import { useRouter } from 'expo-router';
 import { useAuth } from '../contexts/AuthContext';
 import { authFetch } from '../utils/api';
 import { Colors, BorderRadius } from '../constants/theme';
+import * as Haptics from 'expo-haptics';
+import TracingBeam from '../components/TracingBeam';
 
 const { width: W } = Dimensions.get('window');
 
@@ -50,6 +52,7 @@ export default function OnboardingScreen() {
   const totalSteps = 4;
 
   const animateStep = (next: number) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     Animated.parallel([
       Animated.timing(fadeAnim, { toValue: 0, duration: 150, useNativeDriver: true }),
       Animated.timing(slideAnim, { toValue: -20, duration: 150, useNativeDriver: true }),
@@ -73,6 +76,7 @@ export default function OnboardingScreen() {
   };
 
   const finish = async () => {
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     await saveProfile();
     router.replace('/(tabs)');
   };
@@ -127,19 +131,19 @@ export default function OnboardingScreen() {
 
                 <View style={s.field}>
                   <Text style={s.label}>Brand name</Text>
-                  <TextInput testID="onboard-brand" style={s.input} value={brandName} onChangeText={setBrandName}
+                  <TextInput testID="onboarding-brand-input" style={s.input} value={brandName} onChangeText={setBrandName}
                     placeholder="Luna Vintage, FitGear Co..." placeholderTextColor="#475569" />
                 </View>
                 <View style={s.field}>
                   <Text style={s.label}>What do you sell?</Text>
-                  <TextInput testID="onboard-niche" style={s.input} value={niche} onChangeText={setNiche}
+                  <TextInput testID="onboarding-niche-input" style={s.input} value={niche} onChangeText={setNiche}
                     placeholder="Handmade jewelry, fitness gear..." placeholderTextColor="#475569" />
                 </View>
                 <View style={s.field}>
                   <Text style={s.label}>Brand voice</Text>
                   <View style={s.voiceRow}>
                     {VOICES.map(v => (
-                      <TouchableOpacity key={v.id} testID={`voice-${v.id}`}
+                      <TouchableOpacity key={v.id} testID={`onboarding-voice-${v.id}`}
                         style={[s.voiceChip, voice === v.id && s.voiceActive]}
                         onPress={() => setVoice(v.id)}>
                         <Text style={{ fontSize: 16 }}>{v.emoji}</Text>
@@ -161,7 +165,7 @@ export default function OnboardingScreen() {
 
                 <View style={s.goalList}>
                   {GOALS.map(g => (
-                    <TouchableOpacity key={g.id} testID={`goal-${g.id}`}
+                    <TouchableOpacity key={g.id} testID={`onboarding-goal-${g.id}`}
                       style={[s.goalRow, goal === g.id && s.goalActive]}
                       onPress={() => setGoal(g.id)} activeOpacity={0.7}>
                       <Text style={{ fontSize: 24 }}>{g.icon}</Text>
@@ -180,6 +184,7 @@ export default function OnboardingScreen() {
                 <Text style={s.h1}>You're Ready</Text>
                 <Text style={s.sub}>Your AI team is online and waiting.</Text>
 
+                <TracingBeam color={Colors.emerald} duration={2000}>
                 <View style={s.readyCard}>
                   {brandName ? <Text style={s.readyBrand}>{brandName}</Text> : null}
                   <View style={s.readyStats}>
@@ -199,6 +204,7 @@ export default function OnboardingScreen() {
                     </View>
                   </View>
                 </View>
+                </TracingBeam>
 
                 <Text style={s.readyTip}>Connect your first store or social account to activate your agents.</Text>
               </View>
@@ -208,20 +214,20 @@ export default function OnboardingScreen() {
           {/* Navigation */}
           <View style={s.nav}>
             {step > 0 && step < 3 ? (
-              <TouchableOpacity testID="onboard-back" style={s.backBtn} onPress={() => animateStep(step - 1)}>
+              <TouchableOpacity testID="onboarding-back-button" style={s.backBtn} onPress={() => animateStep(step - 1)}>
                 <Text style={s.backText}>Back</Text>
               </TouchableOpacity>
             ) : <View style={{ width: 60 }} />}
             <View style={{ flex: 1 }} />
             {step < 3 ? (
-              <TouchableOpacity testID="onboard-next"
+              <TouchableOpacity testID="onboarding-next-button"
                 style={[s.nextBtn, step === 2 && !goal && { opacity: 0.35 }]}
                 onPress={() => { Keyboard.dismiss(); animateStep(step + 1); }}
                 disabled={step === 2 && !goal}>
                 <Text style={s.nextText}>{step === 0 ? "Let's go" : 'Continue'}</Text>
               </TouchableOpacity>
             ) : (
-              <TouchableOpacity testID="onboard-finish" style={s.launchBtn} onPress={finish}>
+              <TouchableOpacity testID="onboarding-finish-button" style={s.launchBtn} onPress={finish}>
                 <Text style={s.launchText}>Enter Command Center</Text>
               </TouchableOpacity>
             )}
@@ -238,7 +244,7 @@ const s = StyleSheet.create({
   // Progress
   progressWrap: { flexDirection: 'row', alignItems: 'center', marginTop: 12, marginBottom: 32, gap: 12 },
   progressTrack: { flex: 1, height: 3, backgroundColor: '#1E293B', borderRadius: 2, overflow: 'hidden' },
-  progressFill: { height: '100%', backgroundColor: Colors.emerald, borderRadius: 2 },
+  progressFill: { height: '100%', backgroundColor: Colors.emerald, borderRadius: 2, shadowColor: Colors.emerald, shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.8, shadowRadius: 4 },
   progressLabel: { fontSize: 12, fontWeight: '700', color: '#475569', width: 28 },
   // Typography
   body: { flex: 1 },

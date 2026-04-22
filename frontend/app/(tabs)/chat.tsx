@@ -12,7 +12,14 @@ import { authFetch } from '../../utils/api';
 
 const { width: W } = Dimensions.get('window');
 
-type Message = { id: string; role: string; content: string; timestamp: string; agent_type?: string };
+type Message = {
+  id: string;
+  role: string;
+  content: string;
+  timestamp: string;
+  agent_type?: string;
+  queued_actions?: any[];
+};
 
 const AGENTS: Record<string, { name: string; icon: any; color: string }> = {
   general: { name: 'orchestrAI', icon: BrainCircuit, color: Colors.emerald },
@@ -79,7 +86,14 @@ export default function ChatScreen() {
       });
       if (res.ok) {
         const data = await res.json();
-        setMessages(prev => [...prev, { id: Date.now().toString() + 'r', role: 'assistant', content: data.reply || data.response, timestamp: new Date().toISOString(), agent_type: params.agent || 'general' }]);
+        setMessages(prev => [...prev, {
+          id: Date.now().toString() + 'r',
+          role: 'assistant',
+          content: data.content,
+          timestamp: new Date().toISOString(),
+          agent_type: params.agent || 'general',
+          queued_actions: data.queued_actions
+        }]);
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       }
     } catch {
@@ -105,6 +119,20 @@ export default function ChatScreen() {
           <Text style={[styles.bubbleText, isUser ? styles.bubbleTextUser : styles.bubbleTextAI]}>
             {item.content}
           </Text>
+          {item.queued_actions && item.queued_actions.length > 0 && (
+            <View style={styles.actionsContainer}>
+              <View style={styles.actionHeader}>
+                <ShoppingCart size={14} color={agColor} />
+                <Text style={[styles.actionHeaderText, { color: agColor }]}>{item.queued_actions.length} Pending Actions</Text>
+              </View>
+              {item.queued_actions.map((act, idx) => (
+                <View key={idx} style={styles.actionRow}>
+                  <Text style={styles.actionTitle} numberOfLines={1}>{act.title || act.type}</Text>
+                  {act.price && <Text style={styles.actionPrice}>${act.price}</Text>}
+                </View>
+              ))}
+            </View>
+          )}
         </View>
       </Animated.View>
     );
@@ -115,7 +143,7 @@ export default function ChatScreen() {
       <BlurView intensity={20} tint="dark" style={styles.header}>
         <View style={styles.headerInfo}>
           <View style={[styles.headerAvatar, { backgroundColor: `${currentAgent.color}15`, borderColor: `${currentAgent.color}40` }]}>
-            <ActiveIcon size={24} color={currentAgent.color} />
+            <ActiveIcon size={24} color={currentAgent.color} strokeWidth={1.5} />
           </View>
           <View>
             <Text style={styles.headerTitle}>{currentAgent.name}</Text>
@@ -139,6 +167,7 @@ export default function ChatScreen() {
         <BlurView intensity={30} tint="dark" style={styles.inputArea}>
           <View style={styles.inputBox}>
             <TextInput
+              testID="chat-input"
               style={styles.input}
               placeholder="Ask your agents..."
               placeholderTextColor={Colors.textDisabled}
@@ -147,8 +176,8 @@ export default function ChatScreen() {
               multiline
               maxLength={2000}
             />
-            <AnimatedPressable scaleDown={0.8} style={[styles.sendBtn, !input.trim() && { opacity: 0.5 }]} onPress={sendMessage}>
-              {sending ? <ActivityIndicator color={Colors.bg} size="small" /> : <Send size={20} color={Colors.bg} />}
+            <AnimatedPressable testID="chat-send-button" haptic={Haptics.ImpactFeedbackStyle.Medium} scaleDown={0.8} style={[styles.sendBtn, !input.trim() && { opacity: 0.5 }]} onPress={sendMessage}>
+              {sending ? <ActivityIndicator color={Colors.bg} size="small" /> : <Send size={20} color={Colors.bg} strokeWidth={1.5} />}
             </AnimatedPressable>
           </View>
         </BlurView>
@@ -245,6 +274,45 @@ const styles = StyleSheet.create({
   },
   bubbleTextAI: {
     color: Colors.text,
+  },
+  actionsContainer: {
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255,255,255,0.1)',
+  },
+  actionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 8,
+  },
+  actionHeaderText: {
+    fontSize: 12,
+    fontFamily: Typography.fonts.outfitB,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  actionRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    padding: 8,
+    borderRadius: 8,
+    marginBottom: 4,
+  },
+  actionTitle: {
+    color: Colors.text,
+    fontSize: 13,
+    fontFamily: Typography.fonts.manropeSB,
+    flex: 1,
+  },
+  actionPrice: {
+    color: Colors.emerald,
+    fontSize: 13,
+    fontFamily: Typography.fonts.outfitB,
+    marginLeft: 8,
   },
   inputArea: {
     paddingHorizontal: 16,

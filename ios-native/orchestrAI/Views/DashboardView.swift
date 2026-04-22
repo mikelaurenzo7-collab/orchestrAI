@@ -310,6 +310,7 @@ struct StatCard: View {
             }
             .clipShape(RoundedRectangle(cornerRadius: 22))
         )
+        .tracingBeam(color: color.opacity(0.6))
         .overlay(
             RoundedRectangle(cornerRadius: 22)
                 .stroke(color.opacity(0.15), lineWidth: 1)
