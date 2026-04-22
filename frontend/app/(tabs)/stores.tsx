@@ -1,23 +1,38 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, Text, StyleSheet, FlatList, TextInput, Dimensions, Keyboard, RefreshControl, ActionSheetIOS } from 'react-native';
+import { View, Text, StyleSheet, FlatList, TextInput, RefreshControl, Modal } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Animated, { FadeInDown, FadeIn, LinearTransition } from 'react-native-reanimated';
 import { BlurView } from 'expo-blur';
 import { Colors, Typography } from '../../constants/theme';
-import { Plus, Link, Power, PowerOff, ShieldCheck, CreditCard, ShoppingCart, Key, ShieldAlert, Package, Tag, Building2, Warehouse, Store as StoreIcon } from 'lucide-react-native';
+import { Plus, Link, Power, PowerOff, ShieldCheck, ShoppingCart, ShieldAlert, Package, Tag, Building2, Warehouse, Store as StoreIcon, ExternalLink, X } from 'lucide-react-native';
 import AnimatedPressable from '../../components/AnimatedPressable';
 import * as Haptics from 'expo-haptics';
 import { authFetch } from '../../utils/api';
-
-const { width: W, height: H } = Dimensions.get('window');
+import * as WebBrowser from 'expo-web-browser';
 
 interface OrgStore {
   id: string;
   name: string;
   store_url?: string;
   platform: string;
-  status: 'active' | 'error' | 'pending';
+  status: 'connected' | 'disconnected' | 'error' | 'pending' | string;
+  connected_at?: string;
   last_sync?: string;
+}
+
+const OAUTH_READY = new Set(['shopify', 'etsy', 'ebay']);
+
+function formatApiError(detail: unknown): string {
+  if (!detail) return 'Something went wrong. Please try again.';
+  if (typeof detail === 'string') return detail;
+  if (Array.isArray(detail)) return detail.map((item) => String(item?.msg || item)).join(' ');
+  return String(detail);
+}
+
+function formatConnectedAt(timestamp?: string): string {
+  if (!timestamp) return 'Awaiting first sync';
+  const date = new Date(timestamp);
+  return `Connected ${date.toLocaleDateString([], { month: 'short', day: 'numeric' })}`;
 }
 
 const PLATFORMS = [
@@ -34,6 +49,10 @@ export default function StoresScreen() {
   const [stores, setStores] = useState<OrgStore[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [pickerVisible, setPickerVisible] = useState(false);
+  const [shopDomain, setShopDomain] = useState('');
+  const [connectingPlatform, setConnectingPlatform] = useState<string | null>(null);
+  const [integrationNotice, setIntegrationNotice] = useState<string | null>(null);
 
   const fetchStores = useCallback(async () => {
     try {
@@ -47,26 +66,55 @@ export default function StoresScreen() {
 
   const handleAddIntegration = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    ActionSheetIOS.showActionSheetWithOptions(
-      {
-        title: 'Add Integration',
-        message: 'Select a platform to connect your workspace',
-        options: ['Cancel', ...PLATFORMS.map(p => p.name)],
-        cancelButtonIndex: 0,
-      },
-      (buttonIndex) => {
-        if (buttonIndex === 0) return;
-        Haptics.selectionAsync();
-        // Trigger modal flow here in a real app
-        alert('Platform selected: ' + PLATFORMS[buttonIndex - 1].name);
+    setPickerVisible(true);
+  };
+
+  const startIntegration = async (platformId: string) => {
+    const platform = PLATFORMS.find((entry) => entry.id === platformId);
+    if (!platform) return;
+
+    if (!OAUTH_READY.has(platformId)) {
+      setIntegrationNotice(`${platform.name} mobile connection will be added next. Use the web workflow for this platform today.`);
+      return;
+    }
+
+    if (platformId === 'shopify' && !shopDomain.trim()) {
+      setIntegrationNotice('Enter your Shopify store domain to start OAuth.');
+      return;
+    }
+
+    setConnectingPlatform(platformId);
+    try {
+      const path = platformId === 'shopify'
+        ? `/api/shopify/auth?shop=${encodeURIComponent(shopDomain.trim())}`
+        : `/api/${platformId}/auth`;
+      const res = await authFetch(path);
+      const data = await res.json().catch(() => ({}));
+
+      if (!res.ok || !data?.auth_url) {
+        setIntegrationNotice(formatApiError(data?.detail));
+        return;
       }
-    );
+
+      setPickerVisible(false);
+      setIntegrationNotice(`Opened ${platform.name} authorization. Return here after approval to refresh your connections.`);
+      await WebBrowser.openBrowserAsync(data.auth_url);
+      setRefreshing(true);
+      fetchStores();
+    } catch {
+      setIntegrationNotice(`Unable to start the ${platform.name} connection flow right now.`);
+    } finally {
+      setConnectingPlatform(null);
+    }
   };
 
   const renderStore = ({ item, index }: { item: OrgStore, index: number }) => {
-    const isLive = item.status === 'active';
+    const isLive = item.status === 'connected';
+    const isPending = item.status === 'pending';
     const plat = PLATFORMS.find(p => p.id === item.platform) || PLATFORMS[3];
     const Icon = plat.icon;
+    const statusColor = isLive ? Colors.emerald : isPending ? Colors.accent : Colors.error;
+    const statusLabel = isLive ? 'Connected' : isPending ? 'Pending' : item.status === 'disconnected' ? 'Disconnected' : 'Needs attention';
 
     return (
       <Animated.View entering={FadeInDown.delay(index * 100).duration(500).springify().damping(14)} layout={LinearTransition}>
@@ -77,16 +125,16 @@ export default function StoresScreen() {
                 <Icon size={24} color={plat.color} />
               </View>
               <View style={styles.statusBadge}>
-                {isLive ? <Power size={14} color={Colors.emerald} /> : <ShieldAlert size={14} color={Colors.error} />}
-                <Text style={[styles.statusTxt, { color: isLive ? Colors.emerald : Colors.error }]}>
-                  {isLive ? 'Connected' : 'Action Required'}
+                {isLive ? <Power size={14} color={statusColor} /> : <ShieldAlert size={14} color={statusColor} />}
+                <Text style={[styles.statusTxt, { color: statusColor }]}>
+                  {statusLabel}
                 </Text>
               </View>
             </View>
 
             <View style={styles.cardBody}>
               <Text style={styles.storeName}>{item.name}</Text>
-              <Text style={styles.platformName}>{plat.tag} • Last synced 2m ago</Text>
+              <Text style={styles.platformName}>{plat.tag} • {formatConnectedAt(item.connected_at)}</Text>
             </View>
 
             <View style={styles.divider} />
@@ -96,7 +144,7 @@ export default function StoresScreen() {
                 <Link size={16} color={Colors.textSecondary} />
                 <Text style={styles.footerUrl}>{item.store_url || 'N/A'}</Text>
               </View>
-              <ShieldCheck size={18} color={Colors.textDisabled} />
+              {isLive ? <ShieldCheck size={18} color={Colors.textDisabled} /> : <ExternalLink size={18} color={Colors.textDisabled} />}
             </View>
           </BlurView>
         </AnimatedPressable>
@@ -115,6 +163,8 @@ export default function StoresScreen() {
           <Plus size={24} color={Colors.bg} />
         </AnimatedPressable>
       </Animated.View>
+
+      {integrationNotice ? <Text style={styles.notice}>{integrationNotice}</Text> : null}
 
       <FlatList
         data={stores || []}
@@ -141,6 +191,74 @@ export default function StoresScreen() {
           ) : null
         }
       />
+
+      <Modal visible={pickerVisible} transparent animationType="slide" onRequestClose={() => setPickerVisible(false)}>
+        <View style={styles.modalScrim}>
+          <View style={styles.modalSheet}>
+            <View style={styles.modalHeader}>
+              <View>
+                <Text style={styles.modalTitle}>Connect a storefront</Text>
+                <Text style={styles.modalSubtitle}>Launch OAuth for the storefronts already wired in the backend.</Text>
+              </View>
+              <AnimatedPressable scaleDown={0.92} style={styles.modalClose} onPress={() => setPickerVisible(false)}>
+                <X size={18} color={Colors.text} />
+              </AnimatedPressable>
+            </View>
+
+            <View style={styles.modalList}>
+              {PLATFORMS.map((platform) => {
+                const Icon = platform.icon;
+                const isOauthReady = OAUTH_READY.has(platform.id);
+                return (
+                  <AnimatedPressable
+                    key={platform.id}
+                    scaleDown={0.98}
+                    style={[styles.platformCard, !isOauthReady && styles.platformCardDisabled]}
+                    onPress={() => {
+                      Haptics.selectionAsync();
+                      if (platform.id === 'shopify') {
+                        setConnectingPlatform(platform.id);
+                      } else {
+                        startIntegration(platform.id);
+                      }
+                    }}
+                  >
+                    <View style={[styles.platformIcon, { backgroundColor: `${platform.color}15`, borderColor: `${platform.color}40` }]}>
+                      <Icon size={20} color={platform.color} />
+                    </View>
+                    <View style={styles.platformCopy}>
+                      <Text style={styles.platformTitle}>{platform.name}</Text>
+                      <Text style={styles.platformCaption}>{isOauthReady ? 'OAuth flow available' : 'Mobile flow coming next'}</Text>
+                    </View>
+                  </AnimatedPressable>
+                );
+              })}
+            </View>
+
+            {connectingPlatform === 'shopify' ? (
+              <View style={styles.shopifyBox}>
+                <Text style={styles.shopifyLabel}>Shopify domain</Text>
+                <TextInput
+                  style={styles.shopifyInput}
+                  value={shopDomain}
+                  onChangeText={setShopDomain}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  placeholder="your-store.myshopify.com"
+                  placeholderTextColor={Colors.textDisabled}
+                />
+                <AnimatedPressable
+                  scaleDown={0.96}
+                  style={[styles.shopifyButton, connectingPlatform === 'shopify' && !shopDomain.trim() && styles.platformCardDisabled]}
+                  onPress={() => startIntegration('shopify')}
+                >
+                  <Text style={styles.shopifyButtonText}>Continue with Shopify</Text>
+                </AnimatedPressable>
+              </View>
+            ) : null}
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -182,6 +300,14 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.3,
     shadowRadius: 10,
     elevation: 8,
+  },
+  notice: {
+    fontFamily: Typography.fonts.manropeM,
+    fontSize: 13,
+    color: Colors.textSecondary,
+    paddingHorizontal: 24,
+    marginBottom: 8,
+    lineHeight: 20,
   },
   listContent: {
     paddingHorizontal: 24,
@@ -258,6 +384,121 @@ const styles = StyleSheet.create({
     fontFamily: Typography.fonts.manropeM,
     fontSize: 14,
     color: Colors.textDisabled,
+  },
+  modalScrim: {
+    flex: 1,
+    backgroundColor: 'rgba(3, 7, 18, 0.82)',
+    justifyContent: 'flex-end',
+  },
+  modalSheet: {
+    backgroundColor: '#09101F',
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    paddingHorizontal: 24,
+    paddingTop: 24,
+    paddingBottom: 36,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.06)',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    gap: 16,
+  },
+  modalTitle: {
+    fontFamily: Typography.fonts.outfitB,
+    fontSize: 22,
+    color: Colors.text,
+  },
+  modalSubtitle: {
+    fontFamily: Typography.fonts.manropeM,
+    fontSize: 13,
+    color: Colors.textSecondary,
+    marginTop: 6,
+    lineHeight: 20,
+  },
+  modalClose: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalList: {
+    gap: 12,
+    marginTop: 20,
+  },
+  platformCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+    padding: 16,
+    borderRadius: 18,
+    backgroundColor: 'rgba(255,255,255,0.04)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.06)',
+  },
+  platformCardDisabled: {
+    opacity: 0.6,
+  },
+  platformIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+  },
+  platformCopy: {
+    flex: 1,
+  },
+  platformTitle: {
+    fontFamily: Typography.fonts.outfitSB,
+    fontSize: 16,
+    color: Colors.text,
+  },
+  platformCaption: {
+    fontFamily: Typography.fonts.manropeM,
+    fontSize: 12,
+    color: Colors.textSecondary,
+    marginTop: 4,
+  },
+  shopifyBox: {
+    marginTop: 20,
+    paddingTop: 20,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255,255,255,0.06)',
+  },
+  shopifyLabel: {
+    fontFamily: Typography.fonts.manropeSB,
+    fontSize: 13,
+    color: Colors.textSecondary,
+    marginBottom: 10,
+  },
+  shopifyInput: {
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.08)',
+    backgroundColor: 'rgba(0,0,0,0.2)',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    color: Colors.text,
+    fontFamily: Typography.fonts.manropeM,
+    fontSize: 15,
+  },
+  shopifyButton: {
+    marginTop: 12,
+    borderRadius: 16,
+    backgroundColor: Colors.emerald,
+    paddingVertical: 14,
+    alignItems: 'center',
+  },
+  shopifyButtonText: {
+    fontFamily: Typography.fonts.manropeSB,
+    fontSize: 15,
+    color: Colors.bg,
   },
   emptyState: {
     alignItems: 'center',

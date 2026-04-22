@@ -143,6 +143,7 @@ export const AgentColors: Record<string, { primary: string; glow: string; icon: 
   meta: { primary: '#0866FF', glow: 'rgba(8,102,255,0.15)', icon: 'megaphone' },
   analytics: { primary: Colors.cyan, glow: Colors.cyanGlow, icon: 'bar-chart-3' },
   store_manager: { primary: Colors.emerald, glow: Colors.emeraldGlow, icon: 'package' },
+  marketing_suite: { primary: Colors.amber, glow: Colors.amberGlow, icon: 'megaphone' },
   marketing: { primary: Colors.amber, glow: Colors.amberGlow, icon: 'megaphone' },
   customer_service: { primary: Colors.rose, glow: Colors.roseGlow, icon: 'headphones' },
   general: { primary: Colors.emerald, glow: Colors.emeraldGlow, icon: 'bot' },

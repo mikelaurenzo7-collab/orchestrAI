@@ -114,6 +114,21 @@ _rate_limiter = _RateLimiter()
 _LLM_RATE_LIMIT = int(os.environ.get("LLM_RATE_LIMIT", "30"))
 _LLM_RATE_WINDOW = 60  # seconds
 
+AGENT_TYPE_ALIASES = {
+    "marketing": "marketing_suite",
+    "store": "store_manager",
+}
+
+STORE_AGENT_TYPES = {
+    "store_manager", "shopify", "etsy", "ebay", "walmart", "faire", "mercari", "poshmark",
+}
+
+STORE_CONTEXT_AGENT_TYPES = STORE_AGENT_TYPES | {"marketing_suite"}
+
+
+def normalize_agent_type(agent_type: str) -> str:
+    return AGENT_TYPE_ALIASES.get(agent_type, agent_type)
+
 async def enforce_llm_rate_limit(user_id: str):
     """Raise 429 if user exceeds LLM call limits."""
     if not _rate_limiter.check(f"llm:{user_id}", _LLM_RATE_LIMIT, _LLM_RATE_WINDOW):
@@ -548,6 +563,13 @@ PRICING_PLANS = {
         "features": ["1 General AI assistant", "100 actions/mo", "Basic chat", "Knowledge base access"],
         "included_agents": ["general"],  # Only general assistant
     },
+    "trial": {
+        "name": "Trial", "price": 0, "interval": "30 days",
+        "max_agents": 4, "actions_per_month": 1000, "max_stores": 1, "max_social_connectors": 2,
+        "features": ["4 core AI agents", "1 store connection", "2 social connectors", "1,000 actions/mo", "Approval controls"],
+        "included_agents": ["general", "marketing_suite", "analytics", "customer_service"],
+        "store_platforms": 1,
+    },
     "starter": {
         "name": "Starter", "price": 29, "interval": "month",
         "max_agents": 3, "actions_per_month": 1000, "max_stores": 1, "max_social_connectors": 2,
@@ -558,16 +580,16 @@ PRICING_PLANS = {
     "growth": {
         "name": "Growth", "price": 79, "interval": "month",
         "max_agents": 8, "actions_per_month": 5000, "max_stores": 3, "max_social_connectors": 6,
-        "features": ["3 store platforms", "Marketing, Analytics, Email, CRM, Finance agents", "6 social connectors", "5,000 actions/mo", "Autopilot mode", "Custom training", "Priority support"],
-        "included_agents": ["general", "marketing_suite", "analytics", "email", "crm", "finance"],
+        "features": ["3 store platforms", "Marketing, Analytics, Support, Email, CRM, Finance agents", "6 social connectors", "5,000 actions/mo", "Autopilot mode", "Custom training", "Priority support"],
+        "included_agents": ["general", "marketing_suite", "analytics", "customer_service", "email", "crm", "finance"],
         "store_platforms": 3,  # User chooses 3 store platforms
         "popular": True,
     },
     "business": {
         "name": "Business", "price": 199, "interval": "month",
         "max_agents": 16, "actions_per_month": 25000, "max_stores": 7, "max_social_connectors": "unlimited",
-        "features": ["All 7 store platforms", "All 9 employee agents", "Unlimited social connectors", "25,000 actions/mo", "White-glove onboarding", "Dedicated support"],
-        "included_agents": ["general", "marketing_suite", "analytics", "email", "crm", "finance", "sales", "operations", "hr", "legal"],
+        "features": ["All 7 store platforms", "All customer-facing and employee agents", "Unlimited social connectors", "25,000 actions/mo", "White-glove onboarding", "Dedicated support"],
+        "included_agents": ["general", "marketing_suite", "analytics", "customer_service", "email", "crm", "finance", "sales", "operations", "hr", "legal"],
         "store_platforms": "all",  # All 7 store platforms
     },
     "enterprise": {
@@ -906,6 +928,7 @@ async def get_cross_agent_insights(user_id: str, requesting_agent: str) -> str:
 
 async def build_agent_context(user_id: str, agent_type: str) -> str:
     """Build rich context — user profile, stores, memories, cross-agent insights, activity"""
+    agent_type = normalize_agent_type(agent_type)
     context_parts = []
 
     # User profile
@@ -959,7 +982,7 @@ async def build_agent_context(user_id: str, agent_type: str) -> str:
         tasks = await db.tasks.find({"user_id": user_id, "agent_type": "store_manager"}, {"_id": 0}).sort("created_at", -1).to_list(3)
         if tasks:
             context_parts.append("RECENT TASKS: " + ", ".join(t.get("title", "") for t in tasks))
-    elif agent_type == "marketing":
+    elif agent_type == "marketing_suite":
         content = await db.social_content.find({"user_id": user_id}, {"_id": 0}).sort("created_at", -1).to_list(3)
         if content:
             context_parts.append(f"RECENT CONTENT: {len(content)} posts — latest for '{content[0].get('product_name','')}' on {content[0].get('platform','')}")
@@ -1011,6 +1034,7 @@ chat_instances: Dict[str, LlmChat] = {}
 
 async def get_or_create_chat_with_context(user_id: str, agent_type: str = "general") -> LlmChat:
     """Create or refresh a chat instance with live user context injected into system prompt"""
+    agent_type = normalize_agent_type(agent_type)
     key = f"{user_id}_{agent_type}"
 
     # Build fresh context every time to keep data current
@@ -1091,8 +1115,8 @@ async def register(req: RegisterRequest, response: Response):
     result = await db.users.insert_one(user_doc)
     user_id = str(result.inserted_id)
 
-    # Create agents based on trial plan (trial acts like free for now)
-    await seed_user_agents(user_id, plan="free")
+    # Give new users a richer trial bundle than the permanent free plan.
+    await seed_user_agents(user_id, plan="trial")
 
     access = create_access_token(user_id, email)
     refresh = create_refresh_token(user_id)
@@ -1168,7 +1192,7 @@ async def seed_user_agents(user_id: str, plan: str = "free"):
     included_agents = plan_config.get("included_agents", ["general"])
     
     if included_agents == "*":  # Enterprise gets everything
-        included_agents = ["general", "marketing_suite", "analytics", "email", "crm", "finance", "sales", "operations", "hr", "legal"]
+        included_agents = ["general", "marketing_suite", "analytics", "customer_service", "email", "crm", "finance", "sales", "operations", "hr", "legal"]
     
     agents_to_create = []
     
@@ -1205,6 +1229,18 @@ async def seed_user_agents(user_id: str, plan: str = "free"):
             "description": "Cross-platform intelligence — analyzes all stores and channels for patterns and opportunities.",
             "personality": "analytical", "tone": "precise", "auto_execute": True, "is_active": True,
             "capabilities": ["cross_platform_analytics", "trend_prediction", "revenue_forecasting", "competitor_tracking", "customer_intelligence"],
+            "tasks_completed": 0, "last_active": None, "training": {}
+        })
+
+    # Customer Service EA
+    if "customer_service" in included_agents:
+        agents_to_create.append({
+            "id": str(uuid.uuid4()), "user_id": user_id,
+            "name": "Customer Experience Assistant", "agent_type": "customer_service",
+            "category": "customer", "platform": "all",
+            "description": "Keeps customers informed, resolves common issues, and drafts policies in your brand voice.",
+            "personality": "empathetic", "tone": "calm", "auto_execute": False, "is_active": True,
+            "capabilities": ["response_templates", "faq_generation", "policy_drafting", "review_management", "satisfaction_optimization"],
             "tasks_completed": 0, "last_active": None, "training": {}
         })
     
@@ -1635,6 +1671,7 @@ async def get_social_connectors(request: Request):
 async def chat_with_agent(req: ChatRequest, request: Request):
     user = await get_current_user(request)
     user_id = user["_id"]
+    agent_type = normalize_agent_type(req.agent_type)
 
     # Rate limit LLM calls
     await enforce_llm_rate_limit(str(user_id))
@@ -1642,7 +1679,7 @@ async def chat_with_agent(req: ChatRequest, request: Request):
     # ── Social posting is handled by Marketing EA and Store EAs ──
     # Non-marketing, non-store agents cannot post to social directly
     social_context = ""
-    if req.agent_type == "marketing_suite":
+    if agent_type == "marketing_suite":
         # Marketing EA gets info about connected social platforms
         social_connectors = await db.stores.find(
             {"user_id": user_id, "platform": {"$in": list(SOCIAL_CONNECTOR_PLATFORMS)}},
@@ -1652,32 +1689,40 @@ async def chat_with_agent(req: ChatRequest, request: Request):
             social_context = f"\n\n[CONNECTED SOCIAL CHANNELS: {platforms}. You can create and schedule content for these platforms. You are the central social media strategist.]"
         else:
             social_context = "\n\n[No social platforms connected yet. Suggest the user connect their social accounts in the Connect hub so you can manage their social media presence.]"
-    elif req.agent_type in ("shopify", "etsy", "ebay", "walmart", "faire", "mercari", "poshmark"):
+    elif agent_type in STORE_AGENT_TYPES:
         # Store EAs can promote products to connected socials
         social_context = "\n\n[SOCIAL CAPABILITY: You can suggest product promotions for connected social platforms. When the user wants to promote products on social media, draft the content and recommend they use the Marketing EA to schedule it across platforms, or you can create platform-specific product promos.]"
-    elif req.agent_type not in ("general",):
+    elif agent_type not in ("general",):
         # Other Employee EAs delegate social to Marketing EA
         social_context = "\n\n[SOCIAL POSTING: You do not post to social media directly. If the user asks for social content, recommend they use the Marketing EA which orchestrates all social platforms.]"
 
-    chat = await get_or_create_chat_with_context(user_id, req.agent_type)
+    chat = await get_or_create_chat_with_context(user_id, agent_type)
 
     # ── PROMPT INJECTION GUARD: strip control prefixes from user input ──
     import re
     sanitized_message = re.sub(r'(?mi)^(ACTION|MEMORY)\s*:', '[FILTERED]:', req.message)
 
-    await db.chat_messages.insert_one({"user_id": user_id, "session_id": user_id, "agent_type": req.agent_type,
+    selected_store = None
+    if req.store_id:
+        selected_store = await db.stores.find_one({"id": req.store_id, "user_id": user_id, "status": "connected"})
+        if not selected_store:
+            raise HTTPException(status_code=404, detail="Selected store not found")
+
+    await db.chat_messages.insert_one({"user_id": user_id, "session_id": user_id, "agent_type": agent_type,
         "role": "user", "content": req.message, "timestamp": datetime.now(timezone.utc).isoformat()})
     try:
         # Check if user has connected stores (for store-aware agents)
         user_stores = await db.stores.find({"user_id": user_id, "status": "connected"}).to_list(10)
         store_context = ""
-        if user_stores and req.agent_type in ("store", "marketing"):
+        if selected_store:
+            user_stores = [selected_store]
+        if user_stores and agent_type in STORE_CONTEXT_AGENT_TYPES:
             store_names = ", ".join([f"{s['platform']}:{s.get('name','')}" for s in user_stores])
             store_context = f"\n\n[CONNECTED STORES: {store_names}]"
 
         # Store Commander gets special instructions for creating products
         action_instruction = ""
-        if req.agent_type == "store" and user_stores:
+        if agent_type in STORE_AGENT_TYPES and user_stores:
             action_instruction = """
 
 [SYSTEM: You can create products, collections, and manage stores. When the user asks you to create a product or build out their store, respond with your recommendation AND include a structured ACTION block at the end of your response.
@@ -1711,6 +1756,7 @@ You can include MULTIPLE action lines. The user will approve each one before it 
 
         # Extract and queue store actions if present
         queued_actions = []
+        needs_store_selection = False
         if "ACTION:" in clean_response:
             lines = clean_response.split("\n")
             action_lines = [l.strip() for l in lines if l.strip().startswith("ACTION:")]
@@ -1734,7 +1780,12 @@ You can include MULTIPLE action lines. The user will approve each one before it 
                     }
                     action_type = action_type_map.get(action_type_raw)
                     if action_type and user_stores:
-                        target_store = user_stores[0]  # Default to first connected store
+                        target_store = selected_store
+                        if not target_store and len(user_stores) == 1:
+                            target_store = user_stores[0]
+                        if not target_store:
+                            needs_store_selection = True
+                            continue
                         action_doc = {
                             "id": str(uuid.uuid4()), "user_id": user_id, "store_id": target_store["id"],
                             "store_name": target_store.get("name", ""), "platform": target_store.get("platform", ""),
@@ -1749,16 +1800,21 @@ You can include MULTIPLE action lines. The user will approve each one before it 
                 except Exception as e:
                     logger.error(f"Action parsing error: {e}")
 
-        await db.chat_messages.insert_one({"user_id": user_id, "session_id": user_id, "agent_type": req.agent_type,
+        if needs_store_selection:
+            clean_response += "\n\nSelect a single connected store before I can queue those store actions. Retry from the relevant storefront context or choose a specific store first."
+
+        await db.chat_messages.insert_one({"user_id": user_id, "session_id": user_id, "agent_type": agent_type,
             "role": "assistant", "content": clean_response, "timestamp": datetime.now(timezone.utc).isoformat(),
             "queued_actions": queued_actions if queued_actions else None})
-        await db.agents.update_one({"user_id": user_id, "agent_type": req.agent_type},
+        await db.agents.update_one({"user_id": user_id, "agent_type": agent_type},
             {"$set": {"last_active": datetime.now(timezone.utc).isoformat()}, "$inc": {"tasks_completed": 1}})
 
-        response_data = {"role": "assistant", "content": clean_response, "agent_type": req.agent_type}
+        response_data = {"role": "assistant", "content": clean_response, "agent_type": agent_type}
         if queued_actions:
             response_data["queued_actions"] = queued_actions
             response_data["content"] += f"\n\n📋 **{len(queued_actions)} action(s) queued for your approval.** Check your pending actions to review and approve."
+        if needs_store_selection:
+            response_data["requires_store_selection"] = True
         return response_data
     except Exception as e:
         logger.error(f"Chat error: {e}")
@@ -1767,12 +1823,14 @@ You can include MULTIPLE action lines. The user will approve each one before it 
 @api_router.get("/chat/history/{agent_type}", response_model=List[ChatMessage])
 async def get_chat_history(agent_type: str, request: Request):
     user = await get_current_user(request)
+    agent_type = normalize_agent_type(agent_type)
     messages = await db.chat_messages.find({"user_id": user["_id"], "agent_type": agent_type}, {"_id": 0, "user_id": 0}).sort("timestamp", 1).to_list(100)
     return [ChatMessage(**m) for m in messages]
 
 @api_router.delete("/chat/history/{agent_type}")
 async def clear_chat_history(agent_type: str, request: Request):
     user = await get_current_user(request)
+    agent_type = normalize_agent_type(agent_type)
     await db.chat_messages.delete_many({"user_id": user["_id"], "agent_type": agent_type})
     key = f"{user['_id']}_{agent_type}"
     if key in chat_instances:
@@ -2593,7 +2651,7 @@ async def get_dashboard(request: Request):
     agents = await db.agents.count_documents({"user_id": user_id, "is_active": True})
     tasks = await db.tasks.count_documents({"user_id": user_id, "status": "completed"})
     social = await db.social_content.count_documents({"user_id": user_id})
-    pending = await db.actions.count_documents({"user_id": user_id, "status": "executing"})
+    pending = await db.store_actions.count_documents({"user_id": user_id, "status": "pending"})
     active_wf = await db.workflows.count_documents({"user_id": user_id, "status": "running"})
     pipeline = [{"$match": {"user_id": user_id}}, {"$group": {"_id": None, "total_revenue": {"$sum": "$revenue"}, "total_orders": {"$sum": "$orders_total"}}}]
     agg = await db.stores.aggregate(pipeline).to_list(1)

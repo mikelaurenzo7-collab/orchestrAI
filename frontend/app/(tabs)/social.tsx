@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, Text, StyleSheet, FlatList, Dimensions, RefreshControl, Image } from 'react-native';
+import { View, Text, StyleSheet, FlatList, Dimensions, RefreshControl, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Animated, { FadeInDown, FadeIn, LinearTransition } from 'react-native-reanimated';
 import { BlurView } from 'expo-blur';
-import { Colors, Typography, Shadows } from '../../constants/theme';
-import { PenTool, MoreHorizontal, Heart, MessageCircle, Share2, BarChart2, Bot, Globe, Repeat } from 'lucide-react-native';
+import { Colors, Typography } from '../../constants/theme';
+import { RefreshCcw, MoreHorizontal, Hash, Bot } from 'lucide-react-native';
 import AnimatedPressable from '../../components/AnimatedPressable';
 import * as Haptics from 'expo-haptics';
 import { authFetch } from '../../utils/api';
@@ -14,34 +14,29 @@ const { width: W } = Dimensions.get('window');
 interface SocialPost {
   id: string;
   content: string;
-  platforms: string[];
+  platform: string;
   status: 'draft' | 'published' | 'scheduled';
-  scheduled_for?: string;
   created_at: string;
-  metrics?: { likes: number, clicks: number, shares: number };
+  hashtags: string[];
+  product_name: string;
 }
 
-// Dummy robust placeholder
-const MOCK_POST: SocialPost = {
-  id: '01',
-  content: 'Just launched our new automated compliance tracking features. 🚀\n\nSave your team 40+ hours a month by letting orchestrAI handle vendor vetting. Sign up for early access today! 👇',
-  platforms: ['twitter', 'linkedin'],
-  status: 'published',
-  created_at: new Date().toISOString(),
-  metrics: { likes: 2400, clicks: 850, shares: 140 }
-};
+function formatTimestamp(timestamp: string): string {
+  const date = new Date(timestamp);
+  return `${date.toLocaleDateString([], { month: 'short', day: 'numeric' })} • ${date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+}
 
 export default function SocialScreen() {
-  const [posts, setPosts] = useState<SocialPost[]>([MOCK_POST]);
+  const [posts, setPosts] = useState<SocialPost[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
   const fetchPosts = useCallback(async () => {
     try {
-      const res = await authFetch('/api/social/posts');
+      const res = await authFetch('/api/social/content');
       if (res.ok) {
         const data = await res.json();
-        if (data.length > 0) setPosts(data);
+        setPosts(data);
       }
     } catch (e) { } 
     finally { setLoading(false); setRefreshing(false); }
@@ -51,9 +46,13 @@ export default function SocialScreen() {
 
   const handleCompose = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    setRefreshing(true);
+    fetchPosts();
   };
 
   const renderPost = ({ item, index }: { item: SocialPost, index: number }) => {
+    const statusColor = item.status === 'published' ? Colors.emerald : item.status === 'scheduled' ? Colors.accent : Colors.textSecondary;
+
     return (
       <Animated.View entering={FadeInDown.delay(index * 150).duration(600).springify().damping(16)} layout={LinearTransition}>
         <AnimatedPressable scaleDown={0.97} onPress={() => Haptics.selectionAsync()} style={styles.cardBox}>
@@ -65,8 +64,8 @@ export default function SocialScreen() {
                   <Bot size={20} color={Colors.emerald} />
                 </View>
                 <View>
-                  <Text style={styles.authorName}>Marketing AI Exec</Text>
-                  <Text style={styles.timestamp}>2h ago • {item.platforms.join(', ')}</Text>
+                  <Text style={styles.authorName}>Marketing Executive Assistant</Text>
+                  <Text style={styles.timestamp}>{formatTimestamp(item.created_at)} • {item.platform}</Text>
                 </View>
               </View>
               <AnimatedPressable onPress={() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)}>
@@ -74,36 +73,24 @@ export default function SocialScreen() {
               </AnimatedPressable>
             </View>
 
-            <Text style={styles.bodyText}>{item.content}</Text>
-
-            <View style={styles.mediaContainer}>
-              <BlurView intensity={10} tint="light" style={styles.mediaPlaceholder}>
-                <BarChart2 size={40} color={Colors.emerald} opacity={0.6} />
-                <Text style={styles.mediaPlaceholderText}>Attached Media</Text>
-              </BlurView>
+            <View style={styles.metaRow}>
+              <View style={styles.productBadge}>
+                <Text style={styles.productBadgeText}>{item.product_name}</Text>
+              </View>
+              <View style={[styles.statusBadge, { borderColor: `${statusColor}45` }]}>
+                <Text style={[styles.statusText, { color: statusColor }]}>{item.status}</Text>
+              </View>
             </View>
 
-            <View style={styles.divider} />
+            <Text style={styles.bodyText}>{item.content}</Text>
 
-            <View style={styles.actionRow}>
-              <AnimatedPressable style={styles.actionBtn} onPress={() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)}>
-                <Heart size={20} color={Colors.textSecondary} />
-                <Text style={styles.actionTxt}>{(item.metrics?.likes || 0).toLocaleString()}</Text>
-              </AnimatedPressable>
-
-              <AnimatedPressable style={styles.actionBtn}>
-                <MessageCircle size={20} color={Colors.textSecondary} />
-                <Text style={styles.actionTxt}>{(item.metrics?.clicks || 0).toLocaleString()}</Text>
-              </AnimatedPressable>
-
-              <AnimatedPressable style={styles.actionBtn}>
-                <Repeat size={20} color={Colors.textSecondary} />
-                <Text style={styles.actionTxt}>{(item.metrics?.shares || 0).toLocaleString()}</Text>
-              </AnimatedPressable>
-
-              <AnimatedPressable style={[styles.actionBtn, { marginLeft: 'auto' }]}>
-                <Share2 size={20} color={Colors.emerald} />
-              </AnimatedPressable>
+            <View style={styles.hashWrap}>
+              {item.hashtags.slice(0, 5).map((tag) => (
+                <View key={tag} style={styles.hashChip}>
+                  <Hash size={12} color={Colors.emerald} />
+                  <Text style={styles.hashText}>{tag.replace(/^#/, '')}</Text>
+                </View>
+              ))}
             </View>
 
           </BlurView>
@@ -117,13 +104,15 @@ export default function SocialScreen() {
       <Animated.View entering={FadeIn.duration(600)} style={styles.header}>
         <View>
           <Text style={styles.title}>Broadcast</Text>
-          <Text style={styles.subtitle}>AI-generated social campaigns</Text>
+          <Text style={styles.subtitle}>Generated social content across connected channels</Text>
         </View>
         <AnimatedPressable scaleDown={0.9} style={styles.composeBtn} onPress={handleCompose}>
-          <PenTool size={20} color={Colors.bg} />
-          <Text style={styles.composeTxt}>Draft</Text>
+          <RefreshCcw size={20} color={Colors.bg} />
+          <Text style={styles.composeTxt}>Refresh</Text>
         </AnimatedPressable>
       </Animated.View>
+
+      {loading && !posts.length ? <ActivityIndicator size="large" color={Colors.emerald} style={styles.loader} /> : null}
 
       <FlatList
         data={posts}
@@ -137,6 +126,17 @@ export default function SocialScreen() {
             setRefreshing(true);
             fetchPosts();
           }} />
+        }
+        ListEmptyComponent={
+          !loading ? (
+            <View style={styles.emptyState}>
+              <View style={styles.avatar}>
+                <Bot size={24} color={Colors.emerald} />
+              </View>
+              <Text style={styles.emptyTitle}>No social content yet</Text>
+              <Text style={styles.emptySubtitle}>Generated drafts and published posts will appear here as soon as your marketing agent creates them.</Text>
+            </View>
+          ) : null
         }
       />
     </SafeAreaView>
@@ -192,6 +192,9 @@ const styles = StyleSheet.create({
     paddingBottom: 120,
     gap: 16,
   },
+  loader: {
+    marginTop: 48,
+  },
   cardBox: {
     borderRadius: 24,
     overflow: 'hidden',
@@ -223,6 +226,36 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(16, 185, 129, 0.3)',
   },
+  metaRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: 12,
+    marginBottom: 14,
+  },
+  productBadge: {
+    backgroundColor: 'rgba(52, 211, 153, 0.12)',
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+  },
+  productBadgeText: {
+    fontFamily: Typography.fonts.manropeSB,
+    fontSize: 12,
+    color: Colors.emerald,
+  },
+  statusBadge: {
+    borderWidth: 1,
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    backgroundColor: 'rgba(255,255,255,0.03)',
+  },
+  statusText: {
+    fontFamily: Typography.fonts.manropeSB,
+    fontSize: 12,
+    textTransform: 'capitalize',
+  },
   authorName: {
     fontFamily: Typography.fonts.outfitB,
     fontSize: 18,
@@ -240,50 +273,45 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: Colors.text,
     lineHeight: 24,
-    marginBottom: 16,
+    marginBottom: 14,
   },
-  mediaContainer: {
-    width: '100%',
-    height: 180,
-    borderRadius: 16,
-    overflow: 'hidden',
-    marginBottom: 16,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.05)',
-  },
-  mediaPlaceholder: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: 'rgba(16, 185, 129, 0.05)',
-  },
-  mediaPlaceholderText: {
-    fontFamily: Typography.fonts.manropeB,
-    fontSize: 14,
-    color: Colors.textSecondary,
-    marginTop: 12,
-  },
-  divider: {
-    height: 1,
-    backgroundColor: 'rgba(255,255,255,0.08)',
-    marginBottom: 16,
-  },
-  actionRow: {
+  hashWrap: {
     flexDirection: 'row',
-    alignItems: 'center',
-    gap: 24,
-  },
-  actionBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexWrap: 'wrap',
     gap: 8,
-    paddingVertical: 4,
-    paddingHorizontal: 8,
-    borderRadius: 8,
   },
-  actionTxt: {
-    fontFamily: Typography.fonts.manropeB,
+  hashChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    backgroundColor: 'rgba(255,255,255,0.05)',
+  },
+  hashText: {
+    fontFamily: Typography.fonts.manropeM,
+    fontSize: 12,
+    color: Colors.textSecondary,
+  },
+  emptyState: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingTop: 80,
+    paddingHorizontal: 32,
+  },
+  emptyTitle: {
+    fontFamily: Typography.fonts.outfitB,
+    fontSize: 20,
+    color: Colors.text,
+    marginTop: 20,
+  },
+  emptySubtitle: {
+    fontFamily: Typography.fonts.manropeM,
     fontSize: 14,
     color: Colors.textSecondary,
+    marginTop: 8,
+    textAlign: 'center',
+    lineHeight: 22,
   },
 });

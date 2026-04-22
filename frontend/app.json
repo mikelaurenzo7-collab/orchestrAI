@@ -2,7 +2,7 @@
   "expo": {
     "name": "orchestrAI",
     "slug": "orchestrai",
-    "description": "AI-powered eCommerce management. 8 specialized agents that build, manage, and grow your Shopify, Etsy, eBay, and social media presence. Automate product listings, social posting, customer support, and analytics.",
+    "description": "AI-powered eCommerce management with coordinated store, marketing, analytics, and customer support agents for modern commerce teams.",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",

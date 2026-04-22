@@ -5,7 +5,7 @@ import { useLocalSearchParams } from 'expo-router';
 import { BlurView } from 'expo-blur';
 import Animated, { FadeInDown, FadeIn, LinearTransition, Easing, withRepeat, withTiming, useSharedValue, useAnimatedStyle } from 'react-native-reanimated';
 import { Colors, Typography } from '../../constants/theme';
-import { Send, Bot, User, ShoppingCart, TrendingUp, Mail, Users, Calculator, BrainCircuit, BarChart2, Shield, Settings } from 'lucide-react-native';
+import { Send, Bot, ShoppingCart, TrendingUp, Mail, Users, Calculator, BrainCircuit, BarChart2, Shield, Settings, Headphones, CircleCheckBig, CircleX } from 'lucide-react-native';
 import AnimatedPressable from '../../components/AnimatedPressable';
 import * as Haptics from 'expo-haptics';
 import { authFetch } from '../../utils/api';
@@ -13,12 +13,44 @@ import { authFetch } from '../../utils/api';
 const { width: W } = Dimensions.get('window');
 
 type Message = { id: string; role: string; content: string; timestamp: string; agent_type?: string };
+type PendingAction = {
+  id: string;
+  action_type: string;
+  status: string;
+  created_at: string;
+  store_name?: string;
+  platform?: string;
+  payload?: {
+    title?: string;
+    price?: string;
+  };
+};
+
+function createStarterMessage(agentType: string): Message {
+  return {
+    id: `starter_${agentType}`,
+    role: 'assistant',
+    content: 'How can I assist you with your workspace operations today?',
+    timestamp: new Date().toISOString(),
+    agent_type: agentType,
+  };
+}
+
+function formatApiError(detail: unknown): string {
+  if (!detail) return 'Something went wrong. Please try again.';
+  if (typeof detail === 'string') return detail;
+  if (Array.isArray(detail)) return detail.map((item) => String(item?.msg || item)).join(' ');
+  if (typeof detail === 'object' && detail && 'detail' in detail) return formatApiError((detail as { detail?: unknown }).detail);
+  return String(detail);
+}
 
 const AGENTS: Record<string, { name: string; icon: any; color: string }> = {
   general: { name: 'orchestrAI', icon: BrainCircuit, color: Colors.emerald },
   shopify: { name: 'Shopify EA', icon: ShoppingCart, color: '#95BF47' },
+  store_manager: { name: 'Store Manager', icon: ShoppingCart, color: Colors.emerald },
   marketing_suite: { name: 'Marketing Exec', icon: TrendingUp, color: Colors.blue },
   analytics: { name: 'Data Analyst', icon: BarChart2, color: Colors.accent },
+  customer_service: { name: 'Customer Care', icon: Headphones, color: '#FB7185' },
   email: { name: 'Comms Exec', icon: Mail, color: '#fff' },
   crm: { name: 'CRM Specialist', icon: Users, color: '#F59E0B' },
   finance: { name: 'CFO AI', icon: Calculator, color: '#10B981' },
@@ -52,15 +84,56 @@ function TypingIndicator() {
 
 export default function ChatScreen() {
   const params = useLocalSearchParams<{ agent?: string }>();
-  const [messages, setMessages] = useState<Message[]>([
-    { id: 'system_1', role: 'assistant', content: 'How can I assist you with your workspace operations today?', timestamp: new Date().toISOString(), agent_type: params.agent || 'general' }
-  ]);
+  const selectedAgent = typeof params.agent === 'string' ? params.agent : 'general';
+  const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [sending, setSending] = useState(false);
+  const [loadingHistory, setLoadingHistory] = useState(true);
+  const [pendingActions, setPendingActions] = useState<PendingAction[]>([]);
+  const [updatingActionId, setUpdatingActionId] = useState<string | null>(null);
   const listRef = useRef<FlatList>(null);
   
-  const currentAgent = params.agent ? (AGENTS[params.agent] || AGENTS.general) : AGENTS.general;
+  const currentAgent = AGENTS[selectedAgent] || AGENTS.general;
   const ActiveIcon = currentAgent.icon;
+
+  const loadHistory = useCallback(async () => {
+    setLoadingHistory(true);
+    try {
+      const [historyRes, actionsRes] = await Promise.all([
+        authFetch(`/api/chat/history/${selectedAgent}`),
+        authFetch('/api/stores/actions/pending'),
+      ]);
+
+      if (!historyRes.ok) {
+        setMessages([createStarterMessage(selectedAgent)]);
+      } else {
+        const history = (await historyRes.json()) as Array<Omit<Message, 'id'> & { id?: string }>;
+        if (!history.length) {
+          setMessages([createStarterMessage(selectedAgent)]);
+        } else {
+          setMessages(history.map((message, index) => ({
+            ...message,
+            id: message.id || `${message.timestamp}_${message.role}_${index}`,
+          })));
+        }
+      }
+
+      if (actionsRes.ok) {
+        setPendingActions(await actionsRes.json());
+      } else {
+        setPendingActions([]);
+      }
+    } catch {
+      setMessages([createStarterMessage(selectedAgent)]);
+      setPendingActions([]);
+    } finally {
+      setLoadingHistory(false);
+    }
+  }, [selectedAgent]);
+
+  useEffect(() => {
+    loadHistory();
+  }, [loadHistory]);
 
   const sendMessage = async () => {
     if (!input.trim() || sending) return;
@@ -75,18 +148,144 @@ export default function ChatScreen() {
     try {
       const res = await authFetch('/api/chat', {
         method: 'POST',
-        body: JSON.stringify({ message: userMessage.content, agent_type: params.agent || 'general' })
+        body: JSON.stringify({ message: userMessage.content, agent_type: selectedAgent })
       });
-      if (res.ok) {
-        const data = await res.json();
-        setMessages(prev => [...prev, { id: Date.now().toString() + 'r', role: 'assistant', content: data.reply || data.response, timestamp: new Date().toISOString(), agent_type: params.agent || 'general' }]);
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+
+      const data = await res.json();
+      if (!res.ok) {
+        const errorMessage = formatApiError(data?.detail);
+        setMessages(prev => [...prev, {
+          id: `${Date.now()}_error`,
+          role: 'assistant',
+          content: errorMessage,
+          timestamp: new Date().toISOString(),
+          agent_type: selectedAgent,
+        }]);
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+        return;
       }
+
+      setMessages(prev => [...prev, {
+        id: Date.now().toString() + 'r',
+        role: 'assistant',
+        content: data.content || 'No response returned.',
+        timestamp: new Date().toISOString(),
+        agent_type: selectedAgent,
+      }]);
+      if (Array.isArray(data.queued_actions) && data.queued_actions.length > 0) {
+        setPendingActions(prev => [
+          ...data.queued_actions.map((action: { id: string; type: string; title?: string; price?: string }) => ({
+            id: action.id,
+            action_type: action.type,
+            status: 'pending',
+            created_at: new Date().toISOString(),
+            payload: {
+              title: action.title,
+              price: action.price,
+            },
+          })),
+          ...prev,
+        ]);
+      }
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch {
+      setMessages(prev => [...prev, {
+        id: `${Date.now()}_network_error`,
+        role: 'assistant',
+        content: 'Connection error. Please try again.',
+        timestamp: new Date().toISOString(),
+        agent_type: selectedAgent,
+      }]);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
     } finally {
       setSending(false);
     }
+  };
+
+  const updateActionStatus = async (actionId: string, decision: 'approve' | 'reject') => {
+    if (updatingActionId) return;
+    setUpdatingActionId(actionId);
+
+    try {
+      const res = await authFetch(`/api/stores/actions/${actionId}/${decision}`, {
+        method: 'POST',
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        setMessages(prev => [...prev, {
+          id: `${Date.now()}_${decision}_error`,
+          role: 'assistant',
+          content: formatApiError(data?.detail),
+          timestamp: new Date().toISOString(),
+          agent_type: selectedAgent,
+        }]);
+        return;
+      }
+
+      setPendingActions(prev => prev.filter(action => action.id !== actionId));
+      setMessages(prev => [...prev, {
+        id: `${Date.now()}_${decision}`,
+        role: 'assistant',
+        content: decision === 'approve' ? 'Approved and dispatched that action.' : 'Rejected that pending action.',
+        timestamp: new Date().toISOString(),
+        agent_type: selectedAgent,
+      }]);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } catch {
+      setMessages(prev => [...prev, {
+        id: `${Date.now()}_${decision}_network_error`,
+        role: 'assistant',
+        content: 'Unable to update that action right now. Please try again.',
+        timestamp: new Date().toISOString(),
+        agent_type: selectedAgent,
+      }]);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+    } finally {
+      setUpdatingActionId(null);
+    }
+  };
+
+  const renderPendingActions = () => {
+    if (!pendingActions.length) return null;
+
+    return (
+      <View style={styles.pendingSection}>
+        <Text style={styles.pendingTitle}>Pending approvals</Text>
+        <Text style={styles.pendingSubtitle}>Review store actions before they execute.</Text>
+        <View style={styles.pendingList}>
+          {pendingActions.slice(0, 3).map((action) => (
+            <View key={action.id} style={styles.pendingCard}>
+              <View style={styles.pendingCardHeader}>
+                <Text style={styles.pendingActionType}>{action.action_type.replace(/_/g, ' ')}</Text>
+                <Text style={styles.pendingPlatform}>{action.platform || action.store_name || 'Store action'}</Text>
+              </View>
+              <Text style={styles.pendingActionTitle}>{action.payload?.title || 'Awaiting approval'}</Text>
+              {action.payload?.price ? <Text style={styles.pendingMeta}>Price: {action.payload.price}</Text> : null}
+              <View style={styles.pendingActionsRow}>
+                <AnimatedPressable
+                  scaleDown={0.94}
+                  style={[styles.pendingBtn, styles.pendingApprove, updatingActionId === action.id && styles.pendingBtnDisabled]}
+                  onPress={() => updateActionStatus(action.id, 'approve')}
+                  disabled={updatingActionId === action.id}
+                >
+                  <CircleCheckBig size={16} color={Colors.bg} />
+                  <Text style={styles.pendingApproveText}>Approve</Text>
+                </AnimatedPressable>
+                <AnimatedPressable
+                  scaleDown={0.94}
+                  style={[styles.pendingBtn, styles.pendingReject, updatingActionId === action.id && styles.pendingBtnDisabled]}
+                  onPress={() => updateActionStatus(action.id, 'reject')}
+                  disabled={updatingActionId === action.id}
+                >
+                  <CircleX size={16} color={Colors.text} />
+                  <Text style={styles.pendingRejectText}>Reject</Text>
+                </AnimatedPressable>
+              </View>
+            </View>
+          ))}
+        </View>
+      </View>
+    );
   };
 
   const renderMessage = ({ item, index }: { item: Message, index: number }) => {
@@ -133,6 +332,8 @@ export default function ChatScreen() {
         showsVerticalScrollIndicator={false}
         onContentSizeChange={() => listRef.current?.scrollToEnd({ animated: true })}
         ListFooterComponent={sending ? <TypingIndicator /> : null}
+        ListEmptyComponent={loadingHistory ? <ActivityIndicator size="small" color={Colors.emerald} /> : null}
+        ListHeaderComponent={renderPendingActions}
       />
 
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
@@ -197,6 +398,95 @@ const styles = StyleSheet.create({
     padding: 24,
     paddingBottom: 40,
     gap: 20,
+  },
+  pendingSection: {
+    marginBottom: 24,
+  },
+  pendingTitle: {
+    fontFamily: Typography.fonts.outfitB,
+    fontSize: 18,
+    color: Colors.text,
+  },
+  pendingSubtitle: {
+    fontFamily: Typography.fonts.manropeM,
+    fontSize: 13,
+    color: Colors.textSecondary,
+    marginTop: 4,
+    marginBottom: 12,
+  },
+  pendingList: {
+    gap: 12,
+  },
+  pendingCard: {
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.08)',
+    padding: 16,
+  },
+  pendingCardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+    gap: 12,
+  },
+  pendingActionType: {
+    fontFamily: Typography.fonts.outfitSB,
+    fontSize: 14,
+    color: Colors.emerald,
+    textTransform: 'capitalize',
+  },
+  pendingPlatform: {
+    fontFamily: Typography.fonts.manropeM,
+    fontSize: 12,
+    color: Colors.textSecondary,
+  },
+  pendingActionTitle: {
+    fontFamily: Typography.fonts.manropeSB,
+    fontSize: 15,
+    color: Colors.text,
+  },
+  pendingMeta: {
+    fontFamily: Typography.fonts.manropeM,
+    fontSize: 13,
+    color: Colors.textSecondary,
+    marginTop: 4,
+  },
+  pendingActionsRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 14,
+  },
+  pendingBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 8,
+    borderRadius: 14,
+    paddingVertical: 12,
+  },
+  pendingApprove: {
+    backgroundColor: Colors.emerald,
+  },
+  pendingReject: {
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.08)',
+  },
+  pendingBtnDisabled: {
+    opacity: 0.55,
+  },
+  pendingApproveText: {
+    fontFamily: Typography.fonts.manropeSB,
+    fontSize: 14,
+    color: Colors.bg,
+  },
+  pendingRejectText: {
+    fontFamily: Typography.fonts.manropeSB,
+    fontSize: 14,
+    color: Colors.text,
   },
   bubbleWrapper: {
     flexDirection: 'row',

@@ -14,6 +14,7 @@ const { width } = Dimensions.get('window');
 
 const AGENT_MAPPINGS: Record<string, { icon: any, color: string, badge: string }> = {
   // Store EAs
+  store_manager: { icon: ShoppingBag, color: Colors.emerald, badge: 'STORE' },
   shopify: { icon: ShoppingBag, color: '#96BF48', badge: 'STORE' },
   etsy: { icon: Package, color: '#F1641E', badge: 'STORE' },
   ebay: { icon: Tag, color: '#E53238', badge: 'STORE' },
@@ -24,6 +25,7 @@ const AGENT_MAPPINGS: Record<string, { icon: any, color: string, badge: string }
   // Employee EAs
   marketing_suite: { icon: Megaphone, color: '#FE2C55', badge: 'MARKETING' },
   analytics: { icon: Activity, color: '#0866FF', badge: 'INTELLIGENCE' },
+  customer_service: { icon: ShieldCheck, color: '#FB7185', badge: 'CUSTOMER' },
   email: { icon: Mail, color: '#EA4335', badge: 'COMMUNICATION' },
   crm: { icon: Users, color: '#FF7A59', badge: 'CRM' },
   finance: { icon: DollarSign, color: '#2CA01C', badge: 'FINANCE' },
@@ -36,9 +38,29 @@ const AGENT_MAPPINGS: Record<string, { icon: any, color: string, badge: string }
   default: { icon: Bot, color: Colors.emerald, badge: 'AGENT' },
 };
 
+type AgentCard = {
+  agent_type: string;
+  name: string;
+  tasks_completed: number;
+  capabilities?: string[];
+  is_active: boolean;
+  last_active?: string | null;
+};
+
+function formatLastActive(timestamp?: string | null): string {
+  if (!timestamp) return 'Ready for new work';
+  const diffMinutes = Math.max(0, Math.round((Date.now() - new Date(timestamp).getTime()) / 60000));
+  if (diffMinutes < 1) return 'Active just now';
+  if (diffMinutes < 60) return `Active ${diffMinutes}m ago`;
+  const diffHours = Math.round(diffMinutes / 60);
+  if (diffHours < 24) return `Active ${diffHours}h ago`;
+  const diffDays = Math.round(diffHours / 24);
+  return `Active ${diffDays}d ago`;
+}
+
 export default function AgentsHubScreen() {
   const router = useRouter();
-  const [agents, setAgents] = useState<any[]>([]);
+  const [agents, setAgents] = useState<AgentCard[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -98,6 +120,7 @@ export default function AgentsHubScreen() {
                   </View>
                   
                   <Text style={s.agentName}>{agent.name}</Text>
+                  <Text style={s.agentMeta}>{formatLastActive(agent.last_active)}</Text>
                   
                   <View style={s.statsWrap}>
                     <View style={s.statBox}>
@@ -106,8 +129,8 @@ export default function AgentsHubScreen() {
                     </View>
                     <View style={s.statDiv} />
                     <View style={s.statBox}>
-                      <Text style={s.statVal}>Lvl {agent.level}</Text>
-                      <Text style={s.statLabel}>Skill</Text>
+                      <Text style={s.statVal}>{agent.capabilities?.length || 0}</Text>
+                      <Text style={s.statLabel}>Skills</Text>
                     </View>
                   </View>
                   
@@ -153,6 +176,7 @@ const s = StyleSheet.create({
   activeDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: Colors.emerald, shadowColor: Colors.emerald, shadowOpacity: 0.8, shadowRadius: 4, shadowOffset: { width: 0, height: 0 } },
   iconBox: { width: 64, height: 64, borderRadius: 20, justifyContent: 'center', alignItems: 'center', marginBottom: 16 },
   agentName: { color: Colors.textPrimary, fontSize: 18, fontFamily: Fonts.bold, letterSpacing: -0.3, textAlign: 'center' },
+  agentMeta: { color: Colors.textSecondary, fontSize: 12, fontFamily: Fonts.bodyMedium, marginTop: 6, textAlign: 'center' },
   statsWrap: { flexDirection: 'row', marginTop: 'auto', paddingTop: 16, width: '100%', alignItems: 'center', borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.05)' },
   statBox: { flex: 1, alignItems: 'center' },
   statDiv: { width: 1, height: 20, backgroundColor: 'rgba(255,255,255,0.1)' },
