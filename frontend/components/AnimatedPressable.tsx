@@ -36,6 +36,8 @@ export function AnimatedPressable({
       } else {
         Haptics.notificationAsync(haptic as Haptics.NotificationFeedbackType);
       }
+    } else {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     }
     if (onPressIn) onPressIn(e);
   };

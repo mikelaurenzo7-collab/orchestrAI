@@ -14,31 +14,23 @@ const { width: W } = Dimensions.get('window');
 interface SocialPost {
   id: string;
   content: string;
-  platforms: string[];
+  platform?: string;
+  platforms?: string[];
+  product_name?: string;
   status: 'draft' | 'published' | 'scheduled';
   scheduled_for?: string;
   created_at: string;
   metrics?: { likes: number, clicks: number, shares: number };
 }
 
-// Dummy robust placeholder
-const MOCK_POST: SocialPost = {
-  id: '01',
-  content: 'Just launched our new automated compliance tracking features. 🚀\n\nSave your team 40+ hours a month by letting orchestrAI handle vendor vetting. Sign up for early access today! 👇',
-  platforms: ['twitter', 'linkedin'],
-  status: 'published',
-  created_at: new Date().toISOString(),
-  metrics: { likes: 2400, clicks: 850, shares: 140 }
-};
-
 export default function SocialScreen() {
-  const [posts, setPosts] = useState<SocialPost[]>([MOCK_POST]);
+  const [posts, setPosts] = useState<SocialPost[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
   const fetchPosts = useCallback(async () => {
     try {
-      const res = await authFetch('/api/social/posts');
+      const res = await authFetch('/api/social/content');
       if (res.ok) {
         const data = await res.json();
         if (data.length > 0) setPosts(data);
@@ -56,7 +48,7 @@ export default function SocialScreen() {
   const renderPost = ({ item, index }: { item: SocialPost, index: number }) => {
     return (
       <Animated.View entering={FadeInDown.delay(index * 150).duration(600).springify().damping(16)} layout={LinearTransition}>
-        <AnimatedPressable scaleDown={0.97} onPress={() => Haptics.selectionAsync()} style={styles.cardBox}>
+        <AnimatedPressable testID={`social-post-${item.id}`} scaleDown={0.97} onPress={() => Haptics.selectionAsync()} style={styles.cardBox}>
           <BlurView intensity={25} tint="dark" style={styles.card}>
             
             <View style={styles.cardHeader}>
@@ -65,8 +57,8 @@ export default function SocialScreen() {
                   <Bot size={20} color={Colors.emerald} />
                 </View>
                 <View>
-                  <Text style={styles.authorName}>Marketing AI Exec</Text>
-                  <Text style={styles.timestamp}>2h ago • {item.platforms.join(', ')}</Text>
+                  <Text style={styles.authorName}>{item.product_name || 'Marketing AI Exec'}</Text>
+                  <Text style={styles.timestamp}>{new Date(item.created_at).toLocaleDateString()} • {item.platform || item.platforms?.join(', ')}</Text>
                 </View>
               </View>
               <AnimatedPressable onPress={() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)}>
@@ -119,7 +111,7 @@ export default function SocialScreen() {
           <Text style={styles.title}>Broadcast</Text>
           <Text style={styles.subtitle}>AI-generated social campaigns</Text>
         </View>
-        <AnimatedPressable scaleDown={0.9} style={styles.composeBtn} onPress={handleCompose}>
+        <AnimatedPressable testID="social-draft-button" haptic={Haptics.ImpactFeedbackStyle.Medium} scaleDown={0.9} style={styles.composeBtn} onPress={handleCompose}>
           <PenTool size={20} color={Colors.bg} />
           <Text style={styles.composeTxt}>Draft</Text>
         </AnimatedPressable>

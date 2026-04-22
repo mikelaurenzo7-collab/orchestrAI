@@ -127,19 +127,19 @@ export default function OnboardingScreen() {
 
                 <View style={s.field}>
                   <Text style={s.label}>Brand name</Text>
-                  <TextInput testID="onboard-brand" style={s.input} value={brandName} onChangeText={setBrandName}
+                  <TextInput testID="onboarding-brand-input" style={s.input} value={brandName} onChangeText={setBrandName}
                     placeholder="Luna Vintage, FitGear Co..." placeholderTextColor="#475569" />
                 </View>
                 <View style={s.field}>
                   <Text style={s.label}>What do you sell?</Text>
-                  <TextInput testID="onboard-niche" style={s.input} value={niche} onChangeText={setNiche}
+                  <TextInput testID="onboarding-niche-input" style={s.input} value={niche} onChangeText={setNiche}
                     placeholder="Handmade jewelry, fitness gear..." placeholderTextColor="#475569" />
                 </View>
                 <View style={s.field}>
                   <Text style={s.label}>Brand voice</Text>
                   <View style={s.voiceRow}>
                     {VOICES.map(v => (
-                      <TouchableOpacity key={v.id} testID={`voice-${v.id}`}
+                      <TouchableOpacity key={v.id} testID={`onboarding-voice-${v.id}`}
                         style={[s.voiceChip, voice === v.id && s.voiceActive]}
                         onPress={() => setVoice(v.id)}>
                         <Text style={{ fontSize: 16 }}>{v.emoji}</Text>
@@ -161,7 +161,7 @@ export default function OnboardingScreen() {
 
                 <View style={s.goalList}>
                   {GOALS.map(g => (
-                    <TouchableOpacity key={g.id} testID={`goal-${g.id}`}
+                    <TouchableOpacity key={g.id} testID={`onboarding-goal-${g.id}`}
                       style={[s.goalRow, goal === g.id && s.goalActive]}
                       onPress={() => setGoal(g.id)} activeOpacity={0.7}>
                       <Text style={{ fontSize: 24 }}>{g.icon}</Text>
@@ -208,20 +208,20 @@ export default function OnboardingScreen() {
           {/* Navigation */}
           <View style={s.nav}>
             {step > 0 && step < 3 ? (
-              <TouchableOpacity testID="onboard-back" style={s.backBtn} onPress={() => animateStep(step - 1)}>
+              <TouchableOpacity testID="onboarding-back-button" style={s.backBtn} onPress={() => animateStep(step - 1)}>
                 <Text style={s.backText}>Back</Text>
               </TouchableOpacity>
             ) : <View style={{ width: 60 }} />}
             <View style={{ flex: 1 }} />
             {step < 3 ? (
-              <TouchableOpacity testID="onboard-next"
+              <TouchableOpacity testID="onboarding-next-button"
                 style={[s.nextBtn, step === 2 && !goal && { opacity: 0.35 }]}
                 onPress={() => { Keyboard.dismiss(); animateStep(step + 1); }}
                 disabled={step === 2 && !goal}>
                 <Text style={s.nextText}>{step === 0 ? "Let's go" : 'Continue'}</Text>
               </TouchableOpacity>
             ) : (
-              <TouchableOpacity testID="onboard-finish" style={s.launchBtn} onPress={finish}>
+              <TouchableOpacity testID="onboarding-finish-button" style={s.launchBtn} onPress={finish}>
                 <Text style={s.launchText}>Enter Command Center</Text>
               </TouchableOpacity>
             )}

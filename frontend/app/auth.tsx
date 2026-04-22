@@ -135,6 +135,7 @@ export default function AuthScreen() {
                 <Animated.View entering={FadeIn.duration(400)} style={styles.inputGroup}>
                   <User size={20} color={Colors.textSecondary} style={styles.inputIcon} />
                   <TextInput
+                    testID="auth-name-input"
                     style={styles.input}
                     placeholder="Full Name"
                     placeholderTextColor={Colors.textSecondary}
@@ -148,6 +149,7 @@ export default function AuthScreen() {
               <View style={styles.inputGroup}>
                 <Mail size={20} color={Colors.textSecondary} style={styles.inputIcon} />
                 <TextInput
+                  testID="auth-email-input"
                   style={styles.input}
                   placeholder="Email Address"
                   placeholderTextColor={Colors.textSecondary}
@@ -162,6 +164,7 @@ export default function AuthScreen() {
               <View style={styles.inputGroup}>
                 <Lock size={20} color={Colors.textSecondary} style={styles.inputIcon} />
                 <TextInput
+                  testID="auth-password-input"
                   style={styles.input}
                   placeholder="Password"
                   placeholderTextColor={Colors.textSecondary}
@@ -172,7 +175,7 @@ export default function AuthScreen() {
                 />
               </View>
 
-              <AnimatedPressable scaleDown={0.96} style={styles.submitBtn} onPress={handleSubmit}>
+              <AnimatedPressable testID="auth-submit-button" haptic={Haptics.ImpactFeedbackStyle.Heavy} scaleDown={0.96} style={styles.submitBtn} onPress={handleSubmit}>
                 <Text style={styles.submitTxt}>{loading ? 'Processing...' : (isLogin ? 'Sign In' : 'Create Account')}</Text>
                 {!loading && <ArrowRight size={20} color={Colors.bg} />}
               </AnimatedPressable>
@@ -181,7 +184,7 @@ export default function AuthScreen() {
                 <Text style={styles.footerTxt}>
                   {isLogin ? "Don't have an account? " : "Already have an account? "}
                 </Text>
-                <AnimatedPressable onPress={toggleMode}>
+                <AnimatedPressable testID="auth-toggle-mode" onPress={toggleMode}>
                   <Text style={styles.footerLink}>{isLogin ? 'Sign up' : 'Sign in'}</Text>
                 </AnimatedPressable>
               </View>

@@ -10,6 +10,7 @@ import { Sparkles, ArrowRight, Store, Bot, CheckCircle2, DollarSign, ShoppingCar
 import Animated, { FadeInDown, FadeIn, SlideInRight } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
 import { AnimatedPressable } from '../../components/AnimatedPressable';
+import TracingBeam from '../../components/TracingBeam';
 
 const { width } = Dimensions.get('window');
 
@@ -37,7 +38,7 @@ function TrialBanner({ trialEnds }: { trialEnds?: string }) {
             <Text style={tb.sub}>{days} days remaining</Text>
           </View>
         </View>
-        <AnimatedPressable haptic={Haptics.ImpactFeedbackStyle.Medium} style={tb.btn} scaleDown={0.92}>
+        <AnimatedPressable testID="upgrade-trial-button" haptic={Haptics.ImpactFeedbackStyle.Medium} style={tb.btn} scaleDown={0.92}>
           <Text style={tb.btnText}>Upgrade</Text>
         </AnimatedPressable>
       </BlurView>
@@ -48,14 +49,16 @@ function TrialBanner({ trialEnds }: { trialEnds?: string }) {
 function StatCard({ title, value, sub, Icon, color, delay }: { title: string, value: string | number, sub?: string, Icon: any, color: string, delay: number }) {
   return (
     <Animated.View entering={FadeInDown.duration(600).delay(delay)} style={[stat.card, { borderColor: `${color}30` }]}>
-      <BlurView intensity={30} tint="dark" style={stat.blurInner}>
-        <View style={[stat.iconWrap, { backgroundColor: `${color}15` }]}>
-          <Icon size={20} color={color} />
-        </View>
-        <Text style={stat.title}>{title}</Text>
-        <Text style={stat.val}>{value}</Text>
-        {sub && <Text style={stat.sub}>{sub}</Text>}
-      </BlurView>
+      <TracingBeam color={color} duration={4000}>
+        <BlurView intensity={30} tint="dark" style={stat.blurInner}>
+          <View style={[stat.iconWrap, { backgroundColor: `${color}15` }]}>
+            <Icon size={20} color={color} />
+          </View>
+          <Text style={stat.title}>{title}</Text>
+          <Text style={stat.val}>{value}</Text>
+          {sub && <Text style={stat.sub}>{sub}</Text>}
+        </BlurView>
+      </TracingBeam>
     </Animated.View>
   );
 }
@@ -90,7 +93,7 @@ export default function DashboardScreen() {
           <Text style={s.greets}>Good morning,</Text>
           <Text style={s.name}>{user?.name?.split(' ')[0] || 'Founder'}</Text>
         </View>
-        <AnimatedPressable haptic={Haptics.ImpactFeedbackStyle.Light} scaleDown={0.9} style={s.profileBtn}>
+        <AnimatedPressable testID="profile-button" haptic={Haptics.ImpactFeedbackStyle.Light} scaleDown={0.9} style={s.profileBtn}>
           <Text style={s.profileInit}>{(user?.name?.[0] || 'O').toUpperCase()}</Text>
         </AnimatedPressable>
       </Animated.View>

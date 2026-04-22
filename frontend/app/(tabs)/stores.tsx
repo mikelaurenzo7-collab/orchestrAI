@@ -6,6 +6,7 @@ import { BlurView } from 'expo-blur';
 import { Colors, Typography } from '../../constants/theme';
 import { Plus, Link, Power, PowerOff, ShieldCheck, CreditCard, ShoppingCart, Key, ShieldAlert } from 'lucide-react-native';
 import AnimatedPressable from '../../components/AnimatedPressable';
+import GlassModal from '../../components/GlassModal';
 import * as Haptics from 'expo-haptics';
 import { authFetch } from '../../utils/api';
 
@@ -31,6 +32,7 @@ export default function StoresScreen() {
   const [stores, setStores] = useState<OrgStore[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [modalVisible, setModalVisible] = useState(false);
 
   const fetchStores = useCallback(async () => {
     try {
@@ -43,21 +45,8 @@ export default function StoresScreen() {
   useEffect(() => { fetchStores(); }, [fetchStores]);
 
   const handleAddIntegration = () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    ActionSheetIOS.showActionSheetWithOptions(
-      {
-        title: 'Add Integration',
-        message: 'Select a platform to connect your workspace',
-        options: ['Cancel', ...PLATFORMS.map(p => p.name)],
-        cancelButtonIndex: 0,
-      },
-      (buttonIndex) => {
-        if (buttonIndex === 0) return;
-        Haptics.selectionAsync();
-        // Trigger modal flow here in a real app
-        alert('Platform selected: ' + PLATFORMS[buttonIndex - 1].name);
-      }
-    );
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    setModalVisible(true);
   };
 
   const renderStore = ({ item, index }: { item: OrgStore, index: number }) => {
@@ -103,12 +92,28 @@ export default function StoresScreen() {
 
   return (
     <SafeAreaView edges={['top']} style={styles.container}>
+      <GlassModal
+        visible={modalVisible}
+        onClose={() => setModalVisible(false)}
+        title="Add Integration"
+        message="Select a platform to connect your workspace"
+        options={PLATFORMS.map(p => ({
+          label: p.name,
+          value: p.id,
+          icon: p.icon,
+          color: p.color
+        }))}
+        onSelect={(value) => {
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+          alert('Platform selected: ' + value);
+        }}
+      />
       <Animated.View entering={FadeIn.duration(600)} style={styles.header}>
         <View>
           <Text style={styles.title}>Integrations</Text>
           <Text style={styles.subtitle}>Connect your business data</Text>
         </View>
-        <AnimatedPressable scaleDown={0.9} style={styles.addBtn} onPress={handleAddIntegration}>
+        <AnimatedPressable testID="add-integration-button" haptic={Haptics.ImpactFeedbackStyle.Medium} scaleDown={0.9} style={styles.addBtn} onPress={handleAddIntegration}>
           <Plus size={24} color={Colors.bg} />
         </AnimatedPressable>
       </Animated.View>
