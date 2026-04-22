@@ -61,6 +61,87 @@ struct PulseIndicator: View {
     }
 }
 
+// MARK: - SwiftUI Tracing Beam
+
+struct TracingBeamEffect: View {
+    let color: Color
+    @State private var position: CGFloat = 0
+
+    var body: some View {
+        GeometryReader { geometry in
+            let w = geometry.size.width
+            let h = geometry.size.height
+            let perimeter = (w + h) * 2
+
+            ZStack {
+                Capsule()
+                    .fill(
+                        LinearGradient(
+                            colors: [.clear, color, .clear],
+                            startPoint: .leading,
+                            endPoint: .trailing
+                        )
+                    )
+                    .frame(width: 80, height: 2)
+                    .offset(x: -40) // Center the beam on the path
+                    .modifier(BeamPathModifier(pct: position, size: geometry.size))
+            }
+            .onAppear {
+                withAnimation(.linear(duration: 4.0).repeatForever(autoreverses: false)) {
+                    position = 1.0
+                }
+            }
+        }
+    }
+}
+
+struct BeamPathModifier: ViewModifier {
+    var pct: CGFloat
+    var size: CGSize
+
+    func body(content: Content) -> some View {
+        let w = size.width
+        let h = size.height
+        let perimeter = (w + h) * 2
+        let distance = pct * perimeter
+
+        var x: CGFloat = 0
+        var y: CGFloat = 0
+        var angle: Angle = .zero
+
+        if distance <= w {
+            x = distance
+            y = 0
+            angle = .zero
+        } else if distance <= w + h {
+            x = w
+            y = distance - w
+            angle = .degrees(90)
+        } else if distance <= w * 2 + h {
+            x = w - (distance - (w + h))
+            y = h
+            angle = .degrees(180)
+        } else {
+            x = 0
+            y = h - (distance - (w * 2 + h))
+            angle = .degrees(270)
+        }
+
+        return content
+            .rotationEffect(angle)
+            .position(x: x, y: y)
+    }
+}
+
+extension View {
+    func tracingBeam(color: Color) -> some View {
+        ZStack {
+            self
+            TracingBeamEffect(color: color)
+        }
+    }
+}
+
 // MARK: - Shimmer Loading
 
 struct ShimmerModifier: ViewModifier {

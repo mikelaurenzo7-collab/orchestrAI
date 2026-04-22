@@ -8,6 +8,8 @@ import { useRouter } from 'expo-router';
 import { useAuth } from '../contexts/AuthContext';
 import { authFetch } from '../utils/api';
 import { Colors, BorderRadius } from '../constants/theme';
+import * as Haptics from 'expo-haptics';
+import TracingBeam from '../components/TracingBeam';
 
 const { width: W } = Dimensions.get('window');
 
@@ -50,6 +52,7 @@ export default function OnboardingScreen() {
   const totalSteps = 4;
 
   const animateStep = (next: number) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     Animated.parallel([
       Animated.timing(fadeAnim, { toValue: 0, duration: 150, useNativeDriver: true }),
       Animated.timing(slideAnim, { toValue: -20, duration: 150, useNativeDriver: true }),
@@ -73,6 +76,7 @@ export default function OnboardingScreen() {
   };
 
   const finish = async () => {
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     await saveProfile();
     router.replace('/(tabs)');
   };
@@ -180,6 +184,7 @@ export default function OnboardingScreen() {
                 <Text style={s.h1}>You're Ready</Text>
                 <Text style={s.sub}>Your AI team is online and waiting.</Text>
 
+                <TracingBeam color={Colors.emerald} duration={2000}>
                 <View style={s.readyCard}>
                   {brandName ? <Text style={s.readyBrand}>{brandName}</Text> : null}
                   <View style={s.readyStats}>
@@ -199,6 +204,7 @@ export default function OnboardingScreen() {
                     </View>
                   </View>
                 </View>
+                </TracingBeam>
 
                 <Text style={s.readyTip}>Connect your first store or social account to activate your agents.</Text>
               </View>
@@ -238,7 +244,7 @@ const s = StyleSheet.create({
   // Progress
   progressWrap: { flexDirection: 'row', alignItems: 'center', marginTop: 12, marginBottom: 32, gap: 12 },
   progressTrack: { flex: 1, height: 3, backgroundColor: '#1E293B', borderRadius: 2, overflow: 'hidden' },
-  progressFill: { height: '100%', backgroundColor: Colors.emerald, borderRadius: 2 },
+  progressFill: { height: '100%', backgroundColor: Colors.emerald, borderRadius: 2, shadowColor: Colors.emerald, shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.8, shadowRadius: 4 },
   progressLabel: { fontSize: 12, fontWeight: '700', color: '#475569', width: 28 },
   // Typography
   body: { flex: 1 },
