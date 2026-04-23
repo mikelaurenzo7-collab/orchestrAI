@@ -82,7 +82,7 @@ export default function TabLayout() {
         listeners={{ tabPress: () => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light) }}
       />
       <Tabs.Screen
-        name="social"
+        name="execute"
         options={{
           tabBarIcon: ({ focused, color }) => (
             <TabIcon label="Execute" Icon={Zap} focused={focused} color={color} />

@@ -22,5 +22,19 @@ export async function authFetch(path: string, options: RequestInit = {}): Promis
     ...(options.headers as Record<string, string> || {}),
   };
   if (token) headers['Authorization'] = `Bearer ${token}`;
-  return fetch(`${API}${path}`, { ...options, headers });
+
+  try {
+    const response = await fetch(`${API}${path}`, { ...options, headers });
+
+    if (response.status === 401) {
+      console.warn('Unauthorized request, clearing token');
+      await AsyncStorage.removeItem('auth_token');
+      setCachedToken(null);
+    }
+
+    return response;
+  } catch (error) {
+    console.error(`Fetch error for ${path}:`, error);
+    throw error;
+  }
 }
