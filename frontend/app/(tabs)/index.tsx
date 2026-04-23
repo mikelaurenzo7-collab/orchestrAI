@@ -25,6 +25,8 @@ function TrialBanner({ trialEnds }: { trialEnds?: string }) {
   const now = new Date();
   const days = Math.max(0, Math.ceil((end.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)));
   
+  const router = useRouter();
+
   return (
     <Animated.View entering={FadeInDown.duration(600).delay(100)}>
       <BlurView intensity={40} tint="dark" style={tb.banner}>
@@ -37,7 +39,13 @@ function TrialBanner({ trialEnds }: { trialEnds?: string }) {
             <Text style={tb.sub}>{days} days remaining</Text>
           </View>
         </View>
-        <AnimatedPressable haptic={Haptics.ImpactFeedbackStyle.Medium} style={tb.btn} scaleDown={0.92}>
+        <AnimatedPressable
+          testID="upgrade-banner-btn"
+          haptic={Haptics.ImpactFeedbackStyle.Medium}
+          style={tb.btn}
+          scaleDown={0.92}
+          onPress={() => router.push('/pricing')}
+        >
           <Text style={tb.btnText}>Upgrade</Text>
         </AnimatedPressable>
       </BlurView>
@@ -90,7 +98,12 @@ export default function DashboardScreen() {
           <Text style={s.greets}>Good morning,</Text>
           <Text style={s.name}>{user?.name?.split(' ')[0] || 'Founder'}</Text>
         </View>
-        <AnimatedPressable haptic={Haptics.ImpactFeedbackStyle.Light} scaleDown={0.9} style={s.profileBtn}>
+        <AnimatedPressable
+          testID="profile-btn"
+          haptic={Haptics.ImpactFeedbackStyle.Light}
+          scaleDown={0.9}
+          style={s.profileBtn}
+        >
           <Text style={s.profileInit}>{(user?.name?.[0] || 'O').toUpperCase()}</Text>
         </AnimatedPressable>
       </Animated.View>

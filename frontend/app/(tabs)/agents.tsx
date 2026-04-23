@@ -101,6 +101,7 @@ export default function AgentsHubScreen() {
             const meta = AGENT_MAPPINGS[agent.agent_type] || AGENT_MAPPINGS.default;
             return (
               <AnimatedPressable
+                testID={`agent-card-${agent.agent_type}`}
                 key={agent.agent_type}
                 haptic={Haptics.ImpactFeedbackStyle.Light}
                 scaleDown={0.92}
@@ -140,7 +141,12 @@ export default function AgentsHubScreen() {
           })}
           
           {/* Add New Agent Placeholder */}
-          <AnimatedPressable haptic={Haptics.ImpactFeedbackStyle.Light} style={[s.card, s.cardDashed]} onPress={() => Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning)}>
+          <AnimatedPressable
+            testID="hire-agent-btn"
+            haptic={Haptics.ImpactFeedbackStyle.Light}
+            style={[s.card, s.cardDashed]}
+            onPress={() => router.push('/pricing')}
+          >
              <BlurView intensity={10} tint="dark" style={[s.cardInner, s.center]}>
                 <View style={[s.iconBox, { backgroundColor: `${Colors.textMuted}20` }]}>
                   <ShieldCheck size={32} color={Colors.textMuted} />

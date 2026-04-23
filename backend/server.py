@@ -3911,6 +3911,93 @@ async def etsy_auth_start(request: Request):
     auth_url = f"https://www.etsy.com/oauth/connect?response_type=code&redirect_uri={redirect_uri}&scope={scopes}&client_id={ETSY_API_KEY}&state={state}&code_challenge={code_challenge}&code_challenge_method=S256"
     return {"auth_url": auth_url}
 
+@api_router.get("/etsy/callback")
+async def etsy_callback(code: str, state: str):
+    """Etsy OAuth callback — exchanges code for access token"""
+    import httpx
+    oauth_state = await db.oauth_states.find_one({"state": state, "platform": "etsy"})
+    if not oauth_state:
+        raise HTTPException(status_code=400, detail="Invalid OAuth state")
+
+    user_id = oauth_state["user_id"]
+    code_verifier = oauth_state["code_verifier"]
+
+    try:
+        redirect_uri = f"{os.environ.get('EXPO_PUBLIC_BACKEND_URL', 'https://agent-marketplace-69.preview.emergentagent.com')}/api/etsy/callback"
+        async with httpx.AsyncClient() as client_http:
+            resp = await client_http.post("https://api.etsy.com/v3/public/oauth/token", data={
+                "grant_type": "authorization_code",
+                "client_id": ETSY_API_KEY,
+                "redirect_uri": redirect_uri,
+                "code": code,
+                "code_verifier": code_verifier
+            })
+
+            if resp.status_code != 200:
+                logger.error(f"Etsy token error: {resp.status_code} {resp.text}")
+                raise HTTPException(status_code=400, detail="Failed to get Etsy access token")
+
+            token_data = resp.json()
+            access_token = token_data.get("access_token")
+            # Etsy access tokens are usually structured as user_id.token
+            etsy_user_id = access_token.split('.')[0] if '.' in access_token else "etsy_user"
+
+            # Create Etsy agent if it doesn't exist
+            existing_agent = await db.agents.find_one({"user_id": user_id, "agent_type": "etsy"})
+            if not existing_agent:
+                try:
+                    await create_store_agent(user_id, "etsy", "Etsy Shop")
+                except HTTPException as plan_error:
+                    return Response(
+                        content=f\"\"\"<html><head></head>
+                        <body style="background:#030712;color:#F87171;font-family:system-ui;display:flex;align-items:center;justify-content:center;height:100vh;flex-direction:column">
+                        <h1 style="font-size:48px">⚠️</h1><h2>Plan Upgrade Required</h2>
+                        <p style="color:#94A3B8;max-width:400px;text-align:center">{plan_error.detail}</p>
+                        <p><a href="/pricing" style="color:#34D399">Upgrade Plan</a></p>
+                        </body></html>\"\"\", media_type="text/html"
+                    )
+
+            # Get Shop info
+            shop_name = "My Etsy Shop"
+            try:
+                shop_resp = await client_http.get(
+                    f"https://api.etsy.com/v3/application/users/{etsy_user_id}/shops",
+                    headers={"x-api-key": ETSY_API_KEY, "Authorization": f"Bearer {access_token}"}
+                )
+                if shop_resp.status_code == 200:
+                    shop_data = shop_resp.json()
+                    if shop_data.get("shop_name"):
+                        shop_name = shop_data["shop_name"]
+            except Exception:
+                pass
+
+            # Save store
+            store_doc = {
+                "id": str(uuid.uuid4()), "user_id": user_id, "name": shop_name,
+                "platform": "etsy", "store_url": f"https://www.etsy.com/shop/{shop_name}",
+                "status": "connected", "access_token": access_token,
+                "connected_at": datetime.now(timezone.utc).isoformat(),
+                "products_synced": 0, "orders_total": 0, "revenue": 0.0,
+                "mode": "autonomous", "spending_cap": 0.0,
+                "safety": STORE_DEFAULT_SAFETY,
+            }
+            await db.stores.insert_one(store_doc)
+            await db.oauth_states.delete_one({"state": state})
+            await db.activity_log.insert_one({"user_id": user_id, "type": "store_connected",
+                "message": f"Connected Etsy shop: {shop_name}",
+                "timestamp": datetime.now(timezone.utc).isoformat()})
+
+            app_url = os.environ.get('EXPO_PUBLIC_BACKEND_URL', 'https://agent-marketplace-69.preview.emergentagent.com')
+            return Response(
+                content=f\"\"\"<html><head><meta http-equiv="refresh" content="2;url={app_url}/stores"></head>
+                <body style="background:#030712;color:#F1641E;font-family:system-ui;display:flex;align-items:center;justify-content:center;height:100vh;flex-direction:column">
+                <h1 style="font-size:48px">✅</h1><h2>Etsy Connected!</h2><p style="color:#94A3B8">Redirecting to orchestrAI...</p>
+                </body></html>\"\"\", media_type="text/html"
+            )
+    except Exception as e:
+        logger.error(f"Etsy OAuth error: {e}")
+        raise HTTPException(status_code=500, detail="Etsy connection failed")
+
 # ──────────────── Promo Codes ────────────────
 
 PROMO_CODES = {

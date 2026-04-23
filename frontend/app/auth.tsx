@@ -6,7 +6,7 @@ import Animated, { FadeInDown, FadeIn, withSpring, useAnimatedStyle, useSharedVa
 import * as Haptics from 'expo-haptics';
 import { Colors, Typography, Shadows } from '../constants/theme';
 import { Mail, Lock, User, ArrowRight, Zap, Database, BrainCircuit, Globe, Bot, Binary } from 'lucide-react-native';
-import AnimatedPressable from '../components/AnimatedPressable';
+import { AnimatedPressable } from '../components/AnimatedPressable';
 
 const { width: W, height: H } = Dimensions.get('window');
 
@@ -36,20 +36,12 @@ function FloatingOrb({ index, icon: Icon, color }: { index: number, icon: any, c
     transform: [{ translateY: tY.value }, { translateX: tX.value }],
   }));
 
-  const size = 60 + Math.random() * 40;
+  const l = 20 + Math.random() * 60;
+  const t = 10 + Math.random() * 60;
 
   return (
-    <Animated.View style={[
-      styles.orb, animatedStyle, 
-      {
-        width: size, height: size, borderRadius: size / 2,
-        backgroundColor: `${color}15`,
-        borderColor: `${color}30`,
-        top: Math.random() * H * 0.7,
-        left: Math.random() * W * 0.8,
-      }
-    ]}>
-      <Icon size={size * 0.4} color={color} opacity={0.6} />
+    <Animated.View style={[s.orb, animatedStyle, { left: `${l}%`, top: `${t}%`, borderColor: color }]}>
+      <Icon size={24} color={color} opacity={0.6} />
     </Animated.View>
   );
 }
@@ -61,131 +53,119 @@ export default function AuthScreen() {
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
   const [loading, setLoading] = useState(false);
-
-  const modeTransition = useSharedValue(0);
-
-  useEffect(() => {
-    modeTransition.value = withSpring(isLogin ? 0 : 1, { damping: 15, stiffness: 100 });
-  }, [isLogin]);
+  const [error, setError] = useState<string | null>(null);
 
   const handleSubmit = async () => {
     if (!email || !password || (!isLogin && !name)) {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+      setError('Please fill all fields');
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       return;
     }
-    
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
-    setLoading(true);
-    Keyboard.dismiss();
-    try {
-      if (isLogin) {
-        await login(email, password);
-      } else {
-        await register(name, email, password);
-      }
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    } catch (e: any) {
-      alert(e.message || 'Authentication failed');
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-    } finally {
-      setLoading(false);
-    }
-  };
 
-  const toggleMode = () => {
-    Haptics.selectionAsync();
-    setIsLogin(!isLogin);
+    setError(null);
+    setLoading(true);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+
+    const result = isLogin
+      ? await login(email, password)
+      : await register(email, password, name);
+
+    if (result) {
+      setError(result);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+    } else {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    }
+    setLoading(false);
   };
 
   return (
-    <View style={styles.container}>
-      {/* Background Orbs effect */}
-      <View style={StyleSheet.absoluteFillObject}>
-        {Array.from({ length: 8 }).map((_, i) => (
-          <FloatingOrb 
-            key={`orb-${i}`} 
-            index={i} 
-            icon={ORB_ICONS[i % ORB_ICONS.length]} 
-            color={ORB_COLORS[i % ORB_COLORS.length]} 
-          />
-        ))}
-      </View>
+    <View style={s.container}>
+      {ORB_ICONS.map((Icon, i) => (
+        <FloatingOrb key={i} index={i} icon={Icon} color={ORB_COLORS[i % ORB_COLORS.length]} />
+      ))}
 
-      <KeyboardAvoidingView 
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'} 
-        style={styles.keyboardView}
-      >
-        <ScrollView 
-          contentContainerStyle={styles.scrollContent}
-          showsVerticalScrollIndicator={false}
-          keyboardShouldPersistTaps="handled"
-        >
-          <Animated.View entering={FadeInDown.duration(800).springify().damping(14)} style={styles.header}>
-            <View style={styles.logoBox}>
-              <BrainCircuit size={40} color={Colors.emerald} strokeWidth={1.5} />
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={s.flex}>
+        <ScrollView contentContainerStyle={s.scroll} bounces={false} keyboardShouldPersistTaps="handled">
+          <Animated.View entering={FadeInDown.duration(1000).springify()} style={s.content}>
+            <View style={s.logoWrap}>
+              <View style={s.logoIcon}>
+                <BrainCircuit size={40} color={Colors.emerald} />
+              </View>
+              <Text style={s.logoText}>orchestr<Text style={{ color: Colors.emerald }}>AI</Text></Text>
+              <Text style={s.tagline}>Supercharge your workforce with autonomous AI agents.</Text>
             </View>
-            <Text style={styles.title}>orchestr<Text style={{ color: Colors.emerald, fontFamily: Typography.fonts.outfitB }}>AI</Text></Text>
-            <Text style={styles.subtitle}>Supercharge your workforce with autonomous AI agents.</Text>
-          </Animated.View>
 
-          <Animated.View entering={FadeInDown.duration(1000).delay(200).springify().damping(14)} style={styles.cardWrapper}>
-            <BlurView intensity={25} tint="dark" style={styles.card}>
+            <BlurView intensity={25} tint="dark" style={s.card}>
+              <Text style={s.h1}>{isLogin ? 'Welcome Back' : 'Create Account'}</Text>
               
-              {!isLogin && (
-                <Animated.View entering={FadeIn.duration(400)} style={styles.inputGroup}>
-                  <User size={20} color={Colors.textSecondary} style={styles.inputIcon} />
+              {error && <Text style={s.error}>{error}</Text>}
+
+              <View style={s.form}>
+                {!isLogin && (
+                  <View style={s.inputWrap}>
+                    <User size={20} color={Colors.textMuted} style={s.icon} />
+                    <TextInput
+                      testID="auth-name-input"
+                      placeholder="Full Name"
+                      placeholderTextColor={Colors.textMuted}
+                      style={s.input}
+                      value={name}
+                      onChangeText={setName}
+                      autoCapitalize="words"
+                    />
+                  </View>
+                )}
+
+                <View style={s.inputWrap}>
+                  <Mail size={20} color={Colors.textMuted} style={s.icon} />
                   <TextInput
-                    style={styles.input}
-                    placeholder="Full Name"
-                    placeholderTextColor={Colors.textSecondary}
-                    value={name}
-                    onChangeText={setName}
-                    editable={!loading}
+                    testID="auth-email-input"
+                    placeholder="Email Address"
+                    placeholderTextColor={Colors.textMuted}
+                    style={s.input}
+                    value={email}
+                    onChangeText={setEmail}
+                    autoCapitalize="none"
+                    keyboardType="email-address"
                   />
-                </Animated.View>
-              )}
+                </View>
 
-              <View style={styles.inputGroup}>
-                <Mail size={20} color={Colors.textSecondary} style={styles.inputIcon} />
-                <TextInput
-                  style={styles.input}
-                  placeholder="Email Address"
-                  placeholderTextColor={Colors.textSecondary}
-                  value={email}
-                  onChangeText={setEmail}
-                  autoCapitalize="none"
-                  keyboardType="email-address"
-                  editable={!loading}
-                />
-              </View>
+                <View style={s.inputWrap}>
+                  <Lock size={20} color={Colors.textMuted} style={s.icon} />
+                  <TextInput
+                    testID="auth-password-input"
+                    placeholder="Password"
+                    placeholderTextColor={Colors.textMuted}
+                    style={s.input}
+                    value={password}
+                    onChangeText={setPassword}
+                    secureTextEntry
+                  />
+                </View>
 
-              <View style={styles.inputGroup}>
-                <Lock size={20} color={Colors.textSecondary} style={styles.inputIcon} />
-                <TextInput
-                  style={styles.input}
-                  placeholder="Password"
-                  placeholderTextColor={Colors.textSecondary}
-                  value={password}
-                  onChangeText={setPassword}
-                  secureTextEntry
-                  editable={!loading}
-                />
-              </View>
-
-              <AnimatedPressable scaleDown={0.96} style={styles.submitBtn} onPress={handleSubmit}>
-                <Text style={styles.submitTxt}>{loading ? 'Processing...' : (isLogin ? 'Sign In' : 'Create Account')}</Text>
-                {!loading && <ArrowRight size={20} color={Colors.bg} />}
-              </AnimatedPressable>
-
-              <View style={styles.footer}>
-                <Text style={styles.footerTxt}>
-                  {isLogin ? "Don't have an account? " : "Already have an account? "}
-                </Text>
-                <AnimatedPressable onPress={toggleMode}>
-                  <Text style={styles.footerLink}>{isLogin ? 'Sign up' : 'Sign in'}</Text>
+                <AnimatedPressable
+                  testID="auth-submit-btn"
+                  scaleDown={0.96}
+                  style={s.btn}
+                  onPress={handleSubmit}
+                  disabled={loading}
+                >
+                  <Text style={s.btnText}>{isLogin ? 'Sign In' : 'Get Started'}</Text>
+                  <ArrowRight size={20} color={Colors.bg} />
                 </AnimatedPressable>
               </View>
 
+              <TouchableOpacity
+                testID="auth-toggle-btn"
+                onPress={() => { setIsLogin(!isLogin); setError(null); Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); }}
+                style={s.toggle}
+              >
+                <Text style={s.toggleText}>
+                  {isLogin ? "Don't have an account? " : "Already have an account? "}
+                  <Text style={{ color: Colors.emerald, fontWeight: '700' }}>{isLogin ? 'Sign up' : 'Login'}</Text>
+                </Text>
+              </TouchableOpacity>
             </BlurView>
           </Animated.View>
         </ScrollView>
@@ -194,112 +174,25 @@ export default function AuthScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: Colors.bg,
-  },
-  orb: {
-    position: 'absolute',
-    borderWidth: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  keyboardView: {
-    flex: 1,
-  },
-  scrollContent: {
-    flexGrow: 1,
-    justifyContent: 'center',
-    padding: 24,
-  },
-  header: {
-    alignItems: 'center',
-    marginBottom: 40,
-  },
-  logoBox: {
-    width: 80,
-    height: 80,
-    borderRadius: 24,
-    backgroundColor: 'rgba(16, 185, 129, 0.1)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 20,
-    borderWidth: 1,
-    borderColor: 'rgba(16, 185, 129, 0.2)',
-  },
-  title: {
-    fontFamily: Typography.fonts.outfitL,
-    fontSize: 42,
-    color: Colors.text,
-    letterSpacing: -1,
-  },
-  subtitle: {
-    fontFamily: Typography.fonts.manropeB,
-    fontSize: 16,
-    color: Colors.textSecondary,
-    textAlign: 'center',
-    marginTop: 12,
-    lineHeight: 24,
-    paddingHorizontal: 20,
-  },
-  cardWrapper: {
-    borderRadius: 32,
-    overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.08)',
-  },
-  card: {
-    padding: 32,
-    gap: 20,
-  },
-  inputGroup: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(255,255,255,0.04)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.05)',
-    borderRadius: 16,
-    paddingHorizontal: 16,
-    height: 64,
-  },
-  inputIcon: {
-    marginRight: 12,
-  },
-  input: {
-    flex: 1,
-    fontFamily: Typography.fonts.manropeB,
-    fontSize: 16,
-    color: Colors.text,
-  },
-  submitBtn: {
-    height: 64,
-    backgroundColor: Colors.emerald,
-    borderRadius: 16,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    marginTop: 8,
-  },
-  submitTxt: {
-    fontFamily: Typography.fonts.outfitB,
-    fontSize: 18,
-    color: Colors.bg,
-  },
-  footer: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    marginTop: 16,
-  },
-  footerTxt: {
-    fontFamily: Typography.fonts.manropeB,
-    color: Colors.textSecondary,
-    fontSize: 14,
-  },
-  footerLink: {
-    fontFamily: Typography.fonts.manropeSB,
-    color: Colors.emerald,
-    fontSize: 14,
-  },
+const s = StyleSheet.create({
+  container: { flex: 1, backgroundColor: Colors.bg },
+  flex: { flex: 1 },
+  scroll: { flexGrow: 1, justifyContent: 'center', padding: 24 },
+  orb: { position: 'absolute', width: 60, height: 60, borderRadius: 30, borderWidth: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.2)' },
+  content: { alignItems: 'center' },
+  logoWrap: { alignItems: 'center', marginBottom: 40 },
+  logoIcon: { width: 80, height: 80, borderRadius: 24, backgroundColor: `${Colors.emerald}10`, justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: `${Colors.emerald}30`, marginBottom: 20 },
+  logoText: { fontSize: 42, fontWeight: '900', color: '#FFF', letterSpacing: -1.5 },
+  tagline: { fontSize: 16, color: Colors.textSecondary, textAlign: 'center', marginTop: 12, lineHeight: 24, paddingHorizontal: 20 },
+  card: { width: '100%', borderRadius: 32, padding: 32, borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)', overflow: 'hidden' },
+  h1: { fontSize: 28, fontWeight: '800', color: '#FFF', marginBottom: 24, textAlign: 'center' },
+  form: { gap: 16 },
+  inputWrap: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.3)', borderRadius: 16, borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)', paddingHorizontal: 16 },
+  icon: { marginRight: 12 },
+  input: { flex: 1, height: 56, color: '#FFF', fontSize: 16 },
+  btn: { backgroundColor: Colors.emerald, height: 64, borderRadius: 16, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 12, marginTop: 12, ...Shadows.glow(Colors.emerald) },
+  btnText: { color: Colors.bg, fontSize: 18, fontWeight: '800' },
+  error: { color: Colors.error, textAlign: 'center', marginBottom: 16, fontWeight: '600' },
+  toggle: { marginTop: 24, alignItems: 'center' },
+  toggleText: { color: Colors.textSecondary, fontSize: 15 },
 });
